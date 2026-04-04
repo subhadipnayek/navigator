@@ -11,7 +11,8 @@ public class NavController(INavService navService) : ControllerBase
 
     /// <summary>
     /// Get NAV history for a fund by scheme code.
-    /// Supports optional date range filtering and interval-based sampling.
+    /// Supports optional date range filtering, interval-based sampling,
+    /// and split-adjusted NAVs (adjusted=true divides pre-action NAVs by cumulative factor).
     /// </summary>
     [HttpGet("{schemeCode:int}")]
     public async Task<IActionResult> GetNavHistory(
@@ -19,6 +20,7 @@ public class NavController(INavService navService) : ControllerBase
         [FromQuery] DateOnly? from = null,
         [FromQuery] DateOnly? to = null,
         [FromQuery] string? interval = null,
+        [FromQuery] bool adjusted = false,
         CancellationToken ct = default)
     {
         if (from.HasValue && to.HasValue && from.Value >= to.Value)
@@ -27,7 +29,7 @@ public class NavController(INavService navService) : ControllerBase
         if (!ValidateInterval(interval, out var error))
             return BadRequest(new { message = error });
 
-        var result = await navService.GetNavHistoryAsync(schemeCode, from, to, interval, ct);
+        var result = await navService.GetNavHistoryAsync(schemeCode, from, to, interval, adjusted, ct);
         return result is null
             ? NotFound(new { message = $"Fund with scheme code {schemeCode} not found." })
             : Ok(result);

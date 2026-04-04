@@ -62,7 +62,7 @@ Data/
 ### NAV — `/api/nav`
 | # | Method | Route | Purpose |
 |---|--------|-------|---------|
-| 6 | GET | `/api/nav/{schemeCode}?from=&to=&interval=` | NAV history (filterable, samplable) |
+| 6 | GET | `/api/nav/{schemeCode}?from=&to=&interval=&adjusted=` | NAV history (filterable, samplable, adjustable) |
 | 7 | GET | `/api/nav/{schemeCode}/returns?startDate=&endDate=` | Point-to-point returns (split-adjusted) |
 | 8 | GET | `/api/nav/{schemeCode}/rolling-returns?periodInYears=&from=&to=&interval=` | Rolling returns (filterable, samplable, split-adjusted) |
 
@@ -100,7 +100,10 @@ Data/
 - **AdjustmentFactor**: For a 10:1 split (FV 10→1), factor = 10. Pre-split NAVs are divided by this.
 - **Returns calculation**: `startNav` is adjusted by cumulative factor for all actions between start and end dates.
 - **Rolling returns**: Pre-loads all actions for the fund, applies `ComputeAdjustmentFactor` per window.
-- **NAV history endpoint**: Returns raw/unadjusted NAVs (the chart shows actual historical values).
+- **NAV history endpoint**: Supports opt-in `adjusted=true` query param. When true, all pre-action NAVs
+  are divided by the cumulative factor from that date to the latest NAV date, producing a continuous line.
+  Default (`adjusted=false`) returns raw/unadjusted NAVs.
+- **`NavDataResponse`** always includes `corporateActions` (list of `CorporateActionDto`) and `isAdjusted` flag.
 - **Anomaly detection**: Scans all NAV history for day-over-day changes exceeding a threshold (default 30%).
   Flags whether each anomaly already has a recorded corporate action.
 

@@ -24,7 +24,7 @@ public class NavService(
     /// </summary>
     private static readonly ConcurrentDictionary<int, SemaphoreSlim> SchemeLocks = new();
 
-    public async Task<NavDataResponse?> GetNavHistoryAsync(int schemeCode, DateOnly? from = null, DateOnly? to = null, string? interval = null, CancellationToken ct = default)
+    public async Task<NavDataResponse?> GetNavHistoryAsync(int schemeCode, DateOnly? from = null, DateOnly? to = null, string? interval = null, bool adjusted = false, CancellationToken ct = default)
     {
         // 1. Verify the fund exists in our master list
         var fund = await fundRepo.GetBySchemeCodeAsync(schemeCode);
@@ -49,7 +49,7 @@ public class NavService(
             if (latestDbDate.HasValue && latestDbDate.Value >= today)
             {
                 logger.LogDebug("Fund {SchemeCode}: NAV is current ({Date}), serving from DB", schemeCode, latestDbDate);
-                return await BuildResponseFromDb(fund, false, from, to, interval);
+                return await BuildResponseFromDb(fund, false, from, to, interval, adjusted);
             }
 
             // 4. Check cooldown tracker — should we call the API?
@@ -62,7 +62,7 @@ public class NavService(
                 logger.LogDebug(
                     "Fund {SchemeCode}: API on cooldown (last check: {LastCheck}), serving from DB",
                     schemeCode, tracker?.LastApiCheckUtc);
-                return await BuildResponseFromDb(fund, false, from, to, interval);
+                return await BuildResponseFromDb(fund, false, from, to, interval, adjusted);
             }
 
             // 5. Call the external API
@@ -80,7 +80,7 @@ public class NavService(
                     LastCheckHadNewData = false
                 });
 
-                return await BuildResponseFromDb(fund, false, from, to, interval);
+                return await BuildResponseFromDb(fund, false, from, to, interval, adjusted);
             }
 
             // 6. Parse and store new NAV entries
@@ -132,7 +132,7 @@ public class NavService(
                 LastCheckHadNewData = hadNewData
             });
 
-            return await BuildResponseFromDb(fund, true, from, to, interval);
+            return await BuildResponseFromDb(fund, true, from, to, interval, adjusted);
         }
         finally
         {
@@ -166,7 +166,7 @@ public class NavService(
         return true;
     }
 
-    private async Task<NavDataResponse> BuildResponseFromDb(Fund fund, bool wasFetchedFromApi, DateOnly? from = null, DateOnly? to = null, string? interval = null)
+    private async Task<NavDataResponse> BuildResponseFromDb(Fund fund, bool wasFetchedFromApi, DateOnly? from = null, DateOnly? to = null, string? interval = null, bool adjusted = false)
     {
         var histories = await navRepo.GetBySchemeCodeAsync(fund.SchemeCode);
 
@@ -174,6 +174,13 @@ public class NavService(
         var latestNavDate = histories.Count > 0
             ? histories[0].Date.ToString("dd-MM-yyyy")
             : null;
+
+        // Load corporate actions for this fund (always needed for the response)
+        var actions = await corporateActionService.GetActionsAsync(fund.SchemeCode);
+
+        // Build adjustment lookup: for each NAV entry, compute the cumulative factor
+        // from that date to the latest date so pre-action NAVs become comparable.
+        DateOnly? overallLatestDate = histories.Count > 0 ? histories[0].Date : null;
 
         // Apply date range filter
         if (from.HasValue || to.HasValue)
@@ -198,11 +205,22 @@ public class NavService(
             FundHouse = fund.FundHouse,
             LatestNavDate = latestNavDate,
             WasFetchedFromApi = wasFetchedFromApi,
-            Data = histories.Select(h => new NavHistoryDto
+            IsAdjusted = adjusted,
+            Data = histories.Select(h =>
             {
-                Date = h.Date.ToString("dd-MM-yyyy"),
-                Nav = h.Nav
-            }).ToList()
+                var nav = h.Nav;
+                if (adjusted && overallLatestDate.HasValue && actions.Count > 0)
+                {
+                    var factor = ComputeAdjustmentFactor(actions, h.Date, overallLatestDate.Value);
+                    nav /= factor;
+                }
+                return new NavHistoryDto
+                {
+                    Date = h.Date.ToString("dd-MM-yyyy"),
+                    Nav = Math.Round(nav, 6)
+                };
+            }).ToList(),
+            CorporateActions = actions
         };
     }
 

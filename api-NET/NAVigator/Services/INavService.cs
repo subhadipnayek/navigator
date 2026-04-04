@@ -9,9 +9,10 @@ public interface INavService
     /// 1. Serve from DB if latest NAV is today.
     /// 2. If stale, check cooldown — skip API if checked recently with no new data.
     /// 3. Otherwise fetch from external API, store new entries, and update tracker.
-    /// Supports optional date range filtering and interval-based sampling.
+    /// Supports optional date range filtering, interval-based sampling,
+    /// and split-adjusted NAVs when <paramref name="adjusted"/> is true.
     /// </summary>
-    Task<NavDataResponse?> GetNavHistoryAsync(int schemeCode, DateOnly? from = null, DateOnly? to = null, string? interval = null, CancellationToken ct = default);
+    Task<NavDataResponse?> GetNavHistoryAsync(int schemeCode, DateOnly? from = null, DateOnly? to = null, string? interval = null, bool adjusted = false, CancellationToken ct = default);
 
     /// <summary>
     /// Computes point-to-point returns (absolute + CAGR) between the specified dates.

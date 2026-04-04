@@ -7,5 +7,7 @@ public class NavDataResponse
     public string? FundHouse { get; set; }
     public string? LatestNavDate { get; set; }
     public bool WasFetchedFromApi { get; set; }
+    public bool IsAdjusted { get; set; }
     public List<NavHistoryDto> Data { get; set; } = [];
+    public List<CorporateActionDto> CorporateActions { get; set; } = [];
 }
