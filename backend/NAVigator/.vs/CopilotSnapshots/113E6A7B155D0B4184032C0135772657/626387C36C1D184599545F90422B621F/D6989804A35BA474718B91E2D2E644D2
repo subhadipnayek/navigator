@@ -1,0 +1,14 @@
+﻿namespace NAVigator.Models.Dto;
+
+/// <summary>
+/// Response for the multi-fund "Growth of ₹10,000" comparison chart.
+/// All funds are rebased to 10,000 on the common start date so they can be
+/// plotted on the same Y-axis regardless of their actual NAV values.
+/// </summary>
+public class GrowthChartResponse
+{
+    public string? CommonStartDate { get; set; }
+    public string? CommonEndDate { get; set; }
+    public decimal BaseAmount { get; set; } = 10000m;
+    public List<FundChartSeriesDto> Funds { get; set; } = [];
+}

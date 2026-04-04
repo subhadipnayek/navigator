@@ -1,0 +1,9 @@
+﻿namespace NAVigator.Models.Dto;
+
+public class FundChartSeriesDto
+{
+    public int SchemeCode { get; set; }
+    public required string SchemeName { get; set; }
+    public string? FundHouse { get; set; }
+    public List<ChartPointDto> Data { get; set; } = [];
+}

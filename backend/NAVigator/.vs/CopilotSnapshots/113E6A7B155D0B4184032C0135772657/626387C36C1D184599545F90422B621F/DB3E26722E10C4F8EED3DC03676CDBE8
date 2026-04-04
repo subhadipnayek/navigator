@@ -1,0 +1,50 @@
+﻿# MF/ETF Comparison App — Backend Context (.NET 10)
+
+## Overview
+A .NET 10 Web API that syncs Indian Mutual Fund/ETF master data daily, serves 
+fund listings, fetches NAV history on demand, computes returns, and exposes 
+comparison APIs. The Angular frontend consumes this API — never calls external 
+data sources directly.
+
+## Tech Stack
+- .NET 10 Web API (Minimal API or Controllers — your choice)
+- SQL Server (EF Core for ORM)
+- Polly (HTTP retry/rate-limiting for external API calls)
+- BackgroundService for scheduled sync
+
+## External Data Sources
+
+### 1. Fund Master List
+- **URL**: https://portal.amfiindia.com/spages/NAVAll.txt
+- **Format**: Semicolon-delimited plain text, grouped by sections
+- **Sync**: Daily via BackgroundService + manual trigger endpoint
+- **Parsing rules**:
+  - Blank lines separate sections
+  - Line matching `Open Ended Schemes(...)` or `Close Ended Schemes(...)` = header
+    → Extract SchemeType = "Open Ended Schemes", SchemeCategory = "Debt Scheme - Banking and PSU Fund"
+  - Standalone text line (no semicolons) after a blank line = Fund House name
+  - Line with semicolons = fund data row, split by ";"
+  - Columns: SchemeCode;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+  - "-" means null/not available
+  - ~20,000+ fund entries
+
+### 2. NAV History (per fund)
+- **URL**: https://api.mfapi.in/mf/{scheme_code}
+- **Format**: JSON
+- **Response**:
+  ```json
+  {
+    "meta": {
+      "fund_house": "string",
+      "scheme_type": "string",
+      "scheme_category": "string",
+      "scheme_code": 140085,
+      "scheme_name": "string",
+      "isin_growth": "string",
+      "isin_div_reinvestment": "string|null"
+    },
+    "data": [
+      { "date": "01-04-2026", "nav": "667.16510" },
+      { "date": "31-03-2026", "nav": "650.35830" }
+    ]
+  }

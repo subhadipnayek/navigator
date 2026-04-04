@@ -1,0 +1,565 @@
+﻿# NAVigator — Angular Frontend Copilot Instructions
+
+## Overview
+Angular frontend for the NAVigator MF/ETF comparison app.
+**All business logic, calculations, and external API calls happen on the .NET backend.**
+Angular is purely for display, user interaction, and consuming the REST API below.
+Never call any external data source directly from Angular.
+
+## Backend API Base URL
+```
+Development: http://localhost:5038/api
+```
+CORS is already configured on the backend for `http://localhost:4200`.
+
+---
+
+## TypeScript Interfaces
+
+All dates from the API are strings in `"dd-MM-yyyy"` format (e.g. `"02-04-2026"`)
+**except** `latestNavDate` in `Fund` which uses `"dd-MMM-yyyy"` (e.g. `"02-Apr-2026"`).
+
+```ts
+// ==================== FUND MODELS ====================
+
+export interface Fund {
+  schemeCode: number;
+  isinGrowth: string | null;
+  isinDivReinvestment: string | null;
+  schemeName: string;
+  latestNav: number | null;
+  latestNavDate: string | null;       // "02-Apr-2026" (dd-MMM-yyyy)
+  fundHouse: string | null;
+  schemeType: string | null;          // "Open Ended Schemes"
+  schemeCategory: string | null;      // "Debt Scheme - Banking and PSU Fund"
+}
+
+export interface FundSyncResult {
+  totalParsed: number;
+  added: number;
+  updated: number;
+  unchanged: number;
+  duration: string;                   // TimeSpan string e.g. "00:00:12.3456789"
+}
+
+export interface FundCount {
+  count: number;
+}
+
+// ==================== NAV HISTORY MODELS ====================
+
+export interface NavHistoryEntry {
+  date: string;                       // "dd-MM-yyyy"
+  nav: number;
+}
+
+export interface NavDataResponse {
+  schemeCode: number;
+  schemeName: string;
+  fundHouse: string | null;
+  latestNavDate: string | null;       // "dd-MM-yyyy"
+  wasFetchedFromApi: boolean;         // true = fresh data was fetched from external API this request
+  data: NavHistoryEntry[];            // sorted newest-first
+}
+
+// ==================== RETURNS MODELS ====================
+
+export interface ReturnPeriod {
+  period: string;                     // "1M" | "3M" | "6M" | "1Y" | "2Y" | "3Y" | "5Y" | "10Y" | "SI"
+  absoluteReturn: number | null;      // percentage e.g. 12.45 means 12.45%
+  cagr: number | null;               // annualized % e.g. 11.82
+  startDate: string | null;          // "dd-MM-yyyy"
+  startNav: number | null;
+  endDate: string | null;            // "dd-MM-yyyy"
+  endNav: number | null;
+}
+
+export interface ReturnsResponse {
+  schemeCode: number;
+  schemeName: string;
+  fundHouse: string | null;
+  returns: ReturnPeriod[];            // one entry per period
+}
+
+export interface ComparisonResponse {
+  funds: ReturnsResponse[];           // one ReturnsResponse per compared fund
+}
+
+// ==================== ROLLING RETURNS MODELS ====================
+
+export interface RollingReturnEntry {
+  date: string;                       // "dd-MM-yyyy" (end date of the rolling window)
+  returnPercentage: number;           // annualized CAGR %
+}
+
+export interface RollingReturnResponse {
+  schemeCode: number;
+  schemeName: string;
+  fundHouse: string | null;
+  periodInYears: number;
+  dataPoints: number;
+  minReturn: number | null;
+  maxReturn: number | null;
+  averageReturn: number | null;
+  medianReturn: number | null;
+  data: RollingReturnEntry[];
+}
+
+// ==================== CHART MODELS ====================
+
+export interface ChartPoint {
+  date: string;                       // "dd-MM-yyyy"
+  value: number;
+}
+
+export interface FundChartSeries {
+  schemeCode: number;
+  schemeName: string;
+  fundHouse: string | null;
+  data: ChartPoint[];
+}
+
+export interface GrowthChartResponse {
+  commonStartDate: string | null;     // "dd-MM-yyyy"
+  commonEndDate: string | null;       // "dd-MM-yyyy"
+  baseAmount: number;                 // always 10000
+  funds: FundChartSeries[];
+}
+
+export interface RollingReturnSeries {
+  schemeCode: number;
+  schemeName: string;
+  fundHouse: string | null;
+  minReturn: number | null;
+  maxReturn: number | null;
+  averageReturn: number | null;
+  medianReturn: number | null;
+  data: RollingReturnEntry[];
+}
+
+export interface RollingReturnCompareResponse {
+  periodInYears: number;
+  funds: RollingReturnSeries[];
+}
+
+// ==================== ERROR ====================
+
+export interface ApiError {
+  message: string;
+}
+```
+
+---
+
+## API Endpoints — Complete Reference
+
+### FUNDS — `/api/funds`
+
+---
+
+#### 1. GET `/api/funds`
+Get all funds (~20,000+ records).
+
+**Response:** `Fund[]`
+
+```json
+[
+  {
+    "schemeCode": 119551,
+    "isinGrowth": "INF209KA12Z1",
+    "isinDivReinvestment": "INF209KA13Z9",
+    "schemeName": "Aditya Birla Sun Life Banking & PSU Debt Fund - DIRECT - IDCW",
+    "latestNav": 103.8813,
+    "latestNavDate": "02-Apr-2026",
+    "fundHouse": "Aditya Birla Sun Life Mutual Fund",
+    "schemeType": "Open Ended Schemes",
+    "schemeCategory": "Debt Scheme - Banking and PSU Fund"
+  }
+]
+```
+
+> ⚠️ Large payload. Prefer the search endpoint for filtering.
+
+---
+
+#### 2. GET `/api/funds/{schemeCode}`
+Get a single fund by scheme code.
+
+| Param | Type | In |
+|-------|------|----|
+| schemeCode | int | path |
+
+**200:** `Fund`
+**404:** empty body
+
+---
+
+#### 3. GET `/api/funds/search?q={query}`
+Search funds by name, fund house, or scheme code.
+
+| Param | Type | In | Required |
+|-------|------|----|----------|
+| q | string | query | yes |
+
+**200:** `Fund[]`
+**400:** if `q` is empty
+
+> 💡 Debounce this in the UI (300–500ms).
+
+---
+
+#### 4. POST `/api/funds/sync`
+Trigger manual sync of fund master list from AMFI. Long-running (~10–15s).
+
+**Request body:** none
+
+**200:**
+```json
+{
+  "totalParsed": 20347,
+  "added": 150,
+  "updated": 20197,
+  "unchanged": 0,
+  "duration": "00:00:14.5623401"
+}
+```
+
+> 💡 Show a loading spinner. This also runs automatically on startup (if DB is empty) and daily at 1 AM IST via a background service.
+
+---
+
+#### 5. GET `/api/funds/count`
+Get total fund count.
+
+**200:**
+```json
+{ "count": 20347 }
+```
+
+---
+
+### NAV — `/api/nav`
+
+---
+
+#### 6. GET `/api/nav/{schemeCode}`
+Get full NAV history for a fund. Backend handles smart caching with 1-hour cooldown.
+
+| Param | Type | In |
+|-------|------|----|
+| schemeCode | int | path |
+
+**200:**
+```json
+{
+  "schemeCode": 140085,
+  "schemeName": "Nippon India ETF Nifty Next 50 Junior BeES",
+  "fundHouse": "Nippon India Mutual Fund",
+  "latestNavDate": "01-04-2026",
+  "wasFetchedFromApi": true,
+  "data": [
+    { "date": "01-04-2026", "nav": 667.16510 },
+    { "date": "31-03-2026", "nav": 650.35830 }
+  ]
+}
+```
+
+**404:** `{ "message": "Fund with scheme code 999999 not found." }`
+
+> `data` is sorted **newest-first**. `wasFetchedFromApi` = true means fresh data was pulled (useful for a freshness indicator).
+
+---
+
+#### 7. GET `/api/nav/{schemeCode}/returns`
+Point-to-point returns (absolute + CAGR) for standard periods.
+
+| Param | Type | In |
+|-------|------|----|
+| schemeCode | int | path |
+
+**Periods returned:** `1M`, `3M`, `6M`, `1Y`, `2Y`, `3Y`, `5Y`, `10Y`, `SI` (Since Inception)
+
+**200:**
+```json
+{
+  "schemeCode": 140085,
+  "schemeName": "Nippon India ETF Nifty Next 50 Junior BeES",
+  "fundHouse": "Nippon India Mutual Fund",
+  "returns": [
+    {
+      "period": "1M",
+      "absoluteReturn": 2.58,
+      "cagr": 36.12,
+      "startDate": "01-03-2026",
+      "startNav": 650.35,
+      "endDate": "01-04-2026",
+      "endNav": 667.17
+    },
+    {
+      "period": "5Y",
+      "absoluteReturn": null,
+      "cagr": null,
+      "startDate": null,
+      "startNav": null,
+      "endDate": null,
+      "endNav": null
+    },
+    {
+      "period": "SI",
+      "absoluteReturn": 145.67,
+      "cagr": 14.23,
+      "startDate": "15-03-2019",
+      "startNav": 271.56,
+      "endDate": "01-04-2026",
+      "endNav": 667.17
+    }
+  ]
+}
+```
+
+**404:** `{ "message": "Fund with scheme code 999999 not found." }`
+
+> Periods where the fund doesn't have enough history return `null` values. Show "N/A" in the UI.
+
+---
+
+#### 8. GET `/api/nav/{schemeCode}/rolling-returns?periodInYears={n}`
+Rolling returns for a single fund. One data point per trading day that has enough lookback history.
+
+| Param | Type | In | Default | Range |
+|-------|------|----|---------|-------|
+| schemeCode | int | path | — | — |
+| periodInYears | int | query | 1 | 1–30 |
+
+**200:**
+```json
+{
+  "schemeCode": 140085,
+  "schemeName": "Nippon India ETF Nifty Next 50 Junior BeES",
+  "fundHouse": "Nippon India Mutual Fund",
+  "periodInYears": 3,
+  "dataPoints": 1024,
+  "minReturn": -8.45,
+  "maxReturn": 32.67,
+  "averageReturn": 14.23,
+  "medianReturn": 13.87,
+  "data": [
+    { "date": "01-04-2026", "returnPercentage": 18.45 },
+    { "date": "31-03-2026", "returnPercentage": 17.92 }
+  ]
+}
+```
+
+**400:** `{ "message": "periodInYears must be between 1 and 30." }`
+**404:** `{ "message": "Fund with scheme code 999999 not found." }`
+
+> `data` can have thousands of entries. **Always render as a line chart, not a table.** Summary stats (min/max/avg/median) can be shown in a legend/card.
+
+---
+
+#### 9. GET `/api/nav/compare?codes={code1},{code2},...`
+Compare point-to-point returns for multiple funds side by side.
+
+| Param | Type | In | Required |
+|-------|------|----|----------|
+| codes | string | query | yes (comma-separated, 2–10 scheme codes) |
+
+**200:**
+```json
+{
+  "funds": [
+    {
+      "schemeCode": 140085,
+      "schemeName": "Nippon India ETF Nifty Next 50 Junior BeES",
+      "fundHouse": "Nippon India Mutual Fund",
+      "returns": [
+        { "period": "1Y", "absoluteReturn": 12.45, "cagr": 12.45, "startDate": "01-04-2025", "startNav": 593.31, "endDate": "01-04-2026", "endNav": 667.17 },
+        { "period": "3Y", "absoluteReturn": 38.90, "cagr": 11.58, "startDate": "01-04-2023", "startNav": 480.40, "endDate": "01-04-2026", "endNav": 667.17 }
+      ]
+    },
+    {
+      "schemeCode": 119551,
+      "schemeName": "Aditya Birla Sun Life Banking & PSU Debt Fund - DIRECT - IDCW",
+      "fundHouse": "Aditya Birla Sun Life Mutual Fund",
+      "returns": [
+        { "period": "1Y", "absoluteReturn": 7.23, "cagr": 7.23, "startDate": "02-04-2025", "startNav": 96.88, "endDate": "02-04-2026", "endNav": 103.88 },
+        { "period": "3Y", "absoluteReturn": 22.10, "cagr": 6.89, "startDate": "01-04-2023", "startNav": 85.08, "endDate": "02-04-2026", "endNav": 103.88 }
+      ]
+    }
+  ]
+}
+```
+
+**400:** `{ "message": "At least 2 valid scheme codes are required for comparison." }`
+**400:** `{ "message": "Maximum 10 funds can be compared at once." }`
+
+> Best displayed as a **comparison table** or **grouped bar chart** with periods as groups and funds as bars.
+
+---
+
+#### 10. GET `/api/nav/compare/chart?codes={code1},{code2},...`
+**Growth of ₹10,000** chart data. All funds rebased to ₹10,000 on the common start date.
+
+| Param | Type | In | Required |
+|-------|------|----|----------|
+| codes | string | query | yes (comma-separated, 2–10 scheme codes) |
+
+**200:**
+```json
+{
+  "commonStartDate": "15-03-2019",
+  "commonEndDate": "01-04-2026",
+  "baseAmount": 10000.00,
+  "funds": [
+    {
+      "schemeCode": 140085,
+      "schemeName": "Nippon India ETF Nifty Next 50 Junior BeES",
+      "fundHouse": "Nippon India Mutual Fund",
+      "data": [
+        { "date": "15-03-2019", "value": 10000.00 },
+        { "date": "18-03-2019", "value": 10045.23 },
+        { "date": "01-04-2026", "value": 24567.89 }
+      ]
+    },
+    {
+      "schemeCode": 119551,
+      "schemeName": "Aditya Birla Sun Life Banking & PSU Debt Fund - DIRECT - IDCW",
+      "fundHouse": "Aditya Birla Sun Life Mutual Fund",
+      "data": [
+        { "date": "15-03-2019", "value": 10000.00 },
+        { "date": "18-03-2019", "value": 10012.34 },
+        { "date": "01-04-2026", "value": 13456.78 }
+      ]
+    }
+  ]
+}
+```
+
+**400:** same as `/compare`
+
+> **Primary comparison chart.** Render as a multi-line chart. Y-axis = "Value of ₹10,000 invested". All lines start at 10,000. This is the standard way mutual fund comparison sites display performance.
+
+---
+
+#### 11. GET `/api/nav/compare/rolling-returns?codes={code1},{code2}&periodInYears={n}`
+Rolling returns overlay for multiple funds.
+
+| Param | Type | In | Default | Range |
+|-------|------|----|---------|-------|
+| codes | string | query | — | comma-separated, 2–10 |
+| periodInYears | int | query | 1 | 1–30 |
+
+**200:**
+```json
+{
+  "periodInYears": 3,
+  "funds": [
+    {
+      "schemeCode": 140085,
+      "schemeName": "Nippon India ETF Nifty Next 50 Junior BeES",
+      "fundHouse": "Nippon India Mutual Fund",
+      "minReturn": -8.45,
+      "maxReturn": 32.67,
+      "averageReturn": 14.23,
+      "medianReturn": 13.87,
+      "data": [
+        { "date": "15-03-2022", "returnPercentage": 12.45 },
+        { "date": "01-04-2026", "returnPercentage": 18.45 }
+      ]
+    },
+    {
+      "schemeCode": 119551,
+      "schemeName": "Aditya Birla Sun Life Banking & PSU Debt Fund - DIRECT - IDCW",
+      "fundHouse": "Aditya Birla Sun Life Mutual Fund",
+      "minReturn": 5.12,
+      "maxReturn": 9.87,
+      "averageReturn": 7.23,
+      "medianReturn": 7.10,
+      "data": [
+        { "date": "15-03-2022", "returnPercentage": 6.78 },
+        { "date": "01-04-2026", "returnPercentage": 7.45 }
+      ]
+    }
+  ]
+}
+```
+
+**400:** same as `/compare` + periodInYears validation
+
+> Render as a multi-line chart. Y-axis = "Annualized Return %". Summary stats per fund can go in a legend or info cards.
+
+---
+
+## Error Handling Summary
+
+| Status | Shape | When |
+|--------|-------|------|
+| 200 | response body as documented above | Success |
+| 400 | `{ "message": "..." }` | Invalid/missing query params |
+| 404 | `{ "message": "Fund with scheme code {x} not found." }` | Fund not in DB (NavController) |
+| 404 | empty body | Fund not in DB (FundsController) |
+
+---
+
+## Important Behaviors & UI Rules
+
+1. **All dates** from the API are `"dd-MM-yyyy"` strings except `Fund.latestNavDate` which is `"dd-MMM-yyyy"`.
+2. **NAV caching is server-side** — the backend manages a smart cache with 1-hour cooldown. The frontend does NOT need to implement caching for NAV data.
+3. **`wasFetchedFromApi`** in `NavDataResponse` — use this to show a "freshly updated" indicator if desired.
+4. **`null` return values** — when a fund doesn't have enough history for a period, `absoluteReturn`, `cagr`, `startDate`, `startNav`, `endDate`, `endNav` will all be `null`. Display "N/A" or hide that row.
+5. **Rolling returns `data` arrays** can have thousands of entries (one per trading day). **Always render as line charts, never as tables.**
+6. **Fund sync** (`POST /api/funds/sync`) takes ~10–15 seconds. Show a loading spinner with a message like "Syncing fund data...".
+7. **Search** (`GET /api/funds/search?q=`) — debounce input at 300–500ms.
+8. **Comparison endpoints** require 2–10 comma-separated scheme codes.
+9. **`schemeCode`** (integer) is the primary identifier used across all endpoints.
+10. **Growth chart** values start at 10,000 for all funds — this is the Y-axis baseline.
+11. **Fund master list** auto-syncs on first startup and daily at 1 AM IST. The manual sync endpoint is for ad-hoc refreshes.
+
+---
+
+## Suggested Angular Architecture
+
+### Services
+```
+FundService        → handles all /api/funds/* calls
+NavService         → handles all /api/nav/* calls
+```
+
+### Suggested Routes
+
+| Route | Page | Primary Endpoints |
+|-------|------|-------------------|
+| `/` | Dashboard | `GET /api/funds/count` |
+| `/funds` | Fund List + Search | `GET /api/funds`, `GET /api/funds/search?q=` |
+| `/funds/:schemeCode` | Fund Detail (NAV chart + returns table) | `GET /api/funds/{id}`, `GET /api/nav/{id}`, `GET /api/nav/{id}/returns` |
+| `/funds/:schemeCode/rolling` | Rolling Returns Chart | `GET /api/nav/{id}/rolling-returns?periodInYears=` |
+| `/compare` | Comparison Page | `GET /api/nav/compare`, `GET /api/nav/compare/chart`, `GET /api/nav/compare/rolling-returns` |
+| `/admin/sync` | Manual Sync Trigger | `POST /api/funds/sync` |
+
+### Chart Recommendations
+
+| Chart | Type | Library | X-Axis | Y-Axis |
+|-------|------|---------|--------|--------|
+| Single fund NAV history | Line | ngx-charts or Chart.js | Date | NAV (₹) |
+| Growth of ₹10,000 comparison | Multi-line | ngx-charts or Chart.js | Date | Value (₹) |
+| Rolling returns (single) | Line | ngx-charts or Chart.js | Date | Return % |
+| Rolling returns comparison | Multi-line | ngx-charts or Chart.js | Date | Return % |
+| Returns comparison | Grouped bar or table | ngx-charts or HTML table | Period | Return % |
+
+---
+
+## Endpoint Quick Reference
+
+| # | Method | Route | Purpose |
+|---|--------|-------|---------|
+| 1 | GET | `/api/funds` | All funds |
+| 2 | GET | `/api/funds/{schemeCode}` | Single fund |
+| 3 | GET | `/api/funds/search?q=` | Search funds |
+| 4 | POST | `/api/funds/sync` | Manual AMFI sync |
+| 5 | GET | `/api/funds/count` | Fund count |
+| 6 | GET | `/api/nav/{schemeCode}` | NAV history |
+| 7 | GET | `/api/nav/{schemeCode}/returns` | Point-to-point returns |
+| 8 | GET | `/api/nav/{schemeCode}/rolling-returns?periodInYears=` | Rolling returns |
+| 9 | GET | `/api/nav/compare?codes=` | Compare returns (table/bar) |
+| 10 | GET | `/api/nav/compare/chart?codes=` | Growth of ₹10,000 chart |
+| 11 | GET | `/api/nav/compare/rolling-returns?codes=&periodInYears=` | Rolling returns comparison chart |

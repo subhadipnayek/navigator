@@ -1,0 +1,14 @@
+﻿using NAVigator.Models.Dto;
+
+namespace NAVigator.Services;
+
+public interface INavService
+{
+    /// <summary>
+    /// Returns NAV history for the given scheme. Uses smart caching:
+    /// 1. Serve from DB if latest NAV is today.
+    /// 2. If stale, check cooldown — skip API if checked recently with no new data.
+    /// 3. Otherwise fetch from external API, store new entries, and update tracker.
+    /// </summary>
+    Task<NavDataResponse?> GetNavHistoryAsync(int schemeCode, CancellationToken ct = default);
+}

@@ -1,0 +1,9 @@
+﻿namespace NAVigator.Models.Dto;
+
+public class ReturnsResponse
+{
+    public int SchemeCode { get; set; }
+    public required string SchemeName { get; set; }
+    public string? FundHouse { get; set; }
+    public List<ReturnPeriodDto> Returns { get; set; } = [];
+}

@@ -1,0 +1,169 @@
+﻿using System.Globalization;
+using NAVigator.Models.Database;
+using NAVigator.Models.Dto;
+using NAVigator.Repositories;
+
+namespace NAVigator.Services;
+
+public class NavService(
+    INavHistoryRepository navRepo,
+    IFundRepository fundRepo,
+    IAmfiService amfiService,
+    ILogger<NavService> logger) : INavService
+{
+    /// <summary>
+    /// Cooldown period: if we checked the API and found no new data,
+    /// don't hit the API again for this fund until this duration elapses.
+    /// </summary>
+    private static readonly TimeSpan ApiCooldown = TimeSpan.FromHours(1);
+
+    public async Task<NavDataResponse?> GetNavHistoryAsync(int schemeCode, CancellationToken ct = default)
+    {
+        // 1. Verify the fund exists in our master list
+        var fund = await fundRepo.GetBySchemeCodeAsync(schemeCode);
+        if (fund is null)
+        {
+            logger.LogWarning("Fund {SchemeCode} not found in database", schemeCode);
+            return null;
+        }
+
+        // 2. Get latest NAV date from DB
+        var latestDbDate = await navRepo.GetLatestNavDateAsync(schemeCode);
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
+            DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("India Standard Time")));
+
+        // 3. If latest NAV in DB is today, serve from DB — no API call needed
+        if (latestDbDate.HasValue && latestDbDate.Value >= today)
+        {
+            logger.LogDebug("Fund {SchemeCode}: NAV is current ({Date}), serving from DB", schemeCode, latestDbDate);
+            return await BuildResponseFromDb(fund, false);
+        }
+
+        // 4. Check cooldown tracker — should we call the API?
+        var tracker = await navRepo.GetSyncTrackerAsync(schemeCode);
+        bool shouldCallApi = ShouldCallApi(tracker, today);
+
+        if (!shouldCallApi)
+        {
+            logger.LogDebug(
+                "Fund {SchemeCode}: API on cooldown (last check: {LastCheck}), serving from DB",
+                schemeCode, tracker?.LastApiCheckUtc);
+            return await BuildResponseFromDb(fund, false);
+        }
+
+        // 5. Call the external API
+        logger.LogInformation("Fund {SchemeCode}: Fetching NAV history from API", schemeCode);
+        var apiResponse = await amfiService.FetchNavHistoryAsync(schemeCode, ct);
+
+        if (apiResponse is null || apiResponse.Data.Count == 0)
+        {
+            // API failed or returned empty — mark tracker so we don't retry immediately
+            await navRepo.UpsertSyncTrackerAsync(new NavSyncTracker
+            {
+                SchemeCode = schemeCode,
+                LastApiCheckUtc = DateTime.UtcNow,
+                LatestNavDateFromApi = latestDbDate,
+                LastCheckHadNewData = false
+            });
+
+            return await BuildResponseFromDb(fund, false);
+        }
+
+        // 6. Parse and store new NAV entries
+        var newEntries = new List<NavHistory>();
+        DateOnly? apiLatestDate = null;
+
+        foreach (var entry in apiResponse.Data)
+        {
+            if (!DateOnly.TryParseExact(entry.Date, "dd-MM-yyyy", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var date))
+                continue;
+
+            if (!decimal.TryParse(entry.Nav, CultureInfo.InvariantCulture, out var nav))
+                continue;
+
+            if (apiLatestDate is null || date > apiLatestDate)
+                apiLatestDate = date;
+
+            // Only add entries newer than what we already have
+            if (!latestDbDate.HasValue || date > latestDbDate.Value)
+            {
+                newEntries.Add(new NavHistory
+                {
+                    SchemeCode = schemeCode,
+                    Date = date,
+                    Nav = nav
+                });
+            }
+        }
+
+        bool hadNewData = newEntries.Count > 0;
+
+        if (hadNewData)
+        {
+            await navRepo.AddRangeAsync(newEntries);
+            logger.LogInformation("Fund {SchemeCode}: Stored {Count} new NAV entries", schemeCode, newEntries.Count);
+        }
+        else
+        {
+            logger.LogDebug("Fund {SchemeCode}: API had no newer data than DB ({DbDate})", schemeCode, latestDbDate);
+        }
+
+        // 7. Update the sync tracker
+        await navRepo.UpsertSyncTrackerAsync(new NavSyncTracker
+        {
+            SchemeCode = schemeCode,
+            LastApiCheckUtc = DateTime.UtcNow,
+            LatestNavDateFromApi = apiLatestDate ?? latestDbDate,
+            LastCheckHadNewData = hadNewData
+        });
+
+        return await BuildResponseFromDb(fund, true);
+    }
+
+    /// <summary>
+    /// Determines whether we should call the external API based on the sync tracker state.
+    /// </summary>
+    private static bool ShouldCallApi(NavSyncTracker? tracker, DateOnly today)
+    {
+        // Never checked before — definitely call
+        if (tracker is null)
+            return true;
+
+        // If the last check DID return new data and the latest date from API is today,
+        // no need to check again today
+        if (tracker.LastCheckHadNewData && tracker.LatestNavDateFromApi.HasValue
+            && tracker.LatestNavDateFromApi.Value >= today)
+            return false;
+
+        // If the last check had NO new data, enforce cooldown
+        if (!tracker.LastCheckHadNewData)
+        {
+            var elapsed = DateTime.UtcNow - tracker.LastApiCheckUtc;
+            if (elapsed < ApiCooldown)
+                return false;
+        }
+
+        return true;
+    }
+
+    private async Task<NavDataResponse> BuildResponseFromDb(Fund fund, bool wasFetchedFromApi)
+    {
+        var histories = await navRepo.GetBySchemeCodeAsync(fund.SchemeCode);
+        return new NavDataResponse
+        {
+            SchemeCode = fund.SchemeCode,
+            SchemeName = fund.SchemeName,
+            FundHouse = fund.FundHouse,
+            LatestNavDate = histories.Count > 0
+                ? histories[0].Date.ToString("dd-MM-yyyy")
+                : null,
+            WasFetchedFromApi = wasFetchedFromApi,
+            Data = histories.Select(h => new NavHistoryDto
+            {
+                Date = h.Date.ToString("dd-MM-yyyy"),
+                Nav = h.Nav
+            }).ToList()
+        };
+    }
+}

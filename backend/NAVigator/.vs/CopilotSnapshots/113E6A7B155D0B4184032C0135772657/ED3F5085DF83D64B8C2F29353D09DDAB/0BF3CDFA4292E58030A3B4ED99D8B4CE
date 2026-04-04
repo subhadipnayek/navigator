@@ -1,0 +1,45 @@
+﻿using NAVigator.Models.Dto;
+
+namespace NAVigator.Services;
+
+public interface INavService
+{
+    /// <summary>
+    /// Returns NAV history for the given scheme. Uses smart caching:
+    /// 1. Serve from DB if latest NAV is today.
+    /// 2. If stale, check cooldown — skip API if checked recently with no new data.
+    /// 3. Otherwise fetch from external API, store new entries, and update tracker.
+    /// </summary>
+    Task<NavDataResponse?> GetNavHistoryAsync(int schemeCode, CancellationToken ct = default);
+
+    /// <summary>
+    /// Computes point-to-point returns (absolute + CAGR) between the specified dates.
+    /// Ensures NAV data is up-to-date before calculating.
+    /// </summary>
+    Task<ReturnsResponse?> GetReturnsAsync(int schemeCode, DateOnly startDate, DateOnly endDate, CancellationToken ct = default);
+
+    /// <summary>
+    /// Computes rolling returns (annualized CAGR) for every possible window of the
+    /// given period length across the fund's NAV history.
+    /// Also returns summary stats: min, max, average, median.
+    /// </summary>
+    Task<RollingReturnResponse?> GetRollingReturnsAsync(int schemeCode, int periodInYears, CancellationToken ct = default);
+
+    /// <summary>
+    /// Compares point-to-point returns for multiple funds between the specified dates.
+    /// </summary>
+    Task<ComparisonResponse> CompareReturnsAsync(int[] schemeCodes, DateOnly startDate, DateOnly endDate, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns "Growth of ₹10,000" chart data for multiple funds.
+    /// All NAVs are rebased to 10,000 on the common start date so they can
+    /// be plotted on the same Y-axis regardless of actual NAV values.
+    /// </summary>
+    Task<GrowthChartResponse> GetGrowthChartAsync(int[] schemeCodes, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns rolling return series for multiple funds so they can be
+    /// overlaid on a single chart for visual comparison.
+    /// </summary>
+    Task<RollingReturnCompareResponse> CompareRollingReturnsAsync(int[] schemeCodes, int periodInYears, CancellationToken ct = default);
+}

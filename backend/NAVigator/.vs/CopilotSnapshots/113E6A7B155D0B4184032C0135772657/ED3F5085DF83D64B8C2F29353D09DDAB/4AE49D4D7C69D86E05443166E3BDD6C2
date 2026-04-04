@@ -1,0 +1,6 @@
+﻿namespace NAVigator.Models.Dto;
+
+public class ComparisonResponse
+{
+    public List<ReturnsResponse> Funds { get; set; } = [];
+}
