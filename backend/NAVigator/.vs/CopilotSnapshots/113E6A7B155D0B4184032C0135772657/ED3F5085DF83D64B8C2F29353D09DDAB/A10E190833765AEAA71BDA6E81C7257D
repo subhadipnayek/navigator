@@ -1,7 +1,0 @@
-﻿namespace NAVigator.Models.Dto;
-
-public class ChartPointDto
-{
-    public required string Date { get; set; }
-    public decimal Value { get; set; }
-}
