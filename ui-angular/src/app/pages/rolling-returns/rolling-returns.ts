@@ -4,10 +4,12 @@ import { NavService } from '../../services/nav.service';
 import { RollingReturnResponse } from '../../models/fund.model';
 import { LineChart, ChartSeriesData } from '../../shared/line-chart/line-chart';
 import { toChartDate } from '../../shared/date-utils';
+import { StatCard } from '../../shared/stat-card/stat-card';
+import { Skeleton } from '../../shared/skeleton/skeleton';
 
 @Component({
   selector: 'app-rolling-returns',
-  imports: [LineChart, FormsModule],
+  imports: [LineChart, FormsModule, StatCard, Skeleton],
   templateUrl: './rolling-returns.html',
   styleUrl: './rolling-returns.scss',
 })

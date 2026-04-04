@@ -62,7 +62,9 @@ export interface NavDataResponse {
   fundHouse: string | null;
   latestNavDate: string | null; // "dd-MM-yyyy"
   wasFetchedFromApi: boolean; // true = fresh data was fetched from external API this request
+  isAdjusted: boolean; // true = NAVs are split-adjusted (adjusted=true was passed)
   data: NavHistoryEntry[]; // sorted newest-first
+  corporateActions: CorporateActionDto[]; // all corporate actions for this fund (always included)
 }
 
 // ==================== RETURNS MODELS ====================
@@ -240,10 +242,10 @@ Get total fund count.
 
 ---
 
-#### 6. GET `/api/nav/{schemeCode}?from={date}&to={date}&interval={interval}`
+#### 6. GET `/api/nav/{schemeCode}?from={date}&to={date}&interval={interval}&adjusted={bool}`
 
 Get NAV history for a fund. Backend handles smart caching with 1-hour cooldown.
-Supports optional date range filtering and interval-based sampling to reduce data points.
+Supports optional date range filtering, interval-based sampling, and split-adjusted NAVs.
 
 | Param      | Type     | In    | Required | Default | Format / Values              |
 | ---------- | -------- | ----- | -------- | ------- | ---------------------------- |
@@ -251,8 +253,9 @@ Supports optional date range filtering and interval-based sampling to reduce dat
 | from       | DateOnly | query | no       | —       | `yyyy-MM-dd`                 |
 | to         | DateOnly | query | no       | —       | `yyyy-MM-dd`                 |
 | interval   | string   | query | no       | `daily` | `daily`, `weekly`, `monthly` |
+| adjusted   | bool     | query | no       | `false` | `true` or `false`            |
 
-> `from`/`to` filter the date range. `interval` samples data: `weekly` = last trading day per ISO week, `monthly` = last trading day per month. `latestNavDate` always reflects the overall latest date in DB (unaffected by filtering).
+> `from`/`to` filter the date range. `interval` samples data: `weekly` = last trading day per ISO week, `monthly` = last trading day per month. `latestNavDate` always reflects the overall latest date in DB (unaffected by filtering). `adjusted=true` divides pre-action NAVs by the cumulative corporate action factor — use this for charts that should show a continuous line across splits/mergers. The response always includes `corporateActions` (the full list for this fund) regardless of the `adjusted` flag.
 
 **200:**
 
@@ -263,9 +266,22 @@ Supports optional date range filtering and interval-based sampling to reduce dat
   "fundHouse": "Nippon India Mutual Fund",
   "latestNavDate": "01-04-2026",
   "wasFetchedFromApi": true,
+  "isAdjusted": false,
   "data": [
     { "date": "01-04-2026", "nav": 667.1651 },
     { "date": "31-03-2026", "nav": 650.3583 }
+  ],
+  "corporateActions": [
+    {
+      "id": 1,
+      "schemeCode": 140085,
+      "actionDate": "15-06-2023",
+      "actionType": "Split",
+      "adjustmentFactor": 10.0,
+      "oldFaceValue": 10.0,
+      "newFaceValue": 1.0,
+      "notes": "Face value split 10:1"
+    }
   ]
 }
 ```
@@ -274,7 +290,7 @@ Supports optional date range filtering and interval-based sampling to reduce dat
 **400:** `{ "message": "interval must be 'daily', 'weekly', or 'monthly'." }`
 **404:** `{ "message": "Fund with scheme code 999999 not found." }`
 
-> `data` is sorted **newest-first**. `wasFetchedFromApi` = true means fresh data was pulled. Use `interval=monthly` for charts spanning many years to reduce payload.
+> `data` is sorted **newest-first**. `wasFetchedFromApi` = true means fresh data was pulled. Use `interval=monthly` for charts spanning many years to reduce payload. `corporateActions` is always included (empty array if none). When `adjusted=true`, `isAdjusted` is `true` and the `nav` values in `data` are divided by cumulative adjustment factors — the chart will show a continuous line across splits.
 
 ---
 
@@ -471,7 +487,7 @@ The backend automatically adjusts returns calculations:
 
 - **Point-to-point returns** (`/nav/{code}/returns`) — the `startNav` in the response is the **adjusted** NAV (original NAV ÷ cumulative adjustment factor). `absoluteReturn` and `cagr` are computed on the adjusted value.
 - **Rolling returns** (`/nav/{code}/rolling-returns`) — each rolling window's start NAV is adjusted for any corporate actions within that window.
-- **NAV history** (`/nav/{code}`) — raw NAV values are returned **unadjusted**. The UI should note that a discontinuity in the chart may be due to a corporate action.
+- **NAV history** (`/nav/{code}?adjusted=true`) — when `adjusted=true`, all pre-action NAVs are divided by the cumulative factor so the chart shows a continuous line. When `adjusted=false` (default), raw/unadjusted NAVs are returned. The `corporateActions` array is always included in the response — use it to display action markers or tooltips on the chart.
 
 ### Admin Workflow
 
@@ -520,7 +536,7 @@ To compare multiple funds, the Angular frontend should:
 9. **`schemeCode`** (integer) is the primary identifier used across all endpoints.
 10. **Comparison is UI-driven** — there are no multi-fund comparison endpoints. The frontend calls individual fund endpoints in parallel (`forkJoin`) and composes the comparison view (tables, overlaid charts, growth rebasing) client-side.
 11. **Fund master list** auto-syncs on first startup and daily at 1 AM IST. The manual sync endpoint is for ad-hoc refreshes.
-12. **Corporate actions (splits/mergers/bonuses)** — the backend automatically adjusts returns calculations. The `startNav` in returns responses is the **adjusted** value. NAV history data is always raw/unadjusted.
+12. **Corporate actions (splits/mergers/bonuses)** — the backend automatically adjusts returns calculations. The `startNav` in returns responses is the **adjusted** value. NAV history supports opt-in `adjusted=true` for split-adjusted charts. The `corporateActions` array is always included in `NavDataResponse` — use it to show action markers on charts or details in a tooltip.
 13. **Anomaly detection** (`GET /api/corporateactions/anomalies`) scans all NAV data in the DB. Only call from the admin page, not on regular user-facing pages.
 
 ---
@@ -563,17 +579,17 @@ CorporateActionService  → handles all /api/corporateactions/* calls
 
 ## Endpoint Quick Reference
 
-| #   | Method | Route                                                                      | Purpose                                 |
-| --- | ------ | -------------------------------------------------------------------------- | --------------------------------------- |
-| 1   | GET    | `/api/funds`                                                               | All funds                               |
-| 2   | GET    | `/api/funds/{schemeCode}`                                                  | Single fund                             |
-| 3   | GET    | `/api/funds/search?q=`                                                     | Search funds                            |
-| 4   | POST   | `/api/funds/sync`                                                          | Manual AMFI sync                        |
-| 5   | GET    | `/api/funds/count`                                                         | Fund count                              |
-| 6   | GET    | `/api/nav/{schemeCode}?from=&to=&interval=`                                | NAV history (filterable, samplable)     |
-| 7   | GET    | `/api/nav/{schemeCode}/returns?startDate=&endDate=`                        | Point-to-point returns                  |
-| 8   | GET    | `/api/nav/{schemeCode}/rolling-returns?periodInYears=&from=&to=&interval=` | Rolling returns (filterable, samplable) |
-| 9   | GET    | `/api/corporateactions/anomalies?threshold=`                               | Detect NAV anomalies                    |
-| 10  | GET    | `/api/corporateactions/{schemeCode}`                                       | List corporate actions                  |
-| 11  | POST   | `/api/corporateactions/{schemeCode}`                                       | Add corporate action                    |
-| 12  | DELETE | `/api/corporateactions/{schemeCode}/{actionId}`                            | Delete corporate action                 |
+| #   | Method | Route                                                                      | Purpose                                         |
+| --- | ------ | -------------------------------------------------------------------------- | ----------------------------------------------- |
+| 1   | GET    | `/api/funds`                                                               | All funds                                       |
+| 2   | GET    | `/api/funds/{schemeCode}`                                                  | Single fund                                     |
+| 3   | GET    | `/api/funds/search?q=`                                                     | Search funds                                    |
+| 4   | POST   | `/api/funds/sync`                                                          | Manual AMFI sync                                |
+| 5   | GET    | `/api/funds/count`                                                         | Fund count                                      |
+| 6   | GET    | `/api/nav/{schemeCode}?from=&to=&interval=&adjusted=`                      | NAV history (filterable, samplable, adjustable) |
+| 7   | GET    | `/api/nav/{schemeCode}/returns?startDate=&endDate=`                        | Point-to-point returns                          |
+| 8   | GET    | `/api/nav/{schemeCode}/rolling-returns?periodInYears=&from=&to=&interval=` | Rolling returns (filterable, samplable)         |
+| 9   | GET    | `/api/corporateactions/anomalies?threshold=`                               | Detect NAV anomalies                            |
+| 10  | GET    | `/api/corporateactions/{schemeCode}`                                       | List corporate actions                          |
+| 11  | POST   | `/api/corporateactions/{schemeCode}`                                       | Add corporate action                            |
+| 12  | DELETE | `/api/corporateactions/{schemeCode}/{actionId}`                            | Delete corporate action                         |

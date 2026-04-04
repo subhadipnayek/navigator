@@ -4,15 +4,13 @@
 
   <div class="stats">
     @if (loading()) {
-      <div class="stat-card">
-        <span class="stat-label">Funds in Database</span>
-        <span class="stat-value">Loading...</span>
-      </div>
+      <app-stat-card label="Funds in Database">
+        <app-skeleton width="80px" height="2rem" />
+      </app-stat-card>
     } @else if (fundCount() !== null) {
-      <div class="stat-card">
-        <span class="stat-label">Funds in Database</span>
-        <span class="stat-value">{{ fundCount()!.toLocaleString() }}</span>
-      </div>
+      <app-stat-card label="Funds in Database">
+        {{ fundCount()!.toLocaleString() }}
+      </app-stat-card>
     }
   </div>
 

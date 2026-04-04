@@ -56,18 +56,15 @@
                   {{ a.changePercent | number: '1.2-2' }}%
                 </td>
                 <td>
-                  <span
-                    class="badge"
-                    [class]="a.direction === 'Drop' ? 'badge-drop' : 'badge-spike'"
-                  >
+                  <app-badge [variant]="a.direction === 'Drop' ? 'negative' : 'positive'">
                     {{ a.direction }}
-                  </span>
+                  </app-badge>
                 </td>
                 <td>
                   @if (a.hasCorporateAction) {
-                    <span class="badge badge-recorded">Recorded</span>
+                    <app-badge variant="positive">Recorded</app-badge>
                   } @else {
-                    <span class="badge badge-pending">Pending</span>
+                    <app-badge variant="warning">Pending</app-badge>
                   }
                 </td>
                 <td class="action-buttons">
@@ -88,118 +85,114 @@
 
   <!-- Create Action Form Modal -->
   @if (showForm(); as anomaly) {
-    <div class="modal-overlay" (click)="closeForm()">
-      <div class="modal" (click)="$event.stopPropagation()">
-        <h2>Record Corporate Action</h2>
-        <p class="modal-subtitle">
-          {{ anomaly.schemeName }} — {{ anomaly.date }} ({{
-            anomaly.changePercent | number: '1.2-2'
-          }}% {{ anomaly.direction }})
-        </p>
+    <app-modal (closed)="closeForm()">
+      <h2>Record Corporate Action</h2>
+      <p class="modal-subtitle">
+        {{ anomaly.schemeName }} — {{ anomaly.date }} ({{
+          anomaly.changePercent | number: '1.2-2'
+        }}% {{ anomaly.direction }})
+      </p>
 
-        <div class="form-grid">
-          <label>
-            Action Type
-            <select [(ngModel)]="actionType">
-              <option value="Split">Split</option>
-              <option value="Merger">Merger</option>
-              <option value="Bonus">Bonus</option>
-              <option value="Other">Other</option>
-            </select>
-          </label>
+      <div class="form-grid">
+        <label>
+          Action Type
+          <select [(ngModel)]="actionType">
+            <option value="Split">Split</option>
+            <option value="Merger">Merger</option>
+            <option value="Bonus">Bonus</option>
+            <option value="Other">Other</option>
+          </select>
+        </label>
 
-          <label>
-            Adjustment Factor
-            <input type="number" [(ngModel)]="adjustmentFactor" min="0.01" step="0.1" />
-          </label>
+        <label>
+          Adjustment Factor
+          <input type="number" [(ngModel)]="adjustmentFactor" min="0.01" step="0.1" />
+        </label>
 
-          <label>
-            Old Face Value
-            <input type="number" [(ngModel)]="oldFaceValue" step="0.01" placeholder="Optional" />
-          </label>
+        <label>
+          Old Face Value
+          <input type="number" [(ngModel)]="oldFaceValue" step="0.01" placeholder="Optional" />
+        </label>
 
-          <label>
-            New Face Value
-            <input type="number" [(ngModel)]="newFaceValue" step="0.01" placeholder="Optional" />
-          </label>
+        <label>
+          New Face Value
+          <input type="number" [(ngModel)]="newFaceValue" step="0.01" placeholder="Optional" />
+        </label>
 
-          <label class="full-width">
-            Notes
-            <input type="text" [(ngModel)]="notes" placeholder="e.g. Face value split 10:1" />
-          </label>
-        </div>
-
-        @if (formError()) {
-          <div class="error">{{ formError() }}</div>
-        }
-
-        <div class="modal-actions">
-          <button class="btn" (click)="submitAction()" [disabled]="formLoading()">
-            @if (formLoading()) {
-              <span class="spinner"></span>
-              Saving...
-            } @else {
-              Save Action
-            }
-          </button>
-          <button class="btn btn-outline" (click)="closeForm()">Cancel</button>
-        </div>
+        <label class="full-width">
+          Notes
+          <input type="text" [(ngModel)]="notes" placeholder="e.g. Face value split 10:1" />
+        </label>
       </div>
-    </div>
+
+      @if (formError()) {
+        <div class="error">{{ formError() }}</div>
+      }
+
+      <div class="modal-actions">
+        <button class="btn" (click)="submitAction()" [disabled]="formLoading()">
+          @if (formLoading()) {
+            <span class="spinner"></span>
+            Saving...
+          } @else {
+            Save Action
+          }
+        </button>
+        <button class="btn btn-outline" (click)="closeForm()">Cancel</button>
+      </div>
+    </app-modal>
   }
 
   <!-- Existing Actions Panel -->
   @if (selectedSchemeCode() !== null) {
-    <div class="modal-overlay" (click)="closeActions()">
-      <div class="modal" (click)="$event.stopPropagation()">
-        <h2>Corporate Actions — Scheme {{ selectedSchemeCode() }}</h2>
+    <app-modal (closed)="closeActions()">
+      <h2>Corporate Actions — Scheme {{ selectedSchemeCode() }}</h2>
 
-        @if (actionsLoading()) {
-          <p>Loading...</p>
-        } @else if (existingActions().length === 0) {
-          <p class="empty">No corporate actions recorded for this fund.</p>
-        } @else {
-          <div class="table-wrapper">
-            <table>
-              <thead>
+      @if (actionsLoading()) {
+        <p>Loading...</p>
+      } @else if (existingActions().length === 0) {
+        <p class="empty">No corporate actions recorded for this fund.</p>
+      } @else {
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Factor</th>
+                <th>Old FV</th>
+                <th>New FV</th>
+                <th>Notes</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (ca of existingActions(); track ca.id) {
                 <tr>
-                  <th>Date</th>
-                  <th>Type</th>
-                  <th>Factor</th>
-                  <th>Old FV</th>
-                  <th>New FV</th>
-                  <th>Notes</th>
-                  <th></th>
+                  <td>{{ ca.actionDate }}</td>
+                  <td>{{ ca.actionType }}</td>
+                  <td>{{ ca.adjustmentFactor }}</td>
+                  <td>{{ ca.oldFaceValue ?? '—' }}</td>
+                  <td>{{ ca.newFaceValue ?? '—' }}</td>
+                  <td>{{ ca.notes ?? '—' }}</td>
+                  <td>
+                    <button
+                      class="btn btn-sm btn-danger"
+                      (click)="deleteAction(selectedSchemeCode()!, ca.id)"
+                    >
+                      Delete
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                @for (ca of existingActions(); track ca.id) {
-                  <tr>
-                    <td>{{ ca.actionDate }}</td>
-                    <td>{{ ca.actionType }}</td>
-                    <td>{{ ca.adjustmentFactor }}</td>
-                    <td>{{ ca.oldFaceValue ?? '—' }}</td>
-                    <td>{{ ca.newFaceValue ?? '—' }}</td>
-                    <td>{{ ca.notes ?? '—' }}</td>
-                    <td>
-                      <button
-                        class="btn btn-sm btn-danger"
-                        (click)="deleteAction(selectedSchemeCode()!, ca.id)"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        }
-
-        <div class="modal-actions">
-          <button class="btn btn-outline" (click)="closeActions()">Close</button>
+              }
+            </tbody>
+          </table>
         </div>
+      }
+
+      <div class="modal-actions">
+        <button class="btn btn-outline" (click)="closeActions()">Close</button>
       </div>
-    </div>
+    </app-modal>
   }
 </div>

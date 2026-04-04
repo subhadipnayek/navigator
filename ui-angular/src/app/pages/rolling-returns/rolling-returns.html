@@ -27,29 +27,30 @@
   @if (error()) {
     <div class="error">{{ error() }}</div>
   } @else if (loading()) {
-    <p class="loading-text">Loading rolling returns...</p>
+    <div class="stats-grid">
+      @for (_ of [1, 2, 3, 4, 5]; track _) {
+        <app-stat-card label="">
+          <app-skeleton width="100%" height="1.25rem" />
+        </app-stat-card>
+      }
+    </div>
   } @else if (data(); as d) {
     <div class="stats-grid">
-      <div class="stat-card">
-        <span class="label">Data Points</span>
-        <span class="value">{{ d.dataPoints.toLocaleString() }}</span>
-      </div>
-      <div class="stat-card">
-        <span class="label">Min Return</span>
-        <span class="value negative">{{ formatPercent(d.minReturn) }}</span>
-      </div>
-      <div class="stat-card">
-        <span class="label">Max Return</span>
-        <span class="value positive">{{ formatPercent(d.maxReturn) }}</span>
-      </div>
-      <div class="stat-card">
-        <span class="label">Average</span>
-        <span class="value">{{ formatPercent(d.averageReturn) }}</span>
-      </div>
-      <div class="stat-card">
-        <span class="label">Median</span>
-        <span class="value">{{ formatPercent(d.medianReturn) }}</span>
-      </div>
+      <app-stat-card label="Data Points">
+        {{ d.dataPoints.toLocaleString() }}
+      </app-stat-card>
+      <app-stat-card label="Min Return" variant="negative">
+        {{ formatPercent(d.minReturn) }}
+      </app-stat-card>
+      <app-stat-card label="Max Return" variant="positive">
+        {{ formatPercent(d.maxReturn) }}
+      </app-stat-card>
+      <app-stat-card label="Average">
+        {{ formatPercent(d.averageReturn) }}
+      </app-stat-card>
+      <app-stat-card label="Median">
+        {{ formatPercent(d.medianReturn) }}
+      </app-stat-card>
     </div>
 
     @if (chartSeries().length > 0) {

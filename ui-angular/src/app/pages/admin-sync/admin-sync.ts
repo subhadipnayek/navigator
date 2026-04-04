@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { FundService } from '../../services/fund.service';
 import { FundSyncResult } from '../../models/fund.model';
+import { ToastService } from '../../shared/toast/toast.service';
 
 @Component({
   selector: 'app-admin-sync',
@@ -10,6 +11,7 @@ import { FundSyncResult } from '../../models/fund.model';
 })
 export class AdminSync {
   private readonly fundService = inject(FundService);
+  private readonly toast = inject(ToastService);
 
   readonly syncing = signal(false);
   readonly result = signal<FundSyncResult | null>(null);
@@ -24,10 +26,12 @@ export class AdminSync {
       next: (res) => {
         this.result.set(res);
         this.syncing.set(false);
+        this.toast.success(`Sync complete — ${res.added} added, ${res.updated} updated`);
       },
       error: (err) => {
         this.error.set(err.error?.message ?? 'Sync failed');
         this.syncing.set(false);
+        this.toast.error('Sync failed');
       },
     });
   }

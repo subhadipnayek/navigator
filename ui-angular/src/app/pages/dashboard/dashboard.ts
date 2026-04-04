@@ -1,10 +1,12 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FundService } from '../../services/fund.service';
+import { StatCard } from '../../shared/stat-card/stat-card';
+import { Skeleton } from '../../shared/skeleton/skeleton';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink],
+  imports: [RouterLink, StatCard, Skeleton],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })

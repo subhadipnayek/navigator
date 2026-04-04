@@ -37,7 +37,9 @@ export interface NavDataResponse {
   fundHouse: string | null;
   latestNavDate: string | null; // "dd-MM-yyyy"
   wasFetchedFromApi: boolean;
+  isAdjusted: boolean;
   data: NavHistoryEntry[]; // sorted newest-first
+  corporateActions: CorporateActionDto[];
 }
 
 // ---------- Returns Models ----------

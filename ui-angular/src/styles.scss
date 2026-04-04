@@ -1,3 +1,63 @@
+:root {
+  // Colors — Primary
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-light: #eff6ff;
+  --color-primary-border: #bfdbfe;
+
+  // Colors — Semantic
+  --color-positive: #16a34a;
+  --color-positive-bg: #f0fdf4;
+  --color-negative: #dc2626;
+  --color-negative-bg: #fef2f2;
+  --color-warning: #ca8a04;
+  --color-warning-bg: #fefce8;
+  --color-danger: #dc2626;
+  --color-danger-hover: #b91c1c;
+
+  // Colors — Neutral
+  --color-text: #1a1a1a;
+  --color-text-secondary: #666;
+  --color-text-muted: #999;
+  --color-text-label: #444;
+  --color-bg: #fff;
+  --color-bg-subtle: #fafafa;
+  --color-bg-hover: #f5f7ff;
+  --color-border: #e0e0e0;
+  --color-border-input: #ccc;
+
+  // Spacing
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+  --space-2xl: 2rem;
+
+  // Border radius
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-full: 20px;
+
+  // Typography
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.8rem;
+  --font-size-base: 0.875rem;
+  --font-size-md: 0.9rem;
+  --font-size-lg: 1rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 2rem;
+  --font-size-4xl: 2.5rem;
+
+  // Transitions
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+}
+
 *,
 *::before,
 *::after {
@@ -6,9 +66,20 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  color: #1a1a1a;
-  background: #fff;
+  font-family: var(--font-family);
+  color: var(--color-text);
+  background: var(--color-bg);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+// Global focus-visible outline for keyboard accessibility
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+// Remove default focus for mouse users
+:focus:not(:focus-visible) {
+  outline: none;
 }

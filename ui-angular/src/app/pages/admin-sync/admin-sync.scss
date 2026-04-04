@@ -1,93 +1,68 @@
+@use '../../shared/styles/mixins' as m;
+
 .admin-sync-page {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 2rem 1rem;
+  @include m.page(600px);
 }
 
 h1 {
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-sm);
 }
 
 .description {
-  color: #666;
-  margin-bottom: 1.5rem;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xl);
 }
 
 .btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  background: #2563eb;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 1rem;
-
-  &:hover:not(:disabled) {
-    background: #1d4ed8;
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
+  @include m.btn;
+  padding: var(--space-md) var(--space-xl);
+  font-size: var(--font-size-lg);
 
   .spinner {
+    @include m.spinner-inline;
     width: 16px;
     height: 16px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-top-color: #fff;
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
   }
 }
 
 .error {
-  color: #dc2626;
-  margin-top: 1rem;
+  @include m.error-text;
+  margin-top: var(--space-lg);
 }
 
 .result-card {
-  margin-top: 1.5rem;
-  padding: 1.5rem;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  background: #fafafa;
+  margin-top: var(--space-xl);
+  padding: var(--space-xl);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-subtle);
 
   h2 {
-    margin: 0 0 1rem;
-    color: #16a34a;
+    margin: 0 0 var(--space-lg);
+    color: var(--color-positive);
   }
 }
 
 .result-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 1rem;
+  gap: var(--space-lg);
 }
 
 .result-item {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--space-xs);
 
   .label {
-    font-size: 0.75rem;
-    color: #666;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
 
   .value {
-    font-size: 1.25rem;
+    font-size: var(--font-size-xl);
     font-weight: 600;
-  }
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
   }
 }

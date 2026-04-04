@@ -125,13 +125,14 @@ export class Compare implements OnDestroy {
       },
     });
 
-    // 2. Growth of ₹10,000 chart — fetch NAV history per fund with monthly interval
+    // 2. Growth of ₹10,000 chart — fetch split-adjusted NAV history per fund with monthly interval
     forkJoin(
       funds.map((f) =>
         this.navService.getNavHistory(f.schemeCode, {
           from: this.startDate,
           to: this.endDate,
           interval: 'monthly',
+          adjusted: true,
         }),
       ),
     ).subscribe({

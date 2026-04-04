@@ -1,16 +1,23 @@
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, TitleCasePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FundService } from '../../services/fund.service';
 import { NavService } from '../../services/nav.service';
-import { Fund, NavDataResponse, ReturnsResponse } from '../../models/fund.model';
+import {
+  Fund,
+  NavDataResponse,
+  ReturnsResponse,
+  CorporateActionDto,
+} from '../../models/fund.model';
 import { LineChart, ChartSeriesData } from '../../shared/line-chart/line-chart';
 import { toChartDate } from '../../shared/date-utils';
+import { StatCard } from '../../shared/stat-card/stat-card';
+import { Skeleton } from '../../shared/skeleton/skeleton';
 
 @Component({
   selector: 'app-fund-detail',
-  imports: [RouterLink, DecimalPipe, LineChart, FormsModule],
+  imports: [RouterLink, DecimalPipe, TitleCasePipe, LineChart, FormsModule, StatCard, Skeleton],
   templateUrl: './fund-detail.html',
   styleUrl: './fund-detail.scss',
 })
@@ -27,9 +34,15 @@ export class FundDetail implements OnInit {
   readonly error = signal<string | null>(null);
   readonly returnsLoading = signal(false);
   readonly returnsError = signal<string | null>(null);
+  readonly adjusted = signal(false);
+  readonly selectedInterval = signal<'daily' | 'weekly' | 'monthly'>('daily');
 
   startDate = '';
   endDate = '';
+
+  readonly corporateActions = computed<CorporateActionDto[]>(() => {
+    return this.navData()?.corporateActions ?? [];
+  });
 
   readonly navChartSeries = computed<ChartSeriesData[]>(() => {
     const nav = this.navData();
@@ -60,15 +73,36 @@ export class FundDetail implements OnInit {
       },
     });
 
-    this.navService.getNavHistory(code).subscribe({
-      next: (data) => {
-        this.navData.set(data);
-        this.loading.set(false);
-      },
-      error: () => this.loading.set(false),
-    });
+    this.navService
+      .getNavHistory(code, { adjusted: this.adjusted(), interval: this.selectedInterval() })
+      .subscribe({
+        next: (data) => {
+          this.navData.set(data);
+          this.loading.set(false);
+        },
+        error: () => this.loading.set(false),
+      });
 
     this.fetchReturns();
+  }
+
+  reloadNav(): void {
+    const code = Number(this.schemeCode());
+    this.navService
+      .getNavHistory(code, { adjusted: this.adjusted(), interval: this.selectedInterval() })
+      .subscribe({
+        next: (data) => this.navData.set(data),
+      });
+  }
+
+  toggleAdjusted(): void {
+    this.adjusted.update((v) => !v);
+    this.reloadNav();
+  }
+
+  setInterval(interval: 'daily' | 'weekly' | 'monthly'): void {
+    this.selectedInterval.set(interval);
+    this.reloadNav();
   }
 
   fetchReturns(): void {
@@ -95,6 +129,11 @@ export class FundDetail implements OnInit {
 
   returnClass(value: number | null): string {
     if (value === null) return '';
+    return value >= 0 ? 'positive' : 'negative';
+  }
+
+  returnVariant(value: number | null): 'default' | 'positive' | 'negative' {
+    if (value === null) return 'default';
     return value >= 0 ? 'positive' : 'negative';
   }
 

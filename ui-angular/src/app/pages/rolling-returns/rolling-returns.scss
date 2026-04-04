@@ -1,142 +1,48 @@
+@use '../../shared/styles/mixins' as m;
+
 .rolling-returns-page {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 2rem 1rem;
+  @include m.page(900px);
 }
 
 h1 {
-  margin-bottom: 0.25rem;
+  margin-bottom: var(--space-xs);
 }
 
 .fund-name {
-  color: #666;
-  margin-bottom: 1.5rem;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xl);
 }
 
 .controls-row {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 1.5rem;
-  margin-bottom: 1.5rem;
+  gap: var(--space-xl);
+  margin-bottom: var(--space-xl);
 }
 
 .period-selector {
-  display: flex;
-  gap: 0.5rem;
-
-  button {
-    padding: 0.5rem 1rem;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    background: #fff;
-    cursor: pointer;
-    font-size: 0.875rem;
-
-    &:hover {
-      border-color: #2563eb;
-    }
-
-    &.active {
-      background: #2563eb;
-      color: #fff;
-      border-color: #2563eb;
-    }
-  }
+  @include m.period-selector;
 }
 
 .date-picker-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: flex-end;
-
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    font-size: 0.8rem;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  input[type='date'] {
-    padding: 0.5rem 0.75rem;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    font-size: 0.875rem;
-
-    &:focus {
-      outline: none;
-      border-color: #2563eb;
-    }
-  }
+  @include m.date-picker-row;
+  margin-bottom: 0;
 }
 
 .btn {
-  padding: 0.5rem 1rem;
-  background: #2563eb;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.875rem;
-
-  &:hover:not(:disabled) {
-    background: #1d4ed8;
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
+  @include m.btn;
 }
 
 .error {
-  color: #dc2626;
+  @include m.error-text;
   text-align: center;
-  padding: 2rem;
-}
-
-.loading-text {
-  text-align: center;
-  color: #666;
+  padding: var(--space-2xl);
 }
 
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 1rem;
-  margin-bottom: 2rem;
-}
-
-.stat-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 1rem;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  background: #fafafa;
-
-  .label {
-    font-size: 0.75rem;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .value {
-    font-size: 1.25rem;
-    font-weight: 600;
-  }
-
-  .positive {
-    color: #16a34a;
-  }
-
-  .negative {
-    color: #dc2626;
-  }
+  gap: var(--space-lg);
+  margin-bottom: var(--space-2xl);
 }

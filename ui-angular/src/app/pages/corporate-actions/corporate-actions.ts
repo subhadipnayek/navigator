@@ -7,15 +7,19 @@ import {
   CorporateActionDto,
   CreateCorporateActionRequest,
 } from '../../models/fund.model';
+import { Badge } from '../../shared/badge/badge';
+import { Modal } from '../../shared/modal/modal';
+import { ToastService } from '../../shared/toast/toast.service';
 
 @Component({
   selector: 'app-corporate-actions',
-  imports: [FormsModule, DecimalPipe],
+  imports: [FormsModule, DecimalPipe, Badge, Modal],
   templateUrl: './corporate-actions.html',
   styleUrl: './corporate-actions.scss',
 })
 export class CorporateActions {
   private readonly caService = inject(CorporateActionService);
+  private readonly toast = inject(ToastService);
 
   // Anomaly detection
   threshold = 30;
@@ -93,6 +97,7 @@ export class CorporateActions {
       next: () => {
         this.formLoading.set(false);
         this.showForm.set(null);
+        this.toast.success('Corporate action recorded');
         // Mark the anomaly as having a corporate action
         this.anomalies.update((list) =>
           list.map((a) =>
@@ -105,6 +110,7 @@ export class CorporateActions {
       error: (err) => {
         this.formError.set(err.error?.message ?? 'Failed to create action');
         this.formLoading.set(false);
+        this.toast.error('Failed to create action');
       },
     });
   }
@@ -131,6 +137,7 @@ export class CorporateActions {
   deleteAction(schemeCode: number, actionId: number): void {
     this.caService.deleteAction(schemeCode, actionId).subscribe({
       next: () => {
+        this.toast.success('Corporate action deleted');
         this.existingActions.update((list) => list.filter((a) => a.id !== actionId));
         // If we deleted the last action for this scheme+date, update anomalies
         this.anomalies.update((list) =>
