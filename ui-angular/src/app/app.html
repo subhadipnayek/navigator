@@ -1,0 +1,13 @@
+<header class="app-header">
+  <nav>
+    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Home</a>
+    <a routerLink="/funds" routerLinkActive="active">Funds</a>
+    <a routerLink="/compare" routerLinkActive="active">Compare</a>
+    <a routerLink="/admin/sync" routerLinkActive="active">Sync</a>
+    <a routerLink="/admin/corporate-actions" routerLinkActive="active">Corporate Actions</a>
+  </nav>
+</header>
+
+<main>
+  <router-outlet />
+</main>

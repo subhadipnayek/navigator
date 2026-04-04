@@ -1,0 +1,38 @@
+:host {
+  display: block;
+}
+
+.app-header {
+  border-bottom: 1px solid #e0e0e0;
+  background: #fff;
+
+  nav {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    gap: 1.5rem;
+    padding: 0.75rem 1rem;
+
+    a {
+      text-decoration: none;
+      color: #444;
+      font-size: 0.9rem;
+      font-weight: 500;
+      padding: 0.25rem 0;
+      border-bottom: 2px solid transparent;
+
+      &:hover {
+        color: #2563eb;
+      }
+
+      &.active {
+        color: #2563eb;
+        border-bottom-color: #2563eb;
+      }
+    }
+  }
+}
+
+main {
+  min-height: calc(100vh - 60px);
+}

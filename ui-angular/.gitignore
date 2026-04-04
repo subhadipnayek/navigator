@@ -1,0 +1,71 @@
+# ========================
+# NAVigator Angular Frontend
+# ========================
+
+# Compiled output
+/dist/
+/tmp/
+/out-tsc/
+/bazel-out/
+
+# Dependencies
+/node_modules/
+package-lock.json
+
+# Angular cache
+/.angular/
+
+# Sass cache
+.sass-cache/
+
+# Testing
+/coverage/
+testem.log
+/karma-results/
+
+# Logs
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+pnpm-debug.log
+lerna-debug.log
+
+# IDEs and editors
+.idea/
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.swo
+*~
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/
+
+# System files
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# SSR build artifacts
+/server-dist/
+
+# Environment overrides (keep checked-in defaults)
+/src/environments/environment.local.ts
+
+# Misc
+/connect.lock
+/libpeerconnection.log
+/typings/
+__screenshots__/
+*.tgz

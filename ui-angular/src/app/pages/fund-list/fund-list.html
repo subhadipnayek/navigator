@@ -1,0 +1,56 @@
+<div class="fund-list-page">
+  <h1>Search Funds</h1>
+
+  <div class="search-box">
+    <input
+      type="text"
+      placeholder="Search by name, fund house, or scheme code..."
+      [value]="searchQuery()"
+      (input)="onSearchInput($any($event.target).value)"
+      autofocus
+    />
+    @if (loading()) {
+      <span class="spinner"></span>
+    }
+  </div>
+
+  @if (funds().length > 0) {
+    <div class="results-count">{{ funds().length }} results</div>
+    <table class="fund-table">
+      <thead>
+        <tr>
+          <th>Scheme Code</th>
+          <th>Fund Name</th>
+          <th>Fund House</th>
+          <th>Category</th>
+          <th>Latest NAV</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (fund of funds(); track fund.schemeCode) {
+          <tr>
+            <td>
+              <a [routerLink]="['/funds', fund.schemeCode]">{{ fund.schemeCode }}</a>
+            </td>
+            <td>
+              <a [routerLink]="['/funds', fund.schemeCode]">{{ fund.schemeName }}</a>
+            </td>
+            <td>{{ fund.fundHouse ?? '—' }}</td>
+            <td>{{ fund.schemeCategory ?? '—' }}</td>
+            <td class="nav-value">
+              @if (fund.latestNav !== null) {
+                {{ fund.latestNav | number: '1.2-4' }}
+              } @else {
+                —
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  } @else if (!loading() && searchQuery().trim().length > 0) {
+    <p class="empty">No funds found for "{{ searchQuery() }}"</p>
+  } @else if (!loading()) {
+    <p class="hint">Start typing to search for mutual funds and ETFs.</p>
+  }
+</div>

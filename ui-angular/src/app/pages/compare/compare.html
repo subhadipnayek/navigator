@@ -1,0 +1,155 @@
+<div class="compare-page">
+  <h1>Compare Funds</h1>
+
+  <div class="search-box">
+    <input
+      type="text"
+      placeholder="Search and add funds to compare..."
+      [value]="searchQuery()"
+      (input)="onSearchInput($any($event.target).value)"
+    />
+    @if (loading()) {
+      <span class="spinner"></span>
+    }
+  </div>
+
+  @if (searchResults().length > 0 && searchQuery().trim().length > 0) {
+    <ul class="search-dropdown">
+      @for (fund of searchResults(); track fund.schemeCode) {
+        <li>
+          <button (click)="addFund(fund)" [disabled]="isAlreadySelected(fund.schemeCode)">
+            <span class="fund-name">{{ fund.schemeName }}</span>
+            <span class="fund-meta">{{ fund.schemeCode }} · {{ fund.fundHouse ?? '' }}</span>
+          </button>
+        </li>
+      }
+    </ul>
+  }
+
+  @if (selectedFunds().length > 0) {
+    <div class="selected-funds">
+      @for (fund of selectedFunds(); track fund.schemeCode) {
+        <span class="chip">
+          {{ fund.schemeName }}
+          <button class="remove" (click)="removeFund(fund.schemeCode)">&times;</button>
+        </span>
+      }
+    </div>
+
+    <div class="date-picker-row">
+      <label>
+        Start Date
+        <input type="date" [(ngModel)]="startDate" />
+      </label>
+      <label>
+        End Date
+        <input type="date" [(ngModel)]="endDate" />
+      </label>
+    </div>
+
+    <button
+      class="btn compare-btn"
+      (click)="compare()"
+      [disabled]="selectedFunds().length < 2 || comparing()"
+    >
+      @if (comparing()) {
+        Comparing...
+      } @else {
+        Compare ({{ selectedFunds().length }} funds)
+      }
+    </button>
+  }
+
+  @if (error()) {
+    <div class="error">{{ error() }}</div>
+  }
+
+  @if (returnsResults().length > 0) {
+    <section class="comparison-results">
+      <h2>Returns Comparison</h2>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Fund</th>
+              <th>Absolute Return</th>
+              <th>CAGR</th>
+              <th>Start NAV</th>
+              <th>End NAV</th>
+              <th>Start Date</th>
+              <th>End Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (fund of returnsResults(); track fund.schemeCode) {
+              <tr>
+                <td class="fund-name-cell">
+                  <div>{{ fund.schemeName }}</div>
+                  <small>{{ fund.fundHouse }}</small>
+                </td>
+                <td [class]="returnClass(fund.absoluteReturn)">
+                  {{ formatReturn(fund.absoluteReturn) }}
+                </td>
+                <td [class]="returnClass(fund.cagr)">
+                  {{ formatReturn(fund.cagr) }}
+                </td>
+                <td>{{ fund.startNav !== null ? (fund.startNav | number: '1.2-4') : 'N/A' }}</td>
+                <td>{{ fund.endNav !== null ? (fund.endNav | number: '1.2-4') : 'N/A' }}</td>
+                <td>{{ fund.startDate ?? 'N/A' }}</td>
+                <td>{{ fund.endDate ?? 'N/A' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+
+  @if (growthChartSeries().length > 0) {
+    <section class="chart-section">
+      <h2>Growth of ₹10,000</h2>
+      <app-line-chart
+        [seriesList]="growthChartSeries()"
+        yAxisLabel="Value (₹)"
+        [priceFormat]="growthPriceFormat"
+      />
+    </section>
+  }
+
+  @if (returnsResults().length > 0) {
+    <section class="chart-section">
+      <h2>Rolling Returns Comparison</h2>
+      <div class="period-selector">
+        @for (p of rollingPeriods; track p) {
+          <button [class.active]="selectedRollingPeriod() === p" (click)="selectRollingPeriod(p)">
+            {{ p }}Y
+          </button>
+        }
+      </div>
+
+      @if (rollingResults().length > 0) {
+        <div class="stats-row">
+          @for (f of rollingResults(); track f.schemeCode) {
+            <div class="stat-card">
+              <span class="stat-name">{{ f.schemeName }}</span>
+              <div class="stat-details">
+                <span>Min: {{ formatReturn(f.minReturn) }}</span>
+                <span>Max: {{ formatReturn(f.maxReturn) }}</span>
+                <span>Avg: {{ formatReturn(f.averageReturn) }}</span>
+                <span>Med: {{ formatReturn(f.medianReturn) }}</span>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      @if (rollingChartSeries().length > 0) {
+        <app-line-chart
+          [seriesList]="rollingChartSeries()"
+          yAxisLabel="Annualized Return %"
+          [priceFormat]="percentFormat"
+        />
+      }
+    </section>
+  }
+</div>

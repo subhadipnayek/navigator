@@ -1,0 +1,63 @@
+<div class="rolling-returns-page">
+  <h1>Rolling Returns</h1>
+
+  @if (data(); as d) {
+    <p class="fund-name">{{ d.schemeName }}</p>
+  }
+
+  <div class="controls-row">
+    <div class="period-selector">
+      @for (p of periods; track p) {
+        <button [class.active]="selectedPeriod() === p" (click)="selectPeriod(p)">{{ p }}Y</button>
+      }
+    </div>
+    <div class="date-picker-row">
+      <label>
+        From
+        <input type="date" [(ngModel)]="fromDate" />
+      </label>
+      <label>
+        To
+        <input type="date" [(ngModel)]="toDate" />
+      </label>
+      <button class="btn" (click)="loadData()" [disabled]="loading()">Apply</button>
+    </div>
+  </div>
+
+  @if (error()) {
+    <div class="error">{{ error() }}</div>
+  } @else if (loading()) {
+    <p class="loading-text">Loading rolling returns...</p>
+  } @else if (data(); as d) {
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="label">Data Points</span>
+        <span class="value">{{ d.dataPoints.toLocaleString() }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="label">Min Return</span>
+        <span class="value negative">{{ formatPercent(d.minReturn) }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="label">Max Return</span>
+        <span class="value positive">{{ formatPercent(d.maxReturn) }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="label">Average</span>
+        <span class="value">{{ formatPercent(d.averageReturn) }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="label">Median</span>
+        <span class="value">{{ formatPercent(d.medianReturn) }}</span>
+      </div>
+    </div>
+
+    @if (chartSeries().length > 0) {
+      <app-line-chart
+        [seriesList]="chartSeries()"
+        yAxisLabel="Annualized Return %"
+        [priceFormat]="percentFormat"
+      />
+    }
+  }
+</div>

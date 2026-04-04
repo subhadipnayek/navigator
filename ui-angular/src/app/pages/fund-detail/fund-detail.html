@@ -1,0 +1,164 @@
+<div class="fund-detail-page">
+  @if (error()) {
+    <div class="error">{{ error() }}</div>
+  } @else if (loading()) {
+    <p class="loading-text">Loading fund details...</p>
+  } @else {
+    @if (fund(); as f) {
+      <div class="fund-header">
+        <h1>{{ f.schemeName }}</h1>
+        <div class="meta">
+          <span class="scheme-code">{{ f.schemeCode }}</span>
+          @if (f.fundHouse) {
+            <span class="fund-house">{{ f.fundHouse }}</span>
+          }
+          @if (f.schemeCategory) {
+            <span class="category">{{ f.schemeCategory }}</span>
+          }
+        </div>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-card">
+          <span class="label">Latest NAV</span>
+          <span class="value">
+            @if (f.latestNav !== null) {
+              {{ f.latestNav | number: '1.2-5' }}
+            } @else {
+              —
+            }
+          </span>
+        </div>
+        <div class="info-card">
+          <span class="label">NAV Date</span>
+          <span class="value">{{ f.latestNavDate ?? '—' }}</span>
+        </div>
+        <div class="info-card">
+          <span class="label">Scheme Type</span>
+          <span class="value">{{ f.schemeType ?? '—' }}</span>
+        </div>
+        @if (navData(); as nav) {
+          <div class="info-card">
+            <span class="label">Data Points</span>
+            <span class="value">{{ nav.data.length.toLocaleString() }}</span>
+          </div>
+          @if (nav.wasFetchedFromApi) {
+            <div class="info-card fresh">
+              <span class="label">Status</span>
+              <span class="value">Fresh data</span>
+            </div>
+          }
+        }
+      </div>
+
+      @if (navChartSeries().length > 0) {
+        <section class="chart-section">
+          <h2>NAV History</h2>
+          <app-line-chart
+            [seriesList]="navChartSeries()"
+            yAxisLabel="NAV (₹)"
+            [priceFormat]="{ type: 'price', precision: 4, minMove: 0.0001 }"
+          />
+        </section>
+      }
+
+      @if (returns(); as ret) {
+        <section class="returns-section">
+          <h2>Point-to-Point Returns</h2>
+          <div class="date-picker-row">
+            <label>
+              Start Date
+              <input type="date" [(ngModel)]="startDate" />
+            </label>
+            <label>
+              End Date
+              <input type="date" [(ngModel)]="endDate" />
+            </label>
+            <button class="btn" (click)="fetchReturns()" [disabled]="returnsLoading()">
+              @if (returnsLoading()) {
+                Loading...
+              } @else {
+                Calculate
+              }
+            </button>
+          </div>
+          @if (returnsError()) {
+            <div class="error">{{ returnsError() }}</div>
+          }
+          <div class="returns-grid">
+            <div class="info-card">
+              <span class="label">Absolute Return</span>
+              <span class="value" [class]="returnClass(ret.absoluteReturn)">
+                {{ formatReturn(ret.absoluteReturn) }}
+              </span>
+            </div>
+            <div class="info-card">
+              <span class="label">CAGR</span>
+              <span class="value" [class]="returnClass(ret.cagr)">
+                {{ formatReturn(ret.cagr) }}
+              </span>
+            </div>
+            <div class="info-card">
+              <span class="label">Start NAV</span>
+              <span class="value">
+                @if (ret.startNav !== null) {
+                  {{ ret.startNav | number: '1.2-4' }}
+                } @else {
+                  N/A
+                }
+              </span>
+            </div>
+            <div class="info-card">
+              <span class="label">End NAV</span>
+              <span class="value">
+                @if (ret.endNav !== null) {
+                  {{ ret.endNav | number: '1.2-4' }}
+                } @else {
+                  N/A
+                }
+              </span>
+            </div>
+            <div class="info-card">
+              <span class="label">Start Date</span>
+              <span class="value">{{ ret.startDate ?? 'N/A' }}</span>
+            </div>
+            <div class="info-card">
+              <span class="label">End Date</span>
+              <span class="value">{{ ret.endDate ?? 'N/A' }}</span>
+            </div>
+          </div>
+        </section>
+      } @else {
+        <section class="returns-section">
+          <h2>Point-to-Point Returns</h2>
+          <div class="date-picker-row">
+            <label>
+              Start Date
+              <input type="date" [(ngModel)]="startDate" />
+            </label>
+            <label>
+              End Date
+              <input type="date" [(ngModel)]="endDate" />
+            </label>
+            <button class="btn" (click)="fetchReturns()" [disabled]="returnsLoading()">
+              @if (returnsLoading()) {
+                Loading...
+              } @else {
+                Calculate
+              }
+            </button>
+          </div>
+          @if (returnsError()) {
+            <div class="error">{{ returnsError() }}</div>
+          } @else if (returnsLoading()) {
+            <p class="loading-text">Calculating returns...</p>
+          }
+        </section>
+      }
+
+      <div class="actions">
+        <a [routerLink]="['/funds', f.schemeCode, 'rolling']" class="btn"> View Rolling Returns </a>
+      </div>
+    }
+  }
+</div>

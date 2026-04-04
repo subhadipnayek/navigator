@@ -1,0 +1,33 @@
+<div class="dashboard">
+  <h1>NAVigator</h1>
+  <p class="subtitle">Mutual Fund & ETF Comparison Tool</p>
+
+  <div class="stats">
+    @if (loading()) {
+      <div class="stat-card">
+        <span class="stat-label">Funds in Database</span>
+        <span class="stat-value">Loading...</span>
+      </div>
+    } @else if (fundCount() !== null) {
+      <div class="stat-card">
+        <span class="stat-label">Funds in Database</span>
+        <span class="stat-value">{{ fundCount()!.toLocaleString() }}</span>
+      </div>
+    }
+  </div>
+
+  <nav class="quick-links">
+    <a routerLink="/funds" class="link-card">
+      <h3>Search Funds</h3>
+      <p>Browse and search mutual funds & ETFs</p>
+    </a>
+    <a routerLink="/compare" class="link-card">
+      <h3>Compare Funds</h3>
+      <p>Side-by-side returns comparison</p>
+    </a>
+    <a routerLink="/admin/sync" class="link-card">
+      <h3>Sync Data</h3>
+      <p>Update fund master list from AMFI</p>
+    </a>
+  </nav>
+</div>

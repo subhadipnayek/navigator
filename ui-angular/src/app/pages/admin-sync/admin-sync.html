@@ -1,0 +1,47 @@
+<div class="admin-sync-page">
+  <h1>Sync Fund Data</h1>
+  <p class="description">
+    Download and update the fund master list from AMFI. This may take 10–15 seconds.
+  </p>
+
+  <button class="btn" (click)="sync()" [disabled]="syncing()">
+    @if (syncing()) {
+      <span class="spinner"></span>
+      Syncing...
+    } @else {
+      Sync Now
+    }
+  </button>
+
+  @if (error()) {
+    <div class="error">{{ error() }}</div>
+  }
+
+  @if (result(); as r) {
+    <div class="result-card">
+      <h2>Sync Complete</h2>
+      <div class="result-grid">
+        <div class="result-item">
+          <span class="label">Total Parsed</span>
+          <span class="value">{{ r.totalParsed.toLocaleString() }}</span>
+        </div>
+        <div class="result-item">
+          <span class="label">Added</span>
+          <span class="value">{{ r.added.toLocaleString() }}</span>
+        </div>
+        <div class="result-item">
+          <span class="label">Updated</span>
+          <span class="value">{{ r.updated.toLocaleString() }}</span>
+        </div>
+        <div class="result-item">
+          <span class="label">Unchanged</span>
+          <span class="value">{{ r.unchanged.toLocaleString() }}</span>
+        </div>
+        <div class="result-item">
+          <span class="label">Duration</span>
+          <span class="value">{{ r.duration }}</span>
+        </div>
+      </div>
+    </div>
+  }
+</div>
