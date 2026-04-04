@@ -22,14 +22,18 @@ public class CorporateActionService(
         var schemesWithActions = await actionRepo.GetSchemeCodesWithActionsAsync();
 
         // Query all funds that have at least 2 NAV entries, looking for large day-over-day swings.
-        // We do this in SQL for performance rather than loading all NAV history into memory.
-        var anomalies = await db.NavHistories
-            .AsNoTracking()
+        // Use a subquery for the filter (EF Core can't translate GroupBy+SelectMany with ordering).
+        var schemesWithMultipleNavs = db.NavHistories
             .GroupBy(n => n.SchemeCode)
             .Where(g => g.Count() > 1)
-            .SelectMany(g => g
-                .OrderBy(n => n.Date)
-                .Select(n => new { n.SchemeCode, n.Date, n.Nav }))
+            .Select(g => g.Key);
+
+        var anomalies = await db.NavHistories
+            .AsNoTracking()
+            .Where(n => schemesWithMultipleNavs.Contains(n.SchemeCode))
+            .OrderBy(n => n.SchemeCode)
+            .ThenBy(n => n.Date)
+            .Select(n => new { n.SchemeCode, n.Date, n.Nav })
             .ToListAsync(ct);
 
         // Process in memory — group by scheme, detect day-over-day anomalies
