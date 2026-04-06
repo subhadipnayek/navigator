@@ -182,6 +182,26 @@ public class NavService(
         // from that date to the latest date so pre-action NAVs become comparable.
         DateOnly? overallLatestDate = histories.Count > 0 ? histories[0].Date : null;
 
+        // When adjusted, truncate data before the latest discontinuity
+        // (pre-discontinuity NAVs are not meaningfully connected to post-discontinuity)
+        if (adjusted && actions.Count > 0)
+        {
+            var latestDiscontinuity = actions
+                .Where(a => a.ActionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase))
+                .Select(a => DateOnly.TryParseExact(a.ActionDate, "dd-MM-yyyy",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var d) ? d : (DateOnly?)null)
+                .Where(d => d.HasValue)
+                .Max();
+
+            if (latestDiscontinuity.HasValue)
+            {
+                histories = histories
+                    .Where(h => h.Date >= latestDiscontinuity.Value)
+                    .ToList();
+            }
+        }
+
         // Apply date range filter
         if (from.HasValue || to.HasValue)
         {
@@ -248,6 +268,19 @@ public class NavService(
         var startEntry = FindClosestNav(navByDate, startDate) ?? navByDate[0];
         var endEntry = FindClosestNav(navByDate, endDate) ?? navByDate[^1];
 
+        // Check for data discontinuity between start and end dates
+        var discontinuityDate = await corporateActionService.GetDiscontinuityDateAsync(
+            schemeCode, startEntry.Date, endEntry.Date);
+        bool hasDiscontinuity = discontinuityDate.HasValue;
+
+        if (hasDiscontinuity)
+        {
+            // Clamp start to the first NAV on or after the discontinuity date
+            var postDiscontinuity = navByDate.FirstOrDefault(n => n.Date >= discontinuityDate.Value);
+            if (postDiscontinuity is not null && postDiscontinuity.Date < endEntry.Date)
+                startEntry = postDiscontinuity;
+        }
+
         if (startEntry.Date >= endEntry.Date || startEntry.Nav <= 0)
             return new ReturnsResponse
             {
@@ -277,7 +310,8 @@ public class NavService(
             StartDate = startEntry.Date.ToString("dd-MM-yyyy"),
             StartNav = Math.Round(adjustedStartNav, 6),
             EndDate = endEntry.Date.ToString("dd-MM-yyyy"),
-            EndNav = endEntry.Nav
+            EndNav = endEntry.Nav,
+            HasDiscontinuity = hasDiscontinuity
         };
     }
 
@@ -306,6 +340,16 @@ public class NavService(
         // Pre-load corporate actions for this fund to avoid repeated DB calls
         var actions = await corporateActionService.GetActionsAsync(schemeCode);
 
+        // Pre-compute discontinuity dates so we can skip windows that span them
+        var discontinuityDates = actions
+            .Where(a => a.ActionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase))
+            .Select(a => DateOnly.TryParseExact(a.ActionDate, "dd-MM-yyyy",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var d) ? d : (DateOnly?)null)
+            .Where(d => d.HasValue)
+            .Select(d => d!.Value)
+            .ToList();
+
         var rollingReturns = new List<(DateOnly Date, decimal ReturnPercentage)>();
 
         foreach (var entry in navByDate)
@@ -315,6 +359,10 @@ public class NavService(
             // Find the closest available NAV date to the target start date (within 7 days tolerance)
             var startNav = FindClosestNavValue(navByDate, startDate, toleranceDays: 7);
             if (startNav is null)
+                continue;
+
+            // Skip windows that span a data discontinuity — returns across it are unreliable
+            if (discontinuityDates.Any(d => d > startNav.Value.Date && d <= entry.Date))
                 continue;
 
             var days = entry.Date.DayNumber - startDate.DayNumber;
@@ -477,6 +525,10 @@ public class NavService(
             if (!DateOnly.TryParseExact(action.ActionDate, "dd-MM-yyyy",
                     System.Globalization.CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.None, out var actionDate))
+                continue;
+
+            // Discontinuity actions have no meaningful adjustment factor — skip them
+            if (action.ActionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase))
                 continue;
 
             if (actionDate > fromDate && actionDate <= toDate)

@@ -14,7 +14,8 @@ public class CorporateAction
     public DateOnly ActionDate { get; set; }
 
     /// <summary>
-    /// Type of corporate action: Split, Merger, Bonus, Other.
+    /// Type of corporate action: Split, Merger, Bonus, Discontinuity, Other.
+    /// Discontinuity = data gap where old/new NAVs are not mathematically related.
     /// </summary>
     [MaxLength(50)]
     public required string ActionType { get; set; }

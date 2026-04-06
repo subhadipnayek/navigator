@@ -114,6 +114,21 @@ table {
   margin-bottom: 1.25rem;
 }
 
+.gap-hint {
+  background: #fff7ed;
+  border: 1px solid #fb923c;
+  color: #9a3412;
+  padding: 0.6rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.gap-warning {
+  color: #d97706;
+  font-weight: 600;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

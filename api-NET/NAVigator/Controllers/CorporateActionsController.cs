@@ -8,11 +8,11 @@ namespace NAVigator.Controllers;
 [Route("api/[controller]")]
 public class CorporateActionsController(ICorporateActionService actionService) : ControllerBase
 {
-    private static readonly string[] ValidActionTypes = ["Split", "Merger", "Bonus", "Other"];
+    private static readonly string[] ValidActionTypes = ["Split", "Merger", "Bonus", "Discontinuity", "Other"];
 
     /// <summary>
     /// Detect NAV anomalies across all funds. Returns large day-over-day NAV changes
-    /// that may indicate splits, mergers, or bonuses.
+    /// that may indicate splits, mergers, bonuses, or data discontinuities.
     /// </summary>
     [HttpGet("anomalies")]
     public async Task<IActionResult> DetectAnomalies(
@@ -43,7 +43,7 @@ public class CorporateActionsController(ICorporateActionService actionService) :
     public async Task<IActionResult> AddAction(int schemeCode, [FromBody] CreateCorporateActionRequest request)
     {
         if (!ValidActionTypes.Contains(request.ActionType, StringComparer.OrdinalIgnoreCase))
-            return BadRequest(new { message = "actionType must be 'Split', 'Merger', 'Bonus', or 'Other'." });
+            return BadRequest(new { message = "actionType must be 'Split', 'Merger', 'Bonus', 'Discontinuity', or 'Other'." });
 
         var result = await actionService.AddActionAsync(schemeCode, request);
         return result is null

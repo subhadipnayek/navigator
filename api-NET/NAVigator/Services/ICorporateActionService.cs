@@ -22,6 +22,13 @@ public interface ICorporateActionService
     /// <summary>
     /// Computes the cumulative adjustment factor for a fund between two dates.
     /// Used to normalize NAVs across splits/mergers when calculating returns.
+    /// Discontinuity actions are excluded from the factor calculation.
     /// </summary>
     Task<decimal> GetCumulativeAdjustmentFactorAsync(int schemeCode, DateOnly fromDate, DateOnly toDate);
+
+    /// <summary>
+    /// Returns the latest Discontinuity action date between two dates for a fund, or null if none exists.
+    /// Used to detect data gaps where returns across the range are unreliable.
+    /// </summary>
+    Task<DateOnly?> GetDiscontinuityDateAsync(int schemeCode, DateOnly fromDate, DateOnly toDate);
 }

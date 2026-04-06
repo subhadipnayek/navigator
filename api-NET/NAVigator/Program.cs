@@ -35,6 +35,9 @@ builder.Services.AddHttpClient("Amfi", client =>
 builder.Services.AddHttpClient("MfApi", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    AutomaticDecompression = System.Net.DecompressionMethods.All
 }).AddPolicyHandler(retryPolicy);
 
 // ----- Controllers & OpenAPI -----

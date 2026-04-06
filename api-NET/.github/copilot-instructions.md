@@ -4,9 +4,11 @@
 A .NET 10 Web API that syncs Indian Mutual Fund/ETF master data daily, serves 
 fund listings, fetches NAV history on demand, computes split-adjusted returns 
 (point-to-point and rolling), and exposes corporate action management APIs.
-The Angular frontend consumes this API — never calls external data sources directly.
+The frontend consumes this API — never calls external data sources directly.
 **Comparison is UI-driven** — the backend serves individual fund data; the frontend
 calls endpoints in parallel and composes comparison views client-side.
+See `NAVigator/api-client-reference.md` for the full API contract (endpoints,
+request/response shapes, TypeScript interfaces) consumed by any frontend client.
 
 ## Tech Stack
 - .NET 10 Web API (Controllers)
@@ -26,12 +28,12 @@ Models/
     Fund.cs                    — Master fund entity (SchemeCode PK)
     NavHistory.cs              — Daily NAV entries (SchemeCode + Date unique)
     NavSyncTracker.cs          — Per-fund API cooldown tracker
-    CorporateAction.cs         — Split/merger/bonus records with adjustment factors
+    CorporateAction.cs         — Split/merger/bonus/discontinuity records with adjustment factors
   Dto/
     NavDataResponse.cs         — NAV history response (with from/to/interval filtering)
-    ReturnsResponse.cs         — Point-to-point returns (split-adjusted)
+    ReturnsResponse.cs         — Point-to-point returns (split-adjusted, discontinuity-aware)
     RollingReturnResponse.cs   — Rolling returns with summary stats
-    NavAnomalyDto.cs           — Detected NAV anomalies
+    NavAnomalyDto.cs           — Detected NAV anomalies (with date gap info)
     CorporateActionDto.cs      — Corporate action response
     CreateCorporateActionRequest.cs — Corporate action creation input
     ...
@@ -43,7 +45,7 @@ Services/
     IAmfiService / AmfiService           — External API calls (AMFI + mfapi.in)
     IFundService / FundService           — Fund business logic + sync
     INavService / NavService             — NAV caching, returns, rolling returns
-    ICorporateActionService / CorporateActionService — Anomaly detection, action CRUD
+    ICorporateActionService / CorporateActionService — Anomaly detection, action CRUD, discontinuity checks
 Data/
     AppDbContext.cs             — EF Core context with 4 DbSets
 ```
@@ -63,7 +65,7 @@ Data/
 | # | Method | Route | Purpose |
 |---|--------|-------|---------|
 | 6 | GET | `/api/nav/{schemeCode}?from=&to=&interval=&adjusted=` | NAV history (filterable, samplable, adjustable) |
-| 7 | GET | `/api/nav/{schemeCode}/returns?startDate=&endDate=` | Point-to-point returns (split-adjusted) |
+| 7 | GET | `/api/nav/{schemeCode}/returns?startDate=&endDate=` | Point-to-point returns (split-adjusted, discontinuity-aware) |
 | 8 | GET | `/api/nav/{schemeCode}/rolling-returns?periodInYears=&from=&to=&interval=` | Rolling returns (filterable, samplable, split-adjusted) |
 
 ### Corporate Actions — `/api/corporateactions`
@@ -95,17 +97,35 @@ Data/
   available range, clamps to earliest/latest available NAV (returns max data, not null).
 - **Rolling returns**: optional `from`/`to` filter the output data points. Stats computed on filtered set.
 
-### Corporate Actions (Split/Merger/Bonus Adjustment)
+### Corporate Actions (Split/Merger/Bonus/Discontinuity)
 - `CorporateAction` entity stores: ActionDate, ActionType, AdjustmentFactor, OldFaceValue, NewFaceValue.
+- **ActionTypes**: `Split`, `Merger`, `Bonus`, `Discontinuity`, `Other`.
 - **AdjustmentFactor**: For a 10:1 split (FV 10→1), factor = 10. Pre-split NAVs are divided by this.
-- **Returns calculation**: `startNav` is adjusted by cumulative factor for all actions between start and end dates.
+  For Discontinuity actions, factor is forced to 1 (no mathematical adjustment is meaningful).
+- **Returns calculation**: `startNav` is adjusted by cumulative factor for all non-Discontinuity actions
+  between start and end dates. If a Discontinuity exists in the range, start date is clamped to
+  the first NAV on or after the discontinuity date. `ReturnsResponse.HasDiscontinuity` flag is set.
 - **Rolling returns**: Pre-loads all actions for the fund, applies `ComputeAdjustmentFactor` per window.
+  Windows spanning a Discontinuity are skipped entirely (returns across the gap are unreliable).
 - **NAV history endpoint**: Supports opt-in `adjusted=true` query param. When true, all pre-action NAVs
   are divided by the cumulative factor from that date to the latest NAV date, producing a continuous line.
-  Default (`adjusted=false`) returns raw/unadjusted NAVs.
+  If a Discontinuity exists, pre-discontinuity data is excluded from adjusted view.
+  Default (`adjusted=false`) returns raw/unadjusted NAVs including pre-discontinuity data.
 - **`NavDataResponse`** always includes `corporateActions` (list of `CorporateActionDto`) and `isAdjusted` flag.
 - **Anomaly detection**: Scans all NAV history for day-over-day changes exceeding a threshold (default 30%).
-  Flags whether each anomaly already has a recorded corporate action.
+  Flags whether each anomaly already has a recorded corporate action. Includes `PreviousDate` and
+  `DaysSincePrevious` to help distinguish genuine splits (1–3 days gap) from data discontinuities
+  (months/years gap, e.g. fund reconstitution or scheme change).
+
+### Discontinuity Action Type
+- Used for multi-month/year gaps in NAV data where old and new NAVs are not mathematically related
+  (fund reconstitution, scheme change, data gap from external source).
+- **Not** a split/merger — no adjustment factor can normalize pre-gap NAVs to post-gap.
+- `AdjustmentFactor` is forced to 1 on creation regardless of input.
+- `GetDiscontinuityDateAsync(schemeCode, fromDate, toDate)` returns the latest Discontinuity date
+  in a range, used by NavService to clamp returns and skip rolling return windows.
+- **Identifying discontinuities**: In anomaly detection output, `DaysSincePrevious >> 7` strongly
+  suggests a discontinuity rather than a split.
 
 ## External Data Sources
 

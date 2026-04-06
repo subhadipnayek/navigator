@@ -7,7 +7,7 @@ public class CreateCorporateActionRequest
     [Required]
     public DateOnly ActionDate { get; set; }
 
-    /// <summary>Split, Merger, Bonus, Other</summary>
+    /// <summary>Split, Merger, Bonus, Discontinuity, Other</summary>
     [Required]
     [MaxLength(50)]
     public required string ActionType { get; set; }

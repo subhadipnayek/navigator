@@ -54,6 +54,7 @@ export interface ReturnsResponse {
   startNav: number | null;
   endDate: string | null; // "dd-MM-yyyy"
   endNav: number | null;
+  hasDiscontinuity: boolean;
 }
 
 // ---------- Rolling Returns Models ----------
@@ -83,6 +84,8 @@ export interface NavAnomalyDto {
   schemeName: string;
   fundHouse: string | null;
   date: string; // "dd-MM-yyyy"
+  previousDate: string; // "dd-MM-yyyy"
+  daysSincePrevious: number;
   previousNav: number;
   currentNav: number;
   changePercent: number;
@@ -94,7 +97,7 @@ export interface CorporateActionDto {
   id: number;
   schemeCode: number;
   actionDate: string; // "dd-MM-yyyy"
-  actionType: string; // "Split", "Merger", "Bonus", "Other"
+  actionType: string; // "Split", "Merger", "Bonus", "Discontinuity", "Other"
   adjustmentFactor: number;
   oldFaceValue: number | null;
   newFaceValue: number | null;

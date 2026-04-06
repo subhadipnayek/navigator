@@ -125,6 +125,11 @@
           @if (returnsError()) {
             <div class="error">{{ returnsError() }}</div>
           }
+          @if (ret.hasDiscontinuity) {
+            <div class="discontinuity-warning">
+              ⚠ Data discontinuity detected. Returns are calculated from {{ ret.startDate }} only.
+            </div>
+          }
           <div class="returns-grid">
             <app-stat-card label="Absolute Return" [variant]="returnVariant(ret.absoluteReturn)">
               {{ formatReturn(ret.absoluteReturn) }}

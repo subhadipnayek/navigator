@@ -12,7 +12,7 @@ public class CorporateActionService(
     IFundRepository fundRepo,
     ILogger<CorporateActionService> logger) : ICorporateActionService
 {
-    private static readonly string[] ValidActionTypes = ["Split", "Merger", "Bonus", "Other"];
+    private static readonly string[] ValidActionTypes = ["Split", "Merger", "Bonus", "Discontinuity", "Other"];
 
     public async Task<List<NavAnomalyDto>> DetectAnomaliesAsync(decimal thresholdPercent = 30m, CancellationToken ct = default)
     {
@@ -82,6 +82,8 @@ public class CorporateActionService(
                         SchemeName = fund?.SchemeName ?? "Unknown",
                         FundHouse = fund?.FundHouse,
                         Date = curr.Date.ToString("dd-MM-yyyy"),
+                        PreviousDate = prev.Date.ToString("dd-MM-yyyy"),
+                        DaysSincePrevious = curr.Date.DayNumber - prev.Date.DayNumber,
                         PreviousNav = prev.Nav,
                         CurrentNav = curr.Nav,
                         ChangePercent = Math.Round(changePercent, 2),
@@ -125,12 +127,17 @@ public class CorporateActionService(
         if (!ValidActionTypes.Contains(request.ActionType, StringComparer.OrdinalIgnoreCase))
             return null;
 
+        // Discontinuity actions don't use adjustment factors — force to 1
+        var adjustmentFactor = request.ActionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase)
+            ? 1m
+            : request.AdjustmentFactor;
+
         var action = new CorporateAction
         {
             SchemeCode = schemeCode,
             ActionDate = request.ActionDate,
             ActionType = request.ActionType,
-            AdjustmentFactor = request.AdjustmentFactor,
+            AdjustmentFactor = adjustmentFactor,
             OldFaceValue = request.OldFaceValue,
             NewFaceValue = request.NewFaceValue,
             Notes = request.Notes
@@ -177,12 +184,30 @@ public class CorporateActionService(
 
         foreach (var action in actions)
         {
-            if (action.ActionDate > fromDate && action.ActionDate <= toDate)
+            if (action.ActionDate > fromDate && action.ActionDate <= toDate
+                && !action.ActionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase))
             {
                 cumulativeFactor *= action.AdjustmentFactor;
             }
         }
 
         return cumulativeFactor;
+    }
+
+    /// <summary>
+    /// Checks whether any Discontinuity corporate action exists between two dates for a fund.
+    /// Used to determine if returns across this range are unreliable.
+    /// </summary>
+    public async Task<DateOnly?> GetDiscontinuityDateAsync(int schemeCode, DateOnly fromDate, DateOnly toDate)
+    {
+        var actions = await actionRepo.GetBySchemeCodeAsync(schemeCode);
+
+        // Return the latest discontinuity date in the range (so callers can clamp to post-discontinuity)
+        return actions
+            .Where(a => a.ActionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase)
+                        && a.ActionDate > fromDate && a.ActionDate <= toDate)
+            .OrderByDescending(a => a.ActionDate)
+            .Select(a => (DateOnly?)a.ActionDate)
+            .FirstOrDefault();
     }
 }

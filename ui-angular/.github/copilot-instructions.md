@@ -1,23 +1,22 @@
-# NAVigator — Angular Frontend Copilot Instructions
+# This is the api client refernce, implement them carefully :
 
-## Overview
+# NAVigator API — Client Reference
 
-Angular frontend for the NAVigator MF/ETF comparison app.
-**All business logic, calculations, and external API calls happen on the .NET backend.**
-Angular is purely for display, user interaction, and consuming the REST API below.
-Never call any external data source directly from Angular.
+> Framework-agnostic API contract for any client consuming the NAVigator backend.
+> TypeScript interfaces below serve as typed JSON schema documentation —
+> translate to any language's type system as needed.
 
-## Backend API Base URL
+## Base URL
 
 ```
 Development: http://localhost:5038/api
 ```
 
-CORS is already configured on the backend for `http://localhost:4200`.
+CORS is configured for `http://localhost:4200`.
 
 ---
 
-## TypeScript Interfaces
+## TypeScript Interfaces (JSON Schema)
 
 All dates from the API are strings in `"dd-MM-yyyy"` format (e.g. `"02-04-2026"`)
 **except** `latestNavDate` in `Fund` which uses `"dd-MMM-yyyy"` (e.g. `"02-Apr-2026"`).
@@ -79,6 +78,7 @@ export interface ReturnsResponse {
   startNav: number | null;
   endDate: string | null; // "dd-MM-yyyy"
   endNav: number | null;
+  hasDiscontinuity: boolean; // true = data gap exists; start date was clamped to post-gap period
 }
 
 // ==================== ROLLING RETURNS MODELS ====================
@@ -108,6 +108,8 @@ export interface NavAnomalyDto {
   schemeName: string;
   fundHouse: string | null;
   date: string; // "dd-MM-yyyy"
+  previousDate: string; // "dd-MM-yyyy" — the date of the previous NAV entry
+  daysSincePrevious: number; // gap in calendar days (1–3 = normal trading, >>7 = likely discontinuity)
   previousNav: number;
   currentNav: number;
   changePercent: number; // e.g. -90.0 for a 10:1 split drop
@@ -119,8 +121,8 @@ export interface CorporateActionDto {
   id: number;
   schemeCode: number;
   actionDate: string; // "dd-MM-yyyy"
-  actionType: string; // "Split", "Merger", "Bonus", "Other"
-  adjustmentFactor: number; // e.g. 10 for a 10:1 split
+  actionType: string; // "Split", "Merger", "Bonus", "Discontinuity", "Other"
+  adjustmentFactor: number; // e.g. 10 for a 10:1 split, always 1 for Discontinuity
   oldFaceValue: number | null;
   newFaceValue: number | null;
   notes: string | null;
@@ -128,8 +130,8 @@ export interface CorporateActionDto {
 
 export interface CreateCorporateActionRequest {
   actionDate: string; // "yyyy-MM-dd" (DateOnly input)
-  actionType: string; // "Split", "Merger", "Bonus", "Other"
-  adjustmentFactor: number;
+  actionType: string; // "Split", "Merger", "Bonus", "Discontinuity", "Other"
+  adjustmentFactor: number; // ignored for Discontinuity (forced to 1 server-side)
   oldFaceValue?: number | null;
   newFaceValue?: number | null;
   notes?: string | null;
@@ -255,7 +257,7 @@ Supports optional date range filtering, interval-based sampling, and split-adjus
 | interval   | string   | query | no       | `daily` | `daily`, `weekly`, `monthly` |
 | adjusted   | bool     | query | no       | `false` | `true` or `false`            |
 
-> `from`/`to` filter the date range. `interval` samples data: `weekly` = last trading day per ISO week, `monthly` = last trading day per month. `latestNavDate` always reflects the overall latest date in DB (unaffected by filtering). `adjusted=true` divides pre-action NAVs by the cumulative corporate action factor — use this for charts that should show a continuous line across splits/mergers. The response always includes `corporateActions` (the full list for this fund) regardless of the `adjusted` flag.
+> `from`/`to` filter the date range. `interval` samples data: `weekly` = last trading day per ISO week, `monthly` = last trading day per month. `latestNavDate` always reflects the overall latest date in DB (unaffected by filtering). `adjusted=true` divides pre-action NAVs by the cumulative corporate action factor — use this for charts that should show a continuous line across splits/mergers. When `adjusted=true` and a Discontinuity action exists, pre-discontinuity data is excluded (old NAVs aren't mathematically related to new ones). The response always includes `corporateActions` (the full list for this fund) regardless of the `adjusted` flag.
 
 **200:**
 
@@ -318,14 +320,15 @@ Point-to-point returns (absolute + CAGR) between two precise dates.
   "startDate": "15-03-2019",
   "startNav": 271.56,
   "endDate": "01-04-2026",
-  "endNav": 667.17
+  "endNav": 667.17,
+  "hasDiscontinuity": false
 }
 ```
 
 **400:** `{ "message": "startDate must be before endDate." }`
 **404:** `{ "message": "Fund with scheme code 999999 not found." }`
 
-> The response `startDate`/`endDate` reflect the **actual** dates used (which may differ from requested dates due to clamping or closest-date matching). Display these actual dates in the UI so the user knows the exact range computed. If no valid range exists (e.g. fund has no data at all), the nullable fields will be `null` — show "N/A" in the UI.
+> The response `startDate`/`endDate` reflect the **actual** dates used (which may differ from requested dates due to clamping or closest-date matching). Display these actual dates in the UI so the user knows the exact range computed. If no valid range exists (e.g. fund has no data at all), the nullable fields will be `null` — show "N/A". When `hasDiscontinuity` is `true`, the start date was clamped to the post-gap period — show a warning like "Data discontinuity detected. Returns are calculated from [startDate] only."
 
 ---
 
@@ -342,7 +345,7 @@ Supports optional date range filtering to align comparison across funds.
 | to            | DateOnly | query | no       | —       | `yyyy-MM-dd`                 |
 | interval      | string   | query | no       | `daily` | `daily`, `weekly`, `monthly` |
 
-> `from`/`to` filter the rolling return data points by date range. If the requested range exceeds available data, the backend returns the max available range (no nulls). Summary stats (`minReturn`, `maxReturn`, etc.) and `dataPoints` are computed on the **filtered** date range before interval sampling. `interval` further samples the `data` array only.
+> `from`/`to` filter the rolling return data points by date range. If the requested range exceeds available data, the backend returns the max available range (no nulls). Summary stats (`minReturn`, `maxReturn`, etc.) and `dataPoints` are computed on the **filtered** date range before interval sampling. `interval` further samples the `data` array only. Rolling return windows that span a Discontinuity action are automatically skipped — no bogus CAGR values from crossing a data gap.
 
 **200:**
 
@@ -379,7 +382,7 @@ Supports optional date range filtering to align comparison across funds.
 
 #### 9. GET `/api/corporateactions/anomalies?threshold={percent}`
 
-Detect NAV anomalies across all funds that have NAV history loaded. Returns large day-over-day changes that may indicate splits, mergers, or bonuses. Admin reviews these and records corporate actions.
+Detect NAV anomalies across all funds that have NAV history loaded. Returns large day-over-day changes that may indicate splits, mergers, bonuses, or data discontinuities. Admin reviews these and records corporate actions.
 
 | Param     | Type    | In    | Required | Default | Range |
 | --------- | ------- | ----- | -------- | ------- | ----- |
@@ -394,10 +397,25 @@ Detect NAV anomalies across all funds that have NAV history loaded. Returns larg
     "schemeName": "Nippon India ETF Nifty BeES",
     "fundHouse": "Nippon India Mutual Fund",
     "date": "20-12-2019",
+    "previousDate": "19-12-2019",
+    "daysSincePrevious": 1,
     "previousNav": 1178.5432,
     "currentNav": 117.8543,
     "changePercent": -90.0,
     "direction": "Drop",
+    "hasCorporateAction": false
+  },
+  {
+    "schemeCode": 100456,
+    "schemeName": "Some Reconstituted Fund - Growth",
+    "fundHouse": "Example Mutual Fund",
+    "date": "03-07-2018",
+    "previousDate": "12-06-2014",
+    "daysSincePrevious": 1482,
+    "previousNav": 77.7062,
+    "currentNav": 110.7245,
+    "changePercent": 42.5,
+    "direction": "Spike",
     "hasCorporateAction": false
   }
 ]
@@ -405,7 +423,7 @@ Detect NAV anomalies across all funds that have NAV history loaded. Returns larg
 
 **400:** `{ "message": "threshold must be between 5 and 99." }`
 
-> ⚠️ This scans all NAV history in the DB — can be slow. Only call from the admin page. `hasCorporateAction: true` means the admin already recorded an action for that fund on that date.
+> ⚠️ This scans all NAV history in the DB — can be slow. Only call from the admin page. `hasCorporateAction: true` means the admin already recorded an action for that fund on that date. Use `daysSincePrevious` to distinguish splits (1–3 days) from data discontinuities (months/years gap). When `daysSincePrevious` is large (e.g. >30), it's almost certainly a discontinuity, not a split.
 
 ---
 
@@ -430,6 +448,16 @@ Get all recorded corporate actions for a fund.
     "oldFaceValue": 10.0,
     "newFaceValue": 1.0,
     "notes": "Face value split 10:1"
+  },
+  {
+    "id": 2,
+    "schemeCode": 100456,
+    "actionDate": "03-07-2018",
+    "actionType": "Discontinuity",
+    "adjustmentFactor": 1.0,
+    "oldFaceValue": null,
+    "newFaceValue": null,
+    "notes": "~4 year data gap, likely fund reconstitution"
   }
 ]
 ```
@@ -446,6 +474,8 @@ Record a new corporate action for a fund.
 
 **Request body:** `CreateCorporateActionRequest`
 
+Split example:
+
 ```json
 {
   "actionDate": "2019-12-19",
@@ -457,11 +487,22 @@ Record a new corporate action for a fund.
 }
 ```
 
+Discontinuity example:
+
+```json
+{
+  "actionDate": "2018-07-03",
+  "actionType": "Discontinuity",
+  "adjustmentFactor": 1,
+  "notes": "~4 year data gap, likely fund reconstitution"
+}
+```
+
 **201:** `CorporateActionDto` (the created action)
-**400:** `{ "message": "actionType must be 'Split', 'Merger', 'Bonus', or 'Other'." }`
+**400:** `{ "message": "actionType must be 'Split', 'Merger', 'Bonus', 'Discontinuity', or 'Other'." }`
 **404:** `{ "message": "Fund with scheme code 999999 not found." }`
 
-> `adjustmentFactor` — the factor to divide pre-action NAVs by: **10** for a 10:1 split (FV 10→1), **0.2** for a 1:5 reverse split, **2** for a 1:1 bonus. `actionDate` uses `yyyy-MM-dd` format in the request body.
+> `adjustmentFactor` — the factor to divide pre-action NAVs by: **10** for a 10:1 split (FV 10→1), **0.2** for a 1:5 reverse split, **2** for a 1:1 bonus. For **Discontinuity**, this value is ignored and forced to **1** server-side. `actionDate` uses `yyyy-MM-dd` format in the request body.
 
 ---
 
@@ -479,9 +520,12 @@ Delete a corporate action.
 
 ---
 
-## Corporate Actions — How They Affect Returns
+## Corporate Actions — How They Affect Data
 
-**Splits, mergers, and bonuses cause sudden NAV discontinuities.** Without adjustment, a 10:1 split looks like a -90% crash.
+### Split, Merger, Bonus (AdjustmentFactor-based)
+
+These cause sudden NAV jumps with a known mathematical relationship.
+Without adjustment, a 10:1 split looks like a -90% crash.
 
 The backend automatically adjusts returns calculations:
 
@@ -489,10 +533,25 @@ The backend automatically adjusts returns calculations:
 - **Rolling returns** (`/nav/{code}/rolling-returns`) — each rolling window's start NAV is adjusted for any corporate actions within that window.
 - **NAV history** (`/nav/{code}?adjusted=true`) — when `adjusted=true`, all pre-action NAVs are divided by the cumulative factor so the chart shows a continuous line. When `adjusted=false` (default), raw/unadjusted NAVs are returned. The `corporateActions` array is always included in the response — use it to display action markers or tooltips on the chart.
 
+### Discontinuity (Data Gap)
+
+Used when NAV data has a multi-month/year gap where old and new data are not
+mathematically related (fund reconstitution, scheme change, data source gap).
+No adjustment factor can normalize the old data to the new.
+
+The backend handles discontinuities automatically:
+
+- **Point-to-point returns** — if a Discontinuity exists between start and end dates, the start date is clamped to the first NAV on or after the discontinuity. `hasDiscontinuity: true` is returned so the UI can warn the user.
+- **Rolling returns** — windows that span a Discontinuity are skipped entirely. No bogus CAGR values.
+- **NAV history (adjusted)** — pre-discontinuity data is excluded. Only post-gap data is returned.
+- **NAV history (unadjusted)** — all raw data is returned including pre-discontinuity. The `corporateActions` array contains the Discontinuity record so the UI can mark the gap.
+
 ### Admin Workflow
 
 1. Navigate to the admin page → call `GET /api/corporateactions/anomalies?threshold=30`
-2. Review each anomaly — if it's a split/merger/bonus, record it via `POST /api/corporateactions/{schemeCode}`
+2. Review each anomaly:
+   - **`daysSincePrevious` = 1–3** → likely a Split/Merger/Bonus → record with appropriate `adjustmentFactor`
+   - **`daysSincePrevious` >> 7** (weeks/months/years) → likely a Discontinuity → record as `"Discontinuity"`
 3. Once recorded, `hasCorporateAction` will be `true` for that anomaly on the next scan
 4. Returns calculations automatically account for the recorded action
 
@@ -502,11 +561,11 @@ The backend automatically adjusts returns calculations:
 
 **The backend serves individual fund data. The UI owns comparison logic.**
 
-To compare multiple funds, the Angular frontend should:
+To compare multiple funds, the client should:
 
-1. Call the individual endpoints (`/nav/{code}`, `/nav/{code}/returns`, `/nav/{code}/rolling-returns`) for each fund in parallel using `forkJoin`.
+1. Call the individual endpoints (`/nav/{code}`, `/nav/{code}/returns`, `/nav/{code}/rolling-returns`) for each fund in parallel.
 2. Compose the comparison view client-side (tables, overlaid charts, growth rebasing).
-3. For "Growth of ₹10,000" charts, fetch NAV history per fund with `interval=monthly` (or `weekly`), then rebase to 10,000 in the UI using the first common date.
+3. For "Growth of ₹10,000" charts, fetch NAV history per fund with `interval=monthly` (or `weekly`), then rebase to 10,000 using the first common date.
 
 ---
 
@@ -515,65 +574,31 @@ To compare multiple funds, the Angular frontend should:
 | Status | Shape                                                   | When                             |
 | ------ | ------------------------------------------------------- | -------------------------------- |
 | 200    | response body as documented above                       | Success                          |
+| 201    | `CorporateActionDto`                                    | Corporate action created         |
+| 204    | empty body                                              | Corporate action deleted         |
 | 400    | `{ "message": "..." }`                                  | Invalid/missing query params     |
 | 404    | `{ "message": "Fund with scheme code {x} not found." }` | Fund not in DB (NavController)   |
 | 404    | empty body                                              | Fund not in DB (FundsController) |
-| 201    | `CorporateActionDto`                                    | Corporate action created         |
-| 204    | empty body                                              | Corporate action deleted         |
 
 ---
 
 ## Important Behaviors & UI Rules
 
 1. **All dates** from the API are `"dd-MM-yyyy"` strings except `Fund.latestNavDate` which is `"dd-MMM-yyyy"`.
-2. **NAV caching is server-side** — the backend manages a smart cache with 1-hour cooldown. The frontend does NOT need to implement caching for NAV data.
+2. **NAV caching is server-side** — the backend manages a smart cache with 1-hour cooldown. Clients do NOT need to implement caching for NAV data.
 3. **`wasFetchedFromApi`** in `NavDataResponse` — use this to show a "freshly updated" indicator if desired.
 4. **`null` return values** — when a fund doesn't have NAV data covering the requested date range, `absoluteReturn`, `cagr`, `startDate`, `startNav`, `endDate`, `endNav` will all be `null`. Display "N/A".
-5. **Rolling returns `data` arrays** can have thousands of entries at daily interval. **Always render as line charts, never as tables.** Use `interval=weekly` or `interval=monthly` to reduce data points.
-6. **`interval` parameter** — `daily` (default) returns every trading day, `weekly` returns the last trading day of each ISO week, `monthly` returns the last trading day of each month. For rolling returns, summary stats are computed on the filtered date range (after `from`/`to`) but before interval sampling.
-7. **Fund sync** (`POST /api/funds/sync`) takes ~10–15 seconds. Show a loading spinner with a message like "Syncing fund data...".
-8. **Search** (`GET /api/funds/search?q=`) — debounce input at 300–500ms.
-9. **`schemeCode`** (integer) is the primary identifier used across all endpoints.
-10. **Comparison is UI-driven** — there are no multi-fund comparison endpoints. The frontend calls individual fund endpoints in parallel (`forkJoin`) and composes the comparison view (tables, overlaid charts, growth rebasing) client-side.
-11. **Fund master list** auto-syncs on first startup and daily at 1 AM IST. The manual sync endpoint is for ad-hoc refreshes.
-12. **Corporate actions (splits/mergers/bonuses)** — the backend automatically adjusts returns calculations. The `startNav` in returns responses is the **adjusted** value. NAV history supports opt-in `adjusted=true` for split-adjusted charts. The `corporateActions` array is always included in `NavDataResponse` — use it to show action markers on charts or details in a tooltip.
-13. **Anomaly detection** (`GET /api/corporateactions/anomalies`) scans all NAV data in the DB. Only call from the admin page, not on regular user-facing pages.
-
----
-
-## Suggested Angular Architecture
-
-### Services
-
-```
-FundService             → handles all /api/funds/* calls
-NavService              → handles all /api/nav/* calls
-CorporateActionService  → handles all /api/corporateactions/* calls
-```
-
-### Suggested Routes
-
-| Route                        | Page                                  | Primary Endpoints                                                                                     |
-| ---------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `/`                          | Dashboard                             | `GET /api/funds/count`                                                                                |
-| `/funds`                     | Fund List + Search                    | `GET /api/funds`, `GET /api/funds/search?q=`                                                          |
-| `/funds/:schemeCode`         | Fund Detail (NAV chart + returns)     | `GET /api/funds/{id}`, `GET /api/nav/{id}?interval=`, `GET /api/nav/{id}/returns?startDate=&endDate=` |
-| `/funds/:schemeCode/rolling` | Rolling Returns Chart                 | `GET /api/nav/{id}/rolling-returns?periodInYears=&interval=`                                          |
-| `/compare`                   | Comparison Page (UI-driven)           | Calls individual fund endpoints in parallel via `forkJoin`                                            |
-| `/admin/sync`                | Manual Sync Trigger                   | `POST /api/funds/sync`                                                                                |
-| `/admin/corporate-actions`   | Anomaly Detection + Action Management | `GET /api/corporateactions/anomalies`, `POST /api/corporateactions/{code}`                            |
-
-### Chart Recommendations
-
-| Chart                        | Type               | Library                  | X-Axis | Y-Axis    |
-| ---------------------------- | ------------------ | ------------------------ | ------ | --------- |
-| Single fund NAV history      | Line               | ngx-charts or Chart.js   | Date   | NAV (₹)   |
-| Growth of ₹10,000 comparison | Multi-line         | ngx-charts or Chart.js   | Date   | Value (₹) |
-| Rolling returns (single)     | Line               | ngx-charts or Chart.js   | Date   | Return %  |
-| Rolling returns comparison   | Multi-line         | ngx-charts or Chart.js   | Date   | Return %  |
-| Returns comparison           | Table or bar chart | HTML table or ngx-charts | Fund   | Return %  |
-
-> For **Growth of ₹10,000**: fetch `/api/nav/{code}?from=&to=&interval=monthly` for each fund, find the common start date, then rebase each fund's NAVs to 10,000 in the UI.
+5. **`hasDiscontinuity`** in `ReturnsResponse` — when `true`, the start date was clamped to the post-gap period. Show a warning to the user explaining the date range was adjusted.
+6. **Rolling returns `data` arrays** can have thousands of entries at daily interval. **Always render as line charts, never as tables.** Use `interval=weekly` or `interval=monthly` to reduce data points.
+7. **`interval` parameter** — `daily` (default) returns every trading day, `weekly` returns the last trading day of each ISO week, `monthly` returns the last trading day of each month. For rolling returns, summary stats are computed on the filtered date range (after `from`/`to`) but before interval sampling.
+8. **Fund sync** (`POST /api/funds/sync`) takes ~10–15 seconds. Show a loading spinner with a message like "Syncing fund data...".
+9. **Search** (`GET /api/funds/search?q=`) — debounce input at 300–500ms.
+10. **`schemeCode`** (integer) is the primary identifier used across all endpoints.
+11. **Comparison is UI-driven** — there are no multi-fund comparison endpoints. The client calls individual fund endpoints in parallel and composes the comparison view (tables, overlaid charts, growth rebasing) client-side.
+12. **Fund master list** auto-syncs on first startup and daily at 1 AM IST. The manual sync endpoint is for ad-hoc refreshes.
+13. **Corporate actions** — the backend automatically adjusts returns. The `startNav` in returns responses is the **adjusted** value. NAV history supports opt-in `adjusted=true` for split-adjusted charts. The `corporateActions` array is always included in `NavDataResponse` — use it to show action markers on charts.
+14. **Discontinuity actions** — represent data gaps where old/new NAVs are not related. The backend excludes pre-gap data from adjusted views, skips rolling return windows across gaps, and clamps returns start dates. The UI should use `daysSincePrevious` in anomaly detection to help admins distinguish splits from data gaps.
+15. **Anomaly detection** (`GET /api/corporateactions/anomalies`) scans all NAV data in the DB. Only call from the admin page, not on regular user-facing pages.
 
 ---
 
@@ -587,7 +612,7 @@ CorporateActionService  → handles all /api/corporateactions/* calls
 | 4   | POST   | `/api/funds/sync`                                                          | Manual AMFI sync                                |
 | 5   | GET    | `/api/funds/count`                                                         | Fund count                                      |
 | 6   | GET    | `/api/nav/{schemeCode}?from=&to=&interval=&adjusted=`                      | NAV history (filterable, samplable, adjustable) |
-| 7   | GET    | `/api/nav/{schemeCode}/returns?startDate=&endDate=`                        | Point-to-point returns                          |
+| 7   | GET    | `/api/nav/{schemeCode}/returns?startDate=&endDate=`                        | Point-to-point returns (discontinuity-aware)    |
 | 8   | GET    | `/api/nav/{schemeCode}/rolling-returns?periodInYears=&from=&to=&interval=` | Rolling returns (filterable, samplable)         |
 | 9   | GET    | `/api/corporateactions/anomalies?threshold=`                               | Detect NAV anomalies                            |
 | 10  | GET    | `/api/corporateactions/{schemeCode}`                                       | List corporate actions                          |

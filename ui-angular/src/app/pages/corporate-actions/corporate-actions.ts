@@ -62,11 +62,19 @@ export class CorporateActions {
   openForm(anomaly: NavAnomalyDto): void {
     this.showForm.set(anomaly);
     this.formError.set(null);
-    this.actionType = 'Split';
-    this.adjustmentFactor = 10;
+
+    // Auto-suggest Discontinuity for large gaps (likely data gap, not a split)
+    if (anomaly.daysSincePrevious > 30) {
+      this.actionType = 'Discontinuity';
+      this.adjustmentFactor = 1;
+      this.notes = `~${anomaly.daysSincePrevious}-day data gap, likely fund reconstitution`;
+    } else {
+      this.actionType = 'Split';
+      this.adjustmentFactor = 10;
+      this.notes = '';
+    }
     this.oldFaceValue = null;
     this.newFaceValue = null;
-    this.notes = '';
   }
 
   closeForm(): void {

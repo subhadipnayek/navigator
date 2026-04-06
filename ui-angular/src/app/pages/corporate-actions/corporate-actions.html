@@ -34,6 +34,7 @@
             <tr>
               <th>Scheme</th>
               <th>Date</th>
+              <th>Gap</th>
               <th>Previous NAV</th>
               <th>Current NAV</th>
               <th>Change</th>
@@ -50,6 +51,11 @@
                   <div class="scheme-meta">{{ a.schemeCode }} · {{ a.fundHouse }}</div>
                 </td>
                 <td>{{ a.date }}</td>
+                <td>
+                  <span [class.gap-warning]="a.daysSincePrevious > 30">
+                    {{ a.daysSincePrevious }}d
+                  </span>
+                </td>
                 <td>{{ a.previousNav | number: '1.4-4' }}</td>
                 <td>{{ a.currentNav | number: '1.4-4' }}</td>
                 <td [class]="a.changePercent >= 0 ? 'positive' : 'negative'">
@@ -93,6 +99,13 @@
         }}% {{ anomaly.direction }})
       </p>
 
+      @if (anomaly.daysSincePrevious > 30) {
+        <div class="gap-hint">
+          ⚠ {{ anomaly.daysSincePrevious }}-day gap from previous NAV ({{ anomaly.previousDate }}).
+          This is likely a <strong>Discontinuity</strong>, not a split.
+        </div>
+      }
+
       <div class="form-grid">
         <label>
           Action Type
@@ -100,24 +113,27 @@
             <option value="Split">Split</option>
             <option value="Merger">Merger</option>
             <option value="Bonus">Bonus</option>
+            <option value="Discontinuity">Discontinuity</option>
             <option value="Other">Other</option>
           </select>
         </label>
 
-        <label>
-          Adjustment Factor
-          <input type="number" [(ngModel)]="adjustmentFactor" min="0.01" step="0.1" />
-        </label>
+        @if (actionType !== 'Discontinuity') {
+          <label>
+            Adjustment Factor
+            <input type="number" [(ngModel)]="adjustmentFactor" min="0.01" step="0.1" />
+          </label>
 
-        <label>
-          Old Face Value
-          <input type="number" [(ngModel)]="oldFaceValue" step="0.01" placeholder="Optional" />
-        </label>
+          <label>
+            Old Face Value
+            <input type="number" [(ngModel)]="oldFaceValue" step="0.01" placeholder="Optional" />
+          </label>
 
-        <label>
-          New Face Value
-          <input type="number" [(ngModel)]="newFaceValue" step="0.01" placeholder="Optional" />
-        </label>
+          <label>
+            New Face Value
+            <input type="number" [(ngModel)]="newFaceValue" step="0.01" placeholder="Optional" />
+          </label>
+        }
 
         <label class="full-width">
           Notes

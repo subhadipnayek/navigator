@@ -111,6 +111,16 @@
   gap: var(--space-lg);
 }
 
+.discontinuity-warning {
+  background: #fff7ed;
+  border: 1px solid #fb923c;
+  color: #9a3412;
+  padding: 0.6rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  margin-bottom: var(--space-lg);
+}
+
 .actions {
   margin-top: var(--space-xl);
 }
