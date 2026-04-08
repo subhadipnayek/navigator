@@ -1,6 +1,5 @@
 {
   "name": "NAVigator Angular (Latest)",
-  // Updated to Node 24 and the latest Debian OS (Bookworm)
   "image": "mcr.microsoft.com/devcontainers/typescript-node:24-bookworm",
   "customizations": {
     "vscode": {
@@ -12,9 +11,6 @@
     }
   },
   "forwardPorts": [4200],
-  // 1. Installs the latest global Angular CLI
-  // 2. Then installs your local project dependencies
   "postCreateCommand": "npm install -g @angular/cli@latest && npm install",
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}/ui-angular",
   "remoteUser": "node"
 }

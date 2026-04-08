@@ -7,6 +7,5 @@
     }
   },
   "forwardPorts": [5038],
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}/api-NET",
   "postCreateCommand": "dotnet restore NAVigator/NAVigator.csproj"
 }
