@@ -46,9 +46,12 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAngularDev", policy =>
+    options.AddPolicy("CorsPolicy", policy =>
     {
-        policy.WithOrigins("http://localhost:4200")
+        policy.WithOrigins(
+                "http://localhost:4200",  // Angular dev server
+                "http://localhost:4000"   // Docker UI container
+              )
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
@@ -73,7 +76,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
-app.UseCors("AllowAngularDev");
+app.UseCors("CorsPolicy");
 app.UseAuthorization();
 app.MapControllers();
 

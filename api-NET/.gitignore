@@ -20,7 +20,8 @@ x86/
 .vs/
 *.rsuser
 *.sln.iml
-launchSettings.json
+# launchSettings.json has no secrets — commit it so devs get correct ports
+# launchSettings.json
 
 # NuGet
 **/[Pp]ackages/*
@@ -54,7 +55,12 @@ $RECYCLE.BIN/
 *.sln.iml
 
 # VS Code
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/
 
 # Test results
 [Tt]est[Rr]esult*/

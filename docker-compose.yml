@@ -1,0 +1,22 @@
+services:
+  api:
+    build:
+      context: ./api-NET
+      dockerfile: Dockerfile
+    ports:
+      - "5038:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ConnectionStrings__DefaultConnection: "Server=host.docker.internal;Database=NAVigatorDb;User Id=sa;Password=Nav!gator2026;TrustServerCertificate=True;"
+
+  ui:
+    build:
+      context: ./ui-angular
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: "production"
+      API_URL: "http://api:8080"
+    depends_on:
+      - api

@@ -22,6 +22,15 @@ public class NavHistoryRepository(AppDbContext db) : INavHistoryRepository
             .MaxAsync(n => (DateOnly?)n.Date);
     }
 
+    public async Task<NavHistory?> GetLatestNavEntryAsync(int schemeCode)
+    {
+        return await db.NavHistories
+            .AsNoTracking()
+            .Where(n => n.SchemeCode == schemeCode)
+            .OrderByDescending(n => n.Date)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task AddRangeAsync(List<NavHistory> entries)
     {
         if (entries.Count == 0) return;

@@ -10,7 +10,7 @@
 
 # Dependencies
 /node_modules/
-package-lock.json
+# package-lock.json must be committed — npm ci in Dockerfile requires it
 
 # Angular cache
 /.angular/

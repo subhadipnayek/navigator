@@ -45,6 +45,18 @@ public class NavService(
             var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
                 DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("India Standard Time")));
 
+            // 2b. Reconcile: if NavHistory has newer data than the Fund record, sync it
+            if (latestDbDate.HasValue && (!fund.LatestNavDate.HasValue || latestDbDate.Value > fund.LatestNavDate.Value))
+            {
+                var latestEntry = await navRepo.GetLatestNavEntryAsync(schemeCode);
+                if (latestEntry is not null)
+                {
+                    await fundRepo.UpdateLatestNavAsync(schemeCode, latestEntry.Nav, latestEntry.Date);
+                    fund.LatestNav = latestEntry.Nav;
+                    fund.LatestNavDate = latestEntry.Date;
+                }
+            }
+
             // 3. If latest NAV in DB is today, serve from DB — no API call needed
             if (latestDbDate.HasValue && latestDbDate.Value >= today)
             {
@@ -117,6 +129,13 @@ public class NavService(
             {
                 await navRepo.AddRangeAsync(newEntries);
                 logger.LogInformation("Fund {SchemeCode}: Stored {Count} new NAV entries", schemeCode, newEntries.Count);
+
+                // Update the fund's latest NAV so the funds endpoint stays in sync
+                var latestEntry = newEntries.OrderByDescending(e => e.Date).First();
+                if (!fund.LatestNavDate.HasValue || latestEntry.Date > fund.LatestNavDate.Value)
+                {
+                    await fundRepo.UpdateLatestNavAsync(schemeCode, latestEntry.Nav, latestEntry.Date);
+                }
             }
             else
             {

@@ -1,0 +1,21 @@
+services:
+  api:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    # ... other settings (volumes, working_dir) ...
+    networks:
+      - global_sql_network # Connect to the DB network
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      # Use the container_name 'sqlserver' instead of an IP!
+      - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=NAVigatorDb;User Id=sa;Password=Nav!gator2026;TrustServerCertificate=True;
+
+  ui:
+    image: node:20-bullseye
+    # ... other settings ...
+    networks:
+      - global_sql_network
+
+networks:
+  global_sql_network:
+    external: true
+    name: name_of_your_sql_network # Get this from 'docker network ls'

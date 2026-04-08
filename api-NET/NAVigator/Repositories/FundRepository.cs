@@ -67,6 +67,17 @@ public class FundRepository(AppDbContext db) : IFundRepository
         await db.SaveChangesAsync();
     }
 
+    public async Task UpdateLatestNavAsync(int schemeCode, decimal nav, DateOnly date)
+    {
+        var fund = await db.Funds.FindAsync(schemeCode);
+        if (fund is null) return;
+
+        fund.LatestNav = nav;
+        fund.LatestNavDate = date;
+        fund.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+    }
+
     public async Task<int> GetCountAsync()
     {
         return await db.Funds.CountAsync();
