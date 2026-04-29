@@ -2,14 +2,17 @@ using Microsoft.EntityFrameworkCore;
 using NAVigator.Data;
 using NAVigator.Repositories;
 using NAVigator.Services;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
 using Polly;
 using Polly.Extensions.Http;
+using EFCore.NamingConventions;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // ----- EF Core -----
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+           .UseSnakeCaseNamingConvention());
 
 // ----- Repositories -----
 builder.Services.AddScoped<IFundRepository, FundRepository>();

@@ -20,8 +20,8 @@ public class FundRepository(AppDbContext db) : IFundRepository
     {
         return await db.Funds
             .AsNoTracking()
-            .Where(f => f.SchemeName.Contains(query)
-                     || f.FundHouse!.Contains(query)
+            .Where(f => EF.Functions.ILike(f.SchemeName, $"%{query}%")
+                     || EF.Functions.ILike(f.FundHouse!, $"%{query}%")
                      || f.SchemeCode.ToString() == query)
             .OrderBy(f => f.SchemeName)
             .Take(maxResults)
