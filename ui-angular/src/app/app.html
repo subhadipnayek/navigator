@@ -1,11 +1,27 @@
 <header class="app-header">
+  <a class="brand" routerLink="/">NAVigator</a>
+
   <nav>
-    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Home</a>
-    <a routerLink="/funds" routerLinkActive="active">Funds</a>
-    <a routerLink="/compare" routerLinkActive="active">Compare</a>
-    <a routerLink="/admin/sync" routerLinkActive="active">Sync</a>
-    <a routerLink="/admin/corporate-actions" routerLinkActive="active">Corporate Actions</a>
+    @if (auth.isAuthenticated()) {
+      <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
+      <a routerLink="/funds" routerLinkActive="active">Funds</a>
+      <a routerLink="/compare" routerLinkActive="active">Compare</a>
+      @if (auth.isAdmin()) {
+        <a routerLink="/admin/sync" routerLinkActive="active">Sync</a>
+        <a routerLink="/admin/corporate-actions" routerLinkActive="active">Corporate Actions</a>
+      }
+    }
   </nav>
+
+  <div class="auth-nav">
+    @if (auth.user(); as user) {
+      <span>{{ user.username }} · {{ user.role }}</span>
+      <button type="button" (click)="logout()">Logout</button>
+    } @else {
+      <a routerLink="/login" routerLinkActive="active">Login</a>
+      <a routerLink="/register" routerLinkActive="active">Register</a>
+    }
+  </div>
 </header>
 
 <main>

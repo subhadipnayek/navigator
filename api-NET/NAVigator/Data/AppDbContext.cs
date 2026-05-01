@@ -5,6 +5,7 @@ namespace NAVigator.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<Fund> Funds => Set<Fund>();
     public DbSet<NavHistory> NavHistories => Set<NavHistory>();
     public DbSet<NavSyncTracker> NavSyncTrackers => Set<NavSyncTracker>();
@@ -42,6 +43,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasIndex(ca => ca.SchemeCode);
             e.HasIndex(ca => new { ca.SchemeCode, ca.ActionDate });
+        });
+
+        modelBuilder.Entity<AppUser>(e =>
+        {
+            e.HasIndex(u => u.NormalizedUsername).IsUnique();
+            e.HasIndex(u => u.NormalizedEmail).IsUnique();
         });
     }
 }

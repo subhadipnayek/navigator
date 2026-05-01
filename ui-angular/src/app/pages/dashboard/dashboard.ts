@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { FundService } from '../../services/fund.service';
 import { StatCard } from '../../shared/stat-card/stat-card';
 import { Skeleton } from '../../shared/skeleton/skeleton';
+import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -12,6 +13,7 @@ import { Skeleton } from '../../shared/skeleton/skeleton';
 })
 export class Dashboard implements OnInit {
   private readonly fundService = inject(FundService);
+  readonly auth = inject(AuthService);
 
   readonly fundCount = signal<number | null>(null);
   readonly loading = signal(true);

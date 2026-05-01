@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using NAVigator.Models.Dto;
 using NAVigator.Services;
 
@@ -6,6 +7,7 @@ namespace NAVigator.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = "Admin")]
 public class CorporateActionsController(ICorporateActionService actionService) : ControllerBase
 {
     private static readonly string[] ValidActionTypes = ["Split", "Merger", "Bonus", "Discontinuity", "Other"];

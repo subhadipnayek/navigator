@@ -1,0 +1,78 @@
+<section class="landing-hero">
+  <div class="hero-copy">
+    <p class="eyebrow">Mutual fund research workspace</p>
+    <h1>Compare, analyse, and decide between 14K+ funds.</h1>
+    <p class="lede">
+      NAVigator brings fund discovery, NAV history, rolling returns, comparison workflows, and
+      corporate-action checks into one focused research tool.
+    </p>
+
+    <div class="hero-actions">
+      @if (auth.isAuthenticated()) {
+        <a class="primary" routerLink="/dashboard">Open Dashboard</a>
+      } @else {
+        <a class="primary" routerLink="/register">Start Researching</a>
+        <a class="secondary" routerLink="/login">Login</a>
+      }
+    </div>
+  </div>
+
+  <div class="research-visual" aria-hidden="true">
+    <div class="visual-topbar">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+    <div class="visual-body">
+      <div class="metric-strip">
+        <div>
+          <strong>14,000+</strong>
+          <span>Funds</span>
+        </div>
+        <div>
+          <strong>30Y</strong>
+          <span>History</span>
+        </div>
+        <div>
+          <strong>Live</strong>
+          <span>NAV sync</span>
+        </div>
+      </div>
+
+      <div class="chart-panel">
+        <div class="chart-line line-a"></div>
+        <div class="chart-line line-b"></div>
+        <div class="chart-bars">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </div>
+
+      <div class="compare-table">
+        <div class="row heading"><span>Fund</span><span>3Y CAGR</span><span>Risk</span></div>
+        <div class="row"><span>Flexi Cap Alpha</span><span>18.4%</span><span>Med</span></div>
+        <div class="row"><span>Bluechip Growth</span><span>15.9%</span><span>Low</span></div>
+        <div class="row"><span>Small Cap Edge</span><span>22.1%</span><span>High</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="feature-band">
+  <div>
+    <h2>Search with context</h2>
+    <p>Find funds by name, scheme code, AMC, type, and category before opening deeper NAV views.</p>
+  </div>
+  <div>
+    <h2>Compare performance</h2>
+    <p>Review point-to-point and rolling returns side by side so decisions are based on patterns.</p>
+  </div>
+  <div>
+    <h2>Trust adjusted data</h2>
+    <p>Flag NAV anomalies and account for splits, mergers, bonuses, and discontinuities.</p>
+  </div>
+</section>

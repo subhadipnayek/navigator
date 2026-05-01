@@ -23,9 +23,11 @@
       <h3>Compare Funds</h3>
       <p>Side-by-side returns comparison</p>
     </a>
-    <a routerLink="/admin/sync" class="link-card">
-      <h3>Sync Data</h3>
-      <p>Update fund master list from AMFI</p>
-    </a>
+    @if (auth.isAdmin()) {
+      <a routerLink="/admin/sync" class="link-card">
+        <h3>Sync Data</h3>
+        <p>Update fund master list from AMFI</p>
+      </a>
+    }
   </nav>
 </div>

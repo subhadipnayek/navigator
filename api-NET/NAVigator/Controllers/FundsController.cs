@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using NAVigator.Services;
 
 namespace NAVigator.Controllers;
@@ -39,6 +40,7 @@ public class FundsController(IFundService fundService) : ControllerBase
     /// This downloads and upserts ~20,000+ fund records.
     /// </summary>
     [HttpPost("sync")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Sync(CancellationToken ct)
     {
         var result = await fundService.SyncFundMasterListAsync(ct);
