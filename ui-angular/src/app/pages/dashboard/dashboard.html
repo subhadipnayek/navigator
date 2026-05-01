@@ -1,33 +1,32 @@
-<div class="dashboard">
-  <h1>NAVigator</h1>
-  <p class="subtitle">Mutual Fund & ETF Comparison Tool</p>
+<mat-card appearance="outlined">
+  <mat-card-header>
+    <mat-card-title>NAVigator</mat-card-title>
+    <mat-card-subtitle>Mutual Fund & ETF Comparison Tool</mat-card-subtitle>
+  </mat-card-header>
+</mat-card>
 
-  <div class="stats">
+<mat-card appearance="outlined">
+  <mat-card-header>
+    <mat-card-title>Funds in Database</mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
     @if (loading()) {
-      <app-stat-card label="Funds in Database">
-        <app-skeleton width="80px" height="2rem" />
-      </app-stat-card>
+      <mat-progress-bar mode="indeterminate" />
     } @else if (fundCount() !== null) {
-      <app-stat-card label="Funds in Database">
-        {{ fundCount()!.toLocaleString() }}
-      </app-stat-card>
+      <h2>{{ fundCount()!.toLocaleString() }}</h2>
     }
-  </div>
+  </mat-card-content>
+</mat-card>
 
-  <nav class="quick-links">
-    <a routerLink="/funds" class="link-card">
-      <h3>Search Funds</h3>
-      <p>Browse and search mutual funds & ETFs</p>
-    </a>
-    <a routerLink="/compare" class="link-card">
-      <h3>Compare Funds</h3>
-      <p>Side-by-side returns comparison</p>
-    </a>
+<mat-card appearance="outlined">
+  <mat-card-header>
+    <mat-card-title>Research Workflows</mat-card-title>
+  </mat-card-header>
+  <mat-card-actions>
+    <a mat-button routerLink="/funds">Search Funds</a>
+    <a mat-button routerLink="/compare">Compare Funds</a>
     @if (auth.isAdmin()) {
-      <a routerLink="/admin/sync" class="link-card">
-        <h3>Sync Data</h3>
-        <p>Update fund master list from AMFI</p>
-      </a>
+      <a mat-button routerLink="/admin/sync">Sync Data</a>
     }
-  </nav>
-</div>
+  </mat-card-actions>
+</mat-card>

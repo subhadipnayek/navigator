@@ -1,78 +1,89 @@
-<section class="landing-hero">
+<section class="hero">
   <div class="hero-copy">
-    <p class="eyebrow">Mutual fund research workspace</p>
+    <mat-chip-set>
+      <mat-chip>Mutual fund research workspace</mat-chip>
+    </mat-chip-set>
+
     <h1>Compare, analyse, and decide between 14K+ funds.</h1>
-    <p class="lede">
+    <p>
       NAVigator brings fund discovery, NAV history, rolling returns, comparison workflows, and
       corporate-action checks into one focused research tool.
     </p>
 
     <div class="hero-actions">
       @if (auth.isAuthenticated()) {
-        <a class="primary" routerLink="/dashboard">Open Dashboard</a>
+        <a mat-flat-button routerLink="/dashboard">Open Dashboard</a>
       } @else {
-        <a class="primary" routerLink="/register">Start Researching</a>
-        <a class="secondary" routerLink="/login">Login</a>
+        <a mat-flat-button routerLink="/register">Start Researching</a>
+        <a mat-stroked-button routerLink="/login">Login</a>
       }
     </div>
   </div>
 
-  <div class="research-visual" aria-hidden="true">
-    <div class="visual-topbar">
-      <span></span>
-      <span></span>
-      <span></span>
-    </div>
-    <div class="visual-body">
-      <div class="metric-strip">
-        <div>
-          <strong>14,000+</strong>
+  <mat-card appearance="outlined" class="research-panel">
+    <mat-card-header>
+      <mat-card-title>Research Coverage</mat-card-title>
+      <mat-card-subtitle>Fund analytics in one authenticated workspace</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="metric-grid">
+        <mat-card appearance="outlined">
+          <strong>14K+</strong>
           <span>Funds</span>
-        </div>
-        <div>
+        </mat-card>
+        <mat-card appearance="outlined">
           <strong>30Y</strong>
-          <span>History</span>
-        </div>
-        <div>
+          <span>NAV history</span>
+        </mat-card>
+        <mat-card appearance="outlined">
           <strong>Live</strong>
-          <span>NAV sync</span>
-        </div>
+          <span>AMFI sync</span>
+        </mat-card>
       </div>
 
-      <div class="chart-panel">
-        <div class="chart-line line-a"></div>
-        <div class="chart-line line-b"></div>
-        <div class="chart-bars">
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
+      <div class="chart-preview" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
       </div>
 
-      <div class="compare-table">
-        <div class="row heading"><span>Fund</span><span>3Y CAGR</span><span>Risk</span></div>
-        <div class="row"><span>Flexi Cap Alpha</span><span>18.4%</span><span>Med</span></div>
-        <div class="row"><span>Bluechip Growth</span><span>15.9%</span><span>Low</span></div>
-        <div class="row"><span>Small Cap Edge</span><span>22.1%</span><span>High</span></div>
-      </div>
-    </div>
-  </div>
+      <mat-chip-set>
+        <mat-chip>Rolling returns</mat-chip>
+        <mat-chip>NAV history</mat-chip>
+        <mat-chip>Corporate action checks</mat-chip>
+        <mat-chip>Fund comparison</mat-chip>
+      </mat-chip-set>
+    </mat-card-content>
+  </mat-card>
 </section>
 
-<section class="feature-band">
-  <div>
-    <h2>Search with context</h2>
-    <p>Find funds by name, scheme code, AMC, type, and category before opening deeper NAV views.</p>
-  </div>
-  <div>
-    <h2>Compare performance</h2>
-    <p>Review point-to-point and rolling returns side by side so decisions are based on patterns.</p>
-  </div>
-  <div>
-    <h2>Trust adjusted data</h2>
-    <p>Flag NAV anomalies and account for splits, mergers, bonuses, and discontinuities.</p>
-  </div>
+<section class="features">
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Search with context</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <p>Find funds by name, scheme code, AMC, type, and category before opening deeper NAV views.</p>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Compare performance</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <p>Review point-to-point and rolling returns side by side so decisions are based on patterns.</p>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Trust adjusted data</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <p>Flag NAV anomalies and account for splits, mergers, bonuses, and discontinuities.</p>
+    </mat-card-content>
+  </mat-card>
 </section>

@@ -1,201 +1,159 @@
-<div class="fund-detail-page">
-  @if (error()) {
-    <div class="error">{{ error() }}</div>
-  } @else if (loading()) {
-    <div class="fund-header">
-      <app-skeleton width="60%" height="1.5rem" />
-      <div class="meta" style="margin-top: 0.5rem">
-        <app-skeleton width="80px" height="1rem" />
-        <app-skeleton width="200px" height="1rem" />
-      </div>
-    </div>
-    <div class="info-grid">
-      @for (_ of [1, 2, 3]; track _) {
-        <app-stat-card label="">
-          <app-skeleton width="100%" height="1.25rem" />
-        </app-stat-card>
-      }
-    </div>
-  } @else {
-    @if (fund(); as f) {
-      <div class="fund-header">
-        <h1>{{ f.schemeName }}</h1>
-        <div class="meta">
-          <span class="scheme-code">{{ f.schemeCode }}</span>
+@if (error()) {
+  <mat-card appearance="outlined">{{ error() }}</mat-card>
+} @else if (loading()) {
+  <mat-card appearance="outlined">
+    <mat-progress-bar mode="indeterminate" />
+  </mat-card>
+} @else {
+  @if (fund(); as f) {
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>{{ f.schemeName }}</mat-card-title>
+        <mat-card-subtitle>
+          {{ f.schemeCode }}
           @if (f.fundHouse) {
-            <span class="fund-house">{{ f.fundHouse }}</span>
+            - {{ f.fundHouse }}
           }
           @if (f.schemeCategory) {
-            <span class="category">{{ f.schemeCategory }}</span>
+            - {{ f.schemeCategory }}
           }
-        </div>
-      </div>
+        </mat-card-subtitle>
+      </mat-card-header>
+    </mat-card>
 
-      <div class="info-grid">
-        <app-stat-card label="Latest NAV">
-          @if (f.latestNav !== null) {
-            {{ f.latestNav | number: '1.2-5' }}
-          } @else {
-            —
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <mat-list>
+          <mat-list-item>
+            Latest NAV:
+            @if (f.latestNav !== null) {
+              {{ f.latestNav | number: '1.2-5' }}
+            } @else {
+              -
+            }
+          </mat-list-item>
+          <mat-list-item>NAV Date: {{ f.latestNavDate ?? '-' }}</mat-list-item>
+          <mat-list-item>Scheme Type: {{ f.schemeType ?? '-' }}</mat-list-item>
+          @if (navData(); as nav) {
+            <mat-list-item>Data Points: {{ nav.data.length.toLocaleString() }}</mat-list-item>
+            @if (nav.wasFetchedFromApi) {
+              <mat-list-item>Fresh data</mat-list-item>
+            }
           }
-        </app-stat-card>
-        <app-stat-card label="NAV Date">
-          {{ f.latestNavDate ?? '—' }}
-        </app-stat-card>
-        <app-stat-card label="Scheme Type">
-          {{ f.schemeType ?? '—' }}
-        </app-stat-card>
-        @if (navData(); as nav) {
-          <app-stat-card label="Data Points">
-            {{ nav.data.length.toLocaleString() }}
-          </app-stat-card>
-          @if (nav.wasFetchedFromApi) {
-            <app-stat-card label="Status" variant="fresh"> Fresh data </app-stat-card>
-          }
-        }
-      </div>
+        </mat-list>
+      </mat-card-content>
+    </mat-card>
 
-      @if (navChartSeries().length > 0) {
-        <section class="chart-section">
-          <h2>NAV History</h2>
-          <div class="chart-controls">
-            <div class="interval-selector">
-              @for (iv of ['daily', 'weekly', 'monthly']; track iv) {
-                <button
-                  class="btn btn-sm"
-                  [class.active]="selectedInterval() === iv"
-                  (click)="setInterval($any(iv))"
-                >
-                  {{ iv | titlecase }}
-                </button>
-              }
-            </div>
-            <label class="adjusted-toggle">
-              <input type="checkbox" [checked]="adjusted()" (change)="toggleAdjusted()" />
-              Split-adjusted
-            </label>
-          </div>
+    @if (navChartSeries().length > 0) {
+      <mat-card appearance="outlined">
+        <mat-card-header>
+          <mat-card-title>NAV History</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <mat-button-toggle-group [value]="selectedInterval()">
+            @for (iv of ['daily', 'weekly', 'monthly']; track iv) {
+              <mat-button-toggle [value]="iv" (click)="setInterval($any(iv))">
+                {{ iv | titlecase }}
+              </mat-button-toggle>
+            }
+          </mat-button-toggle-group>
+
+          <mat-checkbox [checked]="adjusted()" (change)="toggleAdjusted()">
+            Split-adjusted
+          </mat-checkbox>
+
           <app-line-chart
             [seriesList]="navChartSeries()"
-            yAxisLabel="NAV (₹)"
+            yAxisLabel="NAV"
             [priceFormat]="{ type: 'price', precision: 4, minMove: 0.0001 }"
           />
+
           @if (corporateActions().length > 0) {
-            <div class="corporate-actions-info">
-              <h3>Corporate Actions</h3>
-              <ul>
-                @for (action of corporateActions(); track action.id) {
-                  <li>
-                    <strong>{{ action.actionType }}</strong> on {{ action.actionDate }} — factor
-                    {{ action.adjustmentFactor }}
-                    @if (action.oldFaceValue !== null && action.newFaceValue !== null) {
-                      (FV ₹{{ action.oldFaceValue }} → ₹{{ action.newFaceValue }})
-                    }
-                    @if (action.notes) {
-                      <span class="action-notes">{{ action.notes }}</span>
-                    }
-                  </li>
-                }
-              </ul>
-            </div>
+            <mat-divider />
+            <mat-list>
+              @for (action of corporateActions(); track action.id) {
+                <mat-list-item>
+                  {{ action.actionType }} on {{ action.actionDate }} - factor
+                  {{ action.adjustmentFactor }}
+                  @if (action.notes) {
+                    - {{ action.notes }}
+                  }
+                </mat-list-item>
+              }
+            </mat-list>
           }
-        </section>
-      }
-
-      @if (returns(); as ret) {
-        <section class="returns-section">
-          <h2>Point-to-Point Returns</h2>
-          <div class="date-picker-row">
-            <label>
-              Start Date
-              <input type="date" [(ngModel)]="startDate" />
-            </label>
-            <label>
-              End Date
-              <input type="date" [(ngModel)]="endDate" />
-            </label>
-            <button class="btn" (click)="fetchReturns()" [disabled]="returnsLoading()">
-              @if (returnsLoading()) {
-                Loading...
-              } @else {
-                Calculate
-              }
-            </button>
-          </div>
-          @if (returnsError()) {
-            <div class="error">{{ returnsError() }}</div>
-          }
-          @if (ret.hasDiscontinuity) {
-            <div class="discontinuity-warning">
-              ⚠ Data discontinuity detected. Returns are calculated from {{ ret.startDate }} only.
-            </div>
-          }
-          <div class="returns-grid">
-            <app-stat-card label="Absolute Return" [variant]="returnVariant(ret.absoluteReturn)">
-              {{ formatReturn(ret.absoluteReturn) }}
-            </app-stat-card>
-            <app-stat-card label="CAGR" [variant]="returnVariant(ret.cagr)">
-              {{ formatReturn(ret.cagr) }}
-            </app-stat-card>
-            <app-stat-card label="Start NAV">
-              @if (ret.startNav !== null) {
-                {{ ret.startNav | number: '1.2-4' }}
-              } @else {
-                N/A
-              }
-            </app-stat-card>
-            <app-stat-card label="End NAV">
-              @if (ret.endNav !== null) {
-                {{ ret.endNav | number: '1.2-4' }}
-              } @else {
-                N/A
-              }
-            </app-stat-card>
-            <app-stat-card label="Start Date">
-              {{ ret.startDate ?? 'N/A' }}
-            </app-stat-card>
-            <app-stat-card label="End Date">
-              {{ ret.endDate ?? 'N/A' }}
-            </app-stat-card>
-          </div>
-        </section>
-      } @else {
-        <section class="returns-section">
-          <h2>Point-to-Point Returns</h2>
-          <div class="date-picker-row">
-            <label>
-              Start Date
-              <input type="date" [(ngModel)]="startDate" />
-            </label>
-            <label>
-              End Date
-              <input type="date" [(ngModel)]="endDate" />
-            </label>
-            <button class="btn" (click)="fetchReturns()" [disabled]="returnsLoading()">
-              @if (returnsLoading()) {
-                Loading...
-              } @else {
-                Calculate
-              }
-            </button>
-          </div>
-          @if (returnsError()) {
-            <div class="error">{{ returnsError() }}</div>
-          } @else if (returnsLoading()) {
-            <div class="returns-grid">
-              @for (_ of [1, 2, 3, 4, 5, 6]; track _) {
-                <app-stat-card label="">
-                  <app-skeleton width="100%" height="1.25rem" />
-                </app-stat-card>
-              }
-            </div>
-          }
-        </section>
-      }
-
-      <div class="actions">
-        <a [routerLink]="['/funds', f.schemeCode, 'rolling']" class="btn"> View Rolling Returns </a>
-      </div>
+        </mat-card-content>
+      </mat-card>
     }
+
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>Point-to-Point Returns</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <mat-form-field appearance="outline" class="date-field">
+          <mat-label>Start Date</mat-label>
+          <input
+            matInput
+            readonly
+            [matDatepicker]="returnsStartPicker"
+            [(ngModel)]="startDate"
+            (click)="returnsStartPicker.open()"
+          />
+          <mat-datepicker-toggle matIconSuffix [for]="returnsStartPicker" />
+          <mat-datepicker #returnsStartPicker />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="date-field">
+          <mat-label>End Date</mat-label>
+          <input
+            matInput
+            readonly
+            [matDatepicker]="returnsEndPicker"
+            [(ngModel)]="endDate"
+            (click)="returnsEndPicker.open()"
+          />
+          <mat-datepicker-toggle matIconSuffix [for]="returnsEndPicker" />
+          <mat-datepicker #returnsEndPicker />
+        </mat-form-field>
+        <button mat-flat-button (click)="fetchReturns()" [disabled]="returnsLoading()">
+          {{ returnsLoading() ? 'Loading...' : 'Calculate' }}
+        </button>
+
+        @if (returnsError()) {
+          <mat-card appearance="outlined">{{ returnsError() }}</mat-card>
+        }
+
+        @if (returns(); as ret) {
+          @if (ret.hasDiscontinuity) {
+            <mat-card appearance="outlined">
+              Data discontinuity detected. Returns are calculated from {{ ret.startDate }} only.
+            </mat-card>
+          }
+          <mat-list>
+            <mat-list-item>Absolute Return: {{ formatReturn(ret.absoluteReturn) }}</mat-list-item>
+            <mat-list-item>CAGR: {{ formatReturn(ret.cagr) }}</mat-list-item>
+            <mat-list-item>
+              Start NAV:
+              {{ ret.startNav !== null ? (ret.startNav | number: '1.2-4') : 'N/A' }}
+            </mat-list-item>
+            <mat-list-item>
+              End NAV: {{ ret.endNav !== null ? (ret.endNav | number: '1.2-4') : 'N/A' }}
+            </mat-list-item>
+            <mat-list-item>Start Date: {{ ret.startDate ?? 'N/A' }}</mat-list-item>
+            <mat-list-item>End Date: {{ ret.endDate ?? 'N/A' }}</mat-list-item>
+          </mat-list>
+        } @else if (returnsLoading()) {
+          <mat-progress-bar mode="indeterminate" />
+        }
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-actions>
+        <a mat-flat-button [routerLink]="['/funds', f.schemeCode, 'rolling']">
+          View Rolling Returns
+        </a>
+      </mat-card-actions>
+    </mat-card>
   }
-</div>
+}

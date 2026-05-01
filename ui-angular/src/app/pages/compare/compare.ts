@@ -20,12 +20,37 @@ import {
 } from '../../models/fund.model';
 import { LineChart, ChartSeriesData } from '../../shared/line-chart/line-chart';
 import { toChartDate } from '../../shared/date-utils';
+import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatCardModule } from '@angular/material/card';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatNativeDateModule } from '@angular/material/core';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatListModule } from '@angular/material/list';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatTableModule } from '@angular/material/table';
 
 @Component({
   selector: 'app-compare',
-  imports: [FormsModule, LineChart, DecimalPipe],
+  imports: [
+    FormsModule,
+    LineChart,
+    DecimalPipe,
+    MatButtonModule,
+    MatButtonToggleModule,
+    MatCardModule,
+    MatChipsModule,
+    MatDatepickerModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatListModule,
+    MatNativeDateModule,
+    MatProgressBarModule,
+    MatTableModule,
+  ],
   templateUrl: './compare.html',
-  styleUrl: './compare.scss',
 })
 export class Compare implements OnDestroy {
   private readonly fundService = inject(FundService);
@@ -45,8 +70,8 @@ export class Compare implements OnDestroy {
   readonly error = signal<string | null>(null);
   readonly selectedRollingPeriod = signal(1);
 
-  startDate = '';
-  endDate = '';
+  startDate: Date | null = null;
+  endDate: Date | null = null;
 
   readonly rollingPeriods = [1, 2, 3, 5, 10];
   readonly growthPriceFormat = { type: 'price' as const, precision: 0, minMove: 1 };
@@ -56,8 +81,8 @@ export class Compare implements OnDestroy {
     const today = new Date();
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(today.getFullYear() - 1);
-    this.endDate = today.toISOString().slice(0, 10);
-    this.startDate = oneYearAgo.toISOString().slice(0, 10);
+    this.endDate = today;
+    this.startDate = oneYearAgo;
 
     this.searchSubject
       .pipe(
@@ -110,27 +135,28 @@ export class Compare implements OnDestroy {
     this.comparing.set(true);
     this.error.set(null);
     this.clearResults();
+    const startDate = this.toApiDate(this.startDate);
+    const endDate = this.toApiDate(this.endDate);
 
     // 1. Point-to-point returns for each fund
-    forkJoin(
-      funds.map((f) => this.navService.getReturns(f.schemeCode, this.startDate, this.endDate)),
-    ).subscribe({
-      next: (results) => {
-        this.returnsResults.set(results);
-        this.comparing.set(false);
-      },
-      error: (err) => {
-        this.error.set(err.error?.message ?? 'Comparison failed');
-        this.comparing.set(false);
-      },
-    });
+    forkJoin(funds.map((f) => this.navService.getReturns(f.schemeCode, startDate, endDate)))
+      .subscribe({
+        next: (results) => {
+          this.returnsResults.set(results);
+          this.comparing.set(false);
+        },
+        error: (err) => {
+          this.error.set(err.error?.message ?? 'Comparison failed');
+          this.comparing.set(false);
+        },
+      });
 
     // 2. Growth of ₹10,000 chart — fetch split-adjusted NAV history per fund with monthly interval
     forkJoin(
       funds.map((f) =>
         this.navService.getNavHistory(f.schemeCode, {
-          from: this.startDate,
-          to: this.endDate,
+          from: startDate,
+          to: endDate,
           interval: 'monthly',
           adjusted: true,
         }),
@@ -155,8 +181,8 @@ export class Compare implements OnDestroy {
     forkJoin(
       funds.map((f) =>
         this.navService.getRollingReturns(f.schemeCode, period, {
-          from: this.startDate,
-          to: this.endDate,
+          from: this.toApiDate(this.startDate),
+          to: this.toApiDate(this.endDate),
           interval: 'monthly',
         }),
       ),
@@ -228,6 +254,14 @@ export class Compare implements OnDestroy {
     this.growthChartSeries.set([]);
     this.rollingResults.set([]);
     this.rollingChartSeries.set([]);
+  }
+
+  private toApiDate(d: Date | null): string {
+    if (!d) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   formatReturn(value: number | null): string {

@@ -4,14 +4,32 @@ import { NavService } from '../../services/nav.service';
 import { RollingReturnResponse } from '../../models/fund.model';
 import { LineChart, ChartSeriesData } from '../../shared/line-chart/line-chart';
 import { toChartDate } from '../../shared/date-utils';
-import { StatCard } from '../../shared/stat-card/stat-card';
-import { Skeleton } from '../../shared/skeleton/skeleton';
+import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatCardModule } from '@angular/material/card';
+import { MatNativeDateModule } from '@angular/material/core';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatListModule } from '@angular/material/list';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 
 @Component({
   selector: 'app-rolling-returns',
-  imports: [LineChart, FormsModule, StatCard, Skeleton],
+  imports: [
+    LineChart,
+    FormsModule,
+    MatButtonModule,
+    MatButtonToggleModule,
+    MatCardModule,
+    MatDatepickerModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatListModule,
+    MatNativeDateModule,
+    MatProgressBarModule,
+  ],
   templateUrl: './rolling-returns.html',
-  styleUrl: './rolling-returns.scss',
 })
 export class RollingReturns implements OnInit {
   private readonly navService = inject(NavService);
@@ -23,8 +41,8 @@ export class RollingReturns implements OnInit {
   readonly error = signal<string | null>(null);
   readonly selectedPeriod = signal(1);
 
-  fromDate = '';
-  toDate = '';
+  fromDate: Date | null = null;
+  toDate: Date | null = null;
 
   readonly periods = [1, 2, 3, 5, 10];
 
@@ -45,8 +63,8 @@ export class RollingReturns implements OnInit {
     const today = new Date();
     const fiveYearsAgo = new Date();
     fiveYearsAgo.setFullYear(today.getFullYear() - 5);
-    this.toDate = today.toISOString().slice(0, 10);
-    this.fromDate = fiveYearsAgo.toISOString().slice(0, 10);
+    this.toDate = today;
+    this.fromDate = fiveYearsAgo;
 
     this.loadData();
   }
@@ -62,8 +80,8 @@ export class RollingReturns implements OnInit {
 
     this.navService
       .getRollingReturns(Number(this.schemeCode()), this.selectedPeriod(), {
-        from: this.fromDate || undefined,
-        to: this.toDate || undefined,
+        from: this.toApiDate(this.fromDate) || undefined,
+        to: this.toApiDate(this.toDate) || undefined,
         interval: 'monthly',
       })
       .subscribe({
@@ -81,5 +99,13 @@ export class RollingReturns implements OnInit {
   formatPercent(value: number | null): string {
     if (value === null) return 'N/A';
     return value.toFixed(2) + '%';
+  }
+
+  private toApiDate(d: Date | null): string {
+    if (!d) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 }

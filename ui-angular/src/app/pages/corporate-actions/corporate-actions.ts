@@ -7,15 +7,31 @@ import {
   CorporateActionDto,
   CreateCorporateActionRequest,
 } from '../../models/fund.model';
-import { Badge } from '../../shared/badge/badge';
-import { Modal } from '../../shared/modal/modal';
 import { ToastService } from '../../shared/toast/toast.service';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatSelectModule } from '@angular/material/select';
+import { MatTableModule } from '@angular/material/table';
 
 @Component({
   selector: 'app-corporate-actions',
-  imports: [FormsModule, DecimalPipe, Badge, Modal],
+  imports: [
+    FormsModule,
+    DecimalPipe,
+    MatButtonModule,
+    MatCardModule,
+    MatChipsModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatProgressBarModule,
+    MatSelectModule,
+    MatTableModule,
+  ],
   templateUrl: './corporate-actions.html',
-  styleUrl: './corporate-actions.scss',
 })
 export class CorporateActions {
   private readonly caService = inject(CorporateActionService);

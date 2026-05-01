@@ -1,85 +1,175 @@
-:root {
-  // Colors — Primary
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-primary-light: #eff6ff;
-  --color-primary-border: #bfdbfe;
+@use '@angular/material' as mat;
 
-  // Colors — Semantic
-  --color-positive: #16a34a;
-  --color-positive-bg: #f0fdf4;
-  --color-negative: #dc2626;
-  --color-negative-bg: #fef2f2;
-  --color-warning: #ca8a04;
-  --color-warning-bg: #fefce8;
-  --color-danger: #dc2626;
-  --color-danger-hover: #b91c1c;
-
-  // Colors — Neutral
-  --color-text: #1a1a1a;
-  --color-text-secondary: #666;
-  --color-text-muted: #999;
-  --color-text-label: #444;
-  --color-bg: #fff;
-  --color-bg-subtle: #fafafa;
-  --color-bg-hover: #f5f7ff;
-  --color-border: #e0e0e0;
-  --color-border-input: #ccc;
-
-  // Spacing
-  --space-xs: 0.25rem;
-  --space-sm: 0.5rem;
-  --space-md: 0.75rem;
-  --space-lg: 1rem;
-  --space-xl: 1.5rem;
-  --space-2xl: 2rem;
-
-  // Border radius
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 10px;
-  --radius-full: 20px;
-
-  // Typography
-  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-size-xs: 0.75rem;
-  --font-size-sm: 0.8rem;
-  --font-size-base: 0.875rem;
-  --font-size-md: 0.9rem;
-  --font-size-lg: 1rem;
-  --font-size-xl: 1.25rem;
-  --font-size-2xl: 1.5rem;
-  --font-size-3xl: 2rem;
-  --font-size-4xl: 2.5rem;
-
-  // Transitions
-  --transition-fast: 0.15s ease;
-  --transition-normal: 0.2s ease;
+html {
+  color-scheme: light;
+  @include mat.theme(
+    (
+      color: mat.$azure-palette,
+      typography: Roboto,
+      density: 0,
+    )
+  );
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
+html,
+body {
+  min-height: 100%;
 }
 
 body {
-  font-family: var(--font-family);
-  color: var(--color-text);
-  background: var(--color-bg);
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
+  margin: 0;
+  font-family: Roboto, Arial, sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 34rem),
+    #f6f7fb;
+  color: #0f172a;
 }
 
-// Global focus-visible outline for keyboard accessibility
-:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
+app-dashboard,
+app-fund-list,
+app-fund-detail,
+app-compare,
+app-rolling-returns,
+app-admin-sync,
+app-corporate-actions {
+  display: grid;
+  gap: 20px;
+  width: min(1180px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 32px 0 72px;
 }
 
-// Remove default focus for mouse users
-:focus:not(:focus-visible) {
-  outline: none;
+app-login,
+app-register {
+  display: grid;
+  width: min(440px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 56px 0;
+}
+
+app-dashboard > mat-card:first-child,
+app-fund-list > mat-card:first-child,
+app-fund-detail > mat-card:first-child,
+app-compare > mat-card:first-child,
+app-rolling-returns > mat-card:first-child,
+app-admin-sync > mat-card:first-child,
+app-corporate-actions > mat-card:first-child {
+  background: linear-gradient(135deg, #ffffff, #f8fbff);
+}
+
+.mat-mdc-card {
+  border-radius: 20px !important;
+  border-color: rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.06) !important;
+}
+
+.mat-mdc-card-header {
+  padding: 22px 24px 8px !important;
+}
+
+.mat-mdc-card-content {
+  padding: 16px 24px 24px !important;
+  overflow-x: auto;
+}
+
+.mat-mdc-card-actions {
+  gap: 12px;
+  padding: 8px 24px 24px !important;
+}
+
+.mat-mdc-card-title {
+  color: #0f172a;
+  font-size: 24px !important;
+  font-weight: 700 !important;
+}
+
+.mat-mdc-card-subtitle {
+  color: #64748b;
+}
+
+.mat-mdc-form-field {
+  width: min(100%, 520px);
+  margin-right: 12px;
+  vertical-align: top;
+}
+
+.mat-mdc-form-field.date-field {
+  width: min(100%, 260px);
+}
+
+table.mat-mdc-table {
+  width: 100%;
+  min-width: 760px;
+}
+
+.mat-mdc-header-row {
+  background: #f8fafc;
+}
+
+.mat-mdc-header-cell {
+  color: #475569;
+  font-weight: 700;
+}
+
+.mat-mdc-cell,
+.mat-mdc-header-cell {
+  padding-inline: 14px !important;
+}
+
+.mat-mdc-list-item {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.mat-button-toggle-group {
+  margin: 0 16px 16px 0;
+  vertical-align: middle;
+}
+
+app-line-chart {
+  display: block;
+  min-width: 640px;
+  margin-top: 18px;
+}
+
+mat-chip-set {
+  display: block;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 760px) {
+  app-dashboard,
+  app-fund-list,
+  app-fund-detail,
+  app-compare,
+  app-rolling-returns,
+  app-admin-sync,
+  app-corporate-actions {
+    width: min(100% - 24px, 1180px);
+    padding-top: 20px;
+  }
+
+  .mat-mdc-card-header {
+    padding: 18px 18px 6px !important;
+  }
+
+  .mat-mdc-card-content {
+    padding: 14px 18px 20px !important;
+  }
+
+  .mat-mdc-card-actions {
+    padding: 6px 18px 20px !important;
+  }
+
+  .mat-mdc-card-title {
+    font-size: 21px !important;
+  }
+
+  .mat-mdc-form-field {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .mat-mdc-form-field.date-field {
+    width: 100%;
+  }
 }

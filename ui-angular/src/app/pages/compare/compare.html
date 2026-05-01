@@ -1,146 +1,186 @@
-<div class="compare-page">
-  <h1>Compare Funds</h1>
-
-  <div class="search-box">
-    <input
-      type="text"
-      placeholder="Search and add funds to compare..."
-      [value]="searchQuery()"
-      (input)="onSearchInput($any($event.target).value)"
-    />
+<mat-card appearance="outlined">
+  <mat-card-header>
+    <mat-card-title>Compare Funds</mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+    <mat-form-field appearance="outline">
+      <mat-label>Search and add funds to compare</mat-label>
+      <input
+        matInput
+        type="text"
+        [value]="searchQuery()"
+        (input)="onSearchInput($any($event.target).value)"
+      />
+    </mat-form-field>
     @if (loading()) {
-      <span class="spinner"></span>
+      <mat-progress-bar mode="indeterminate" />
     }
-  </div>
 
-  @if (searchResults().length > 0 && searchQuery().trim().length > 0) {
-    <ul class="search-dropdown">
-      @for (fund of searchResults(); track fund.schemeCode) {
-        <li>
-          <button (click)="addFund(fund)" [disabled]="isAlreadySelected(fund.schemeCode)">
-            <span class="fund-name">{{ fund.schemeName }}</span>
-            <span class="fund-meta">{{ fund.schemeCode }} · {{ fund.fundHouse ?? '' }}</span>
-          </button>
-        </li>
-      }
-    </ul>
-  }
+    @if (searchResults().length > 0 && searchQuery().trim().length > 0) {
+      <mat-selection-list>
+        @for (fund of searchResults(); track fund.schemeCode) {
+          <mat-list-item>
+            <button mat-button (click)="addFund(fund)" [disabled]="isAlreadySelected(fund.schemeCode)">
+              {{ fund.schemeName }} - {{ fund.schemeCode }} - {{ fund.fundHouse ?? '' }}
+            </button>
+          </mat-list-item>
+        }
+      </mat-selection-list>
+    }
+  </mat-card-content>
+</mat-card>
 
-  @if (selectedFunds().length > 0) {
-    <div class="selected-funds">
-      @for (fund of selectedFunds(); track fund.schemeCode) {
-        <span class="chip">
-          {{ fund.schemeName }}
-          <button class="remove" (click)="removeFund(fund.schemeCode)">&times;</button>
-        </span>
-      }
-    </div>
+@if (selectedFunds().length > 0) {
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Selected Funds</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <mat-chip-set>
+        @for (fund of selectedFunds(); track fund.schemeCode) {
+          <mat-chip>
+            {{ fund.schemeName }}
+            <button matChipRemove type="button" (click)="removeFund(fund.schemeCode)">x</button>
+          </mat-chip>
+        }
+      </mat-chip-set>
 
-    <div class="date-picker-row">
-      <label>
-        Start Date
-        <input type="date" [(ngModel)]="startDate" />
-      </label>
-      <label>
-        End Date
-        <input type="date" [(ngModel)]="endDate" />
-      </label>
-    </div>
+      <mat-form-field appearance="outline" class="date-field">
+        <mat-label>Start Date</mat-label>
+        <input
+          matInput
+          readonly
+          [matDatepicker]="compareStartPicker"
+          [(ngModel)]="startDate"
+          (click)="compareStartPicker.open()"
+        />
+        <mat-datepicker-toggle matIconSuffix [for]="compareStartPicker" />
+        <mat-datepicker #compareStartPicker />
+      </mat-form-field>
 
-    <button
-      class="btn compare-btn"
-      (click)="compare()"
-      [disabled]="selectedFunds().length < 2 || comparing()"
-    >
-      @if (comparing()) {
-        Comparing...
-      } @else {
-        Compare ({{ selectedFunds().length }} funds)
-      }
-    </button>
-  }
+      <mat-form-field appearance="outline" class="date-field">
+        <mat-label>End Date</mat-label>
+        <input
+          matInput
+          readonly
+          [matDatepicker]="compareEndPicker"
+          [(ngModel)]="endDate"
+          (click)="compareEndPicker.open()"
+        />
+        <mat-datepicker-toggle matIconSuffix [for]="compareEndPicker" />
+        <mat-datepicker #compareEndPicker />
+      </mat-form-field>
+    </mat-card-content>
+    <mat-card-actions>
+      <button
+        mat-flat-button
+        (click)="compare()"
+        [disabled]="selectedFunds().length < 2 || comparing()"
+      >
+        {{ comparing() ? 'Comparing...' : 'Compare (' + selectedFunds().length + ' funds)' }}
+      </button>
+    </mat-card-actions>
+  </mat-card>
+}
 
-  @if (error()) {
-    <div class="error">{{ error() }}</div>
-  }
+@if (error()) {
+  <mat-card appearance="outlined">{{ error() }}</mat-card>
+}
 
-  @if (returnsResults().length > 0) {
-    <section class="comparison-results">
-      <h2>Returns Comparison</h2>
-      <div class="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>Fund</th>
-              <th>Absolute Return</th>
-              <th>CAGR</th>
-              <th>Start NAV</th>
-              <th>End NAV</th>
-              <th>Start Date</th>
-              <th>End Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (fund of returnsResults(); track fund.schemeCode) {
-              <tr>
-                <td class="fund-name-cell">
-                  <div>{{ fund.schemeName }}</div>
-                  <small>{{ fund.fundHouse }}</small>
-                </td>
-                <td [class]="returnClass(fund.absoluteReturn)">
-                  {{ formatReturn(fund.absoluteReturn) }}
-                </td>
-                <td [class]="returnClass(fund.cagr)">
-                  {{ formatReturn(fund.cagr) }}
-                </td>
-                <td>{{ fund.startNav !== null ? (fund.startNav | number: '1.2-4') : 'N/A' }}</td>
-                <td>{{ fund.endNav !== null ? (fund.endNav | number: '1.2-4') : 'N/A' }}</td>
-                <td>{{ fund.startDate ?? 'N/A' }}</td>
-                <td>{{ fund.endDate ?? 'N/A' }}</td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    </section>
-  }
+@if (returnsResults().length > 0) {
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Returns Comparison</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <table mat-table [dataSource]="returnsResults()">
+        <ng-container matColumnDef="fund">
+          <th mat-header-cell *matHeaderCellDef>Fund</th>
+          <td mat-cell *matCellDef="let fund">
+            {{ fund.schemeName }}
+            <br />
+            <small>{{ fund.fundHouse }}</small>
+          </td>
+        </ng-container>
 
-  @if (growthChartSeries().length > 0) {
-    <section class="chart-section">
-      <h2>Growth of ₹10,000</h2>
+        <ng-container matColumnDef="absoluteReturn">
+          <th mat-header-cell *matHeaderCellDef>Absolute Return</th>
+          <td mat-cell *matCellDef="let fund">{{ formatReturn(fund.absoluteReturn) }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="cagr">
+          <th mat-header-cell *matHeaderCellDef>CAGR</th>
+          <td mat-cell *matCellDef="let fund">{{ formatReturn(fund.cagr) }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="startNav">
+          <th mat-header-cell *matHeaderCellDef>Start NAV</th>
+          <td mat-cell *matCellDef="let fund">
+            {{ fund.startNav !== null ? (fund.startNav | number: '1.2-4') : 'N/A' }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="endNav">
+          <th mat-header-cell *matHeaderCellDef>End NAV</th>
+          <td mat-cell *matCellDef="let fund">
+            {{ fund.endNav !== null ? (fund.endNav | number: '1.2-4') : 'N/A' }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="startDate">
+          <th mat-header-cell *matHeaderCellDef>Start Date</th>
+          <td mat-cell *matCellDef="let fund">{{ fund.startDate ?? 'N/A' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="endDate">
+          <th mat-header-cell *matHeaderCellDef>End Date</th>
+          <td mat-cell *matCellDef="let fund">{{ fund.endDate ?? 'N/A' }}</td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="['fund', 'absoluteReturn', 'cagr', 'startNav', 'endNav', 'startDate', 'endDate']"></tr>
+        <tr mat-row *matRowDef="let row; columns: ['fund', 'absoluteReturn', 'cagr', 'startNav', 'endNav', 'startDate', 'endDate']"></tr>
+      </table>
+    </mat-card-content>
+  </mat-card>
+}
+
+@if (growthChartSeries().length > 0) {
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Growth of Rs 10,000</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
       <app-line-chart
         [seriesList]="growthChartSeries()"
-        yAxisLabel="Value (₹)"
+        yAxisLabel="Value"
         [priceFormat]="growthPriceFormat"
       />
-    </section>
-  }
+    </mat-card-content>
+  </mat-card>
+}
 
-  @if (returnsResults().length > 0) {
-    <section class="chart-section">
-      <h2>Rolling Returns Comparison</h2>
-      <div class="period-selector">
+@if (returnsResults().length > 0) {
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Rolling Returns Comparison</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <mat-button-toggle-group [value]="selectedRollingPeriod()">
         @for (p of rollingPeriods; track p) {
-          <button [class.active]="selectedRollingPeriod() === p" (click)="selectRollingPeriod(p)">
-            {{ p }}Y
-          </button>
+          <mat-button-toggle [value]="p" (click)="selectRollingPeriod(p)">{{ p }}Y</mat-button-toggle>
         }
-      </div>
+      </mat-button-toggle-group>
 
       @if (rollingResults().length > 0) {
-        <div class="stats-row">
+        <mat-list>
           @for (f of rollingResults(); track f.schemeCode) {
-            <div class="stat-card">
-              <span class="stat-name">{{ f.schemeName }}</span>
-              <div class="stat-details">
-                <span>Min: {{ formatReturn(f.minReturn) }}</span>
-                <span>Max: {{ formatReturn(f.maxReturn) }}</span>
-                <span>Avg: {{ formatReturn(f.averageReturn) }}</span>
-                <span>Med: {{ formatReturn(f.medianReturn) }}</span>
-              </div>
-            </div>
+            <mat-list-item>
+              {{ f.schemeName }} - Min {{ formatReturn(f.minReturn) }} - Max
+              {{ formatReturn(f.maxReturn) }} - Avg {{ formatReturn(f.averageReturn) }} - Med
+              {{ formatReturn(f.medianReturn) }}
+            </mat-list-item>
           }
-        </div>
+        </mat-list>
       }
 
       @if (rollingChartSeries().length > 0) {
@@ -150,6 +190,6 @@
           [priceFormat]="percentFormat"
         />
       }
-    </section>
-  }
-</div>
+    </mat-card-content>
+  </mat-card>
+}

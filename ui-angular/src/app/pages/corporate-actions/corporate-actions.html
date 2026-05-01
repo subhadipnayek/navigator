@@ -1,214 +1,219 @@
-<div class="corporate-actions-page">
-  <h1>Corporate Actions</h1>
-  <p class="description">
-    Detect NAV anomalies (splits, mergers, bonuses) and record corporate actions.
-  </p>
-
-  <!-- Scan Controls -->
-  <div class="scan-controls">
-    <label>
-      Threshold (%)
-      <input type="number" [(ngModel)]="threshold" min="5" max="99" step="1" />
-    </label>
-    <button class="btn" (click)="scanAnomalies()" [disabled]="anomaliesLoading()">
-      @if (anomaliesLoading()) {
-        <span class="spinner"></span>
-        Scanning...
-      } @else {
-        Scan Anomalies
-      }
+<mat-card appearance="outlined">
+  <mat-card-header>
+    <mat-card-title>Corporate Actions</mat-card-title>
+    <mat-card-subtitle>
+      Detect NAV anomalies and record corporate actions for adjusted analysis.
+    </mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    <mat-form-field appearance="outline">
+      <mat-label>Threshold (%)</mat-label>
+      <input matInput type="number" [(ngModel)]="threshold" min="5" max="99" step="1" />
+    </mat-form-field>
+  </mat-card-content>
+  <mat-card-actions>
+    <button mat-flat-button (click)="scanAnomalies()" [disabled]="anomaliesLoading()">
+      {{ anomaliesLoading() ? 'Scanning...' : 'Scan Anomalies' }}
     </button>
-  </div>
-
-  @if (anomaliesError()) {
-    <div class="error">{{ anomaliesError() }}</div>
+  </mat-card-actions>
+  @if (anomaliesLoading()) {
+    <mat-progress-bar mode="indeterminate" />
   }
+</mat-card>
 
-  <!-- Anomalies Table -->
-  @if (anomalies().length > 0) {
-    <div class="anomalies-section">
-      <h2>Detected Anomalies ({{ anomalies().length }})</h2>
-      <div class="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>Scheme</th>
-              <th>Date</th>
-              <th>Gap</th>
-              <th>Previous NAV</th>
-              <th>Current NAV</th>
-              <th>Change</th>
-              <th>Direction</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (a of anomalies(); track a.schemeCode + a.date) {
-              <tr [class.recorded]="a.hasCorporateAction">
-                <td>
-                  <div class="scheme-name">{{ a.schemeName }}</div>
-                  <div class="scheme-meta">{{ a.schemeCode }} · {{ a.fundHouse }}</div>
-                </td>
-                <td>{{ a.date }}</td>
-                <td>
-                  <span [class.gap-warning]="a.daysSincePrevious > 30">
-                    {{ a.daysSincePrevious }}d
-                  </span>
-                </td>
-                <td>{{ a.previousNav | number: '1.4-4' }}</td>
-                <td>{{ a.currentNav | number: '1.4-4' }}</td>
-                <td [class]="a.changePercent >= 0 ? 'positive' : 'negative'">
-                  {{ a.changePercent | number: '1.2-2' }}%
-                </td>
-                <td>
-                  <app-badge [variant]="a.direction === 'Drop' ? 'negative' : 'positive'">
-                    {{ a.direction }}
-                  </app-badge>
-                </td>
-                <td>
-                  @if (a.hasCorporateAction) {
-                    <app-badge variant="positive">Recorded</app-badge>
-                  } @else {
-                    <app-badge variant="warning">Pending</app-badge>
-                  }
-                </td>
-                <td class="action-buttons">
-                  @if (!a.hasCorporateAction) {
-                    <button class="btn btn-sm" (click)="openForm(a)">Record</button>
-                  }
-                  <button class="btn btn-sm btn-outline" (click)="viewActions(a.schemeCode)">
-                    View
-                  </button>
-                </td>
-              </tr>
+@if (anomaliesError()) {
+  <mat-card appearance="outlined">{{ anomaliesError() }}</mat-card>
+}
+
+@if (anomalies().length > 0) {
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Detected Anomalies ({{ anomalies().length }})</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <table mat-table [dataSource]="anomalies()">
+        <ng-container matColumnDef="scheme">
+          <th mat-header-cell *matHeaderCellDef>Scheme</th>
+          <td mat-cell *matCellDef="let a">
+            {{ a.schemeName }}
+            <br />
+            <small>{{ a.schemeCode }} - {{ a.fundHouse }}</small>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="date">
+          <th mat-header-cell *matHeaderCellDef>Date</th>
+          <td mat-cell *matCellDef="let a">{{ a.date }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="gap">
+          <th mat-header-cell *matHeaderCellDef>Gap</th>
+          <td mat-cell *matCellDef="let a">{{ a.daysSincePrevious }}d</td>
+        </ng-container>
+
+        <ng-container matColumnDef="previousNav">
+          <th mat-header-cell *matHeaderCellDef>Previous NAV</th>
+          <td mat-cell *matCellDef="let a">{{ a.previousNav | number: '1.4-4' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="currentNav">
+          <th mat-header-cell *matHeaderCellDef>Current NAV</th>
+          <td mat-cell *matCellDef="let a">{{ a.currentNav | number: '1.4-4' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="change">
+          <th mat-header-cell *matHeaderCellDef>Change</th>
+          <td mat-cell *matCellDef="let a">{{ a.changePercent | number: '1.2-2' }}%</td>
+        </ng-container>
+
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let a">
+            <mat-chip-set>
+              <mat-chip>{{ a.direction }}</mat-chip>
+              <mat-chip>{{ a.hasCorporateAction ? 'Recorded' : 'Pending' }}</mat-chip>
+            </mat-chip-set>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef>Actions</th>
+          <td mat-cell *matCellDef="let a">
+            @if (!a.hasCorporateAction) {
+              <button mat-button (click)="openForm(a)">Record</button>
             }
-          </tbody>
-        </table>
-      </div>
-    </div>
-  }
+            <button mat-button (click)="viewActions(a.schemeCode)">View</button>
+          </td>
+        </ng-container>
 
-  <!-- Create Action Form Modal -->
-  @if (showForm(); as anomaly) {
-    <app-modal (closed)="closeForm()">
-      <h2>Record Corporate Action</h2>
-      <p class="modal-subtitle">
-        {{ anomaly.schemeName }} — {{ anomaly.date }} ({{
-          anomaly.changePercent | number: '1.2-2'
-        }}% {{ anomaly.direction }})
-      </p>
+        <tr mat-header-row *matHeaderRowDef="['scheme', 'date', 'gap', 'previousNav', 'currentNav', 'change', 'status', 'actions']"></tr>
+        <tr mat-row *matRowDef="let row; columns: ['scheme', 'date', 'gap', 'previousNav', 'currentNav', 'change', 'status', 'actions']"></tr>
+      </table>
+    </mat-card-content>
+  </mat-card>
+}
 
+@if (showForm(); as anomaly) {
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Record Corporate Action</mat-card-title>
+      <mat-card-subtitle>
+        {{ anomaly.schemeName }} - {{ anomaly.date }} -
+        {{ anomaly.changePercent | number: '1.2-2' }}% {{ anomaly.direction }}
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
       @if (anomaly.daysSincePrevious > 30) {
-        <div class="gap-hint">
-          ⚠ {{ anomaly.daysSincePrevious }}-day gap from previous NAV ({{ anomaly.previousDate }}).
-          This is likely a <strong>Discontinuity</strong>, not a split.
-        </div>
+        <mat-card appearance="outlined">
+          {{ anomaly.daysSincePrevious }}-day gap from previous NAV ({{ anomaly.previousDate }}).
+          This is likely a Discontinuity, not a split.
+        </mat-card>
       }
 
-      <div class="form-grid">
-        <label>
-          Action Type
-          <select [(ngModel)]="actionType">
-            <option value="Split">Split</option>
-            <option value="Merger">Merger</option>
-            <option value="Bonus">Bonus</option>
-            <option value="Discontinuity">Discontinuity</option>
-            <option value="Other">Other</option>
-          </select>
-        </label>
+      <mat-form-field appearance="outline">
+        <mat-label>Action Type</mat-label>
+        <mat-select [(ngModel)]="actionType">
+          <mat-option value="Split">Split</mat-option>
+          <mat-option value="Merger">Merger</mat-option>
+          <mat-option value="Bonus">Bonus</mat-option>
+          <mat-option value="Discontinuity">Discontinuity</mat-option>
+          <mat-option value="Other">Other</mat-option>
+        </mat-select>
+      </mat-form-field>
 
-        @if (actionType !== 'Discontinuity') {
-          <label>
-            Adjustment Factor
-            <input type="number" [(ngModel)]="adjustmentFactor" min="0.01" step="0.1" />
-          </label>
+      @if (actionType !== 'Discontinuity') {
+        <mat-form-field appearance="outline">
+          <mat-label>Adjustment Factor</mat-label>
+          <input matInput type="number" [(ngModel)]="adjustmentFactor" min="0.01" step="0.1" />
+        </mat-form-field>
 
-          <label>
-            Old Face Value
-            <input type="number" [(ngModel)]="oldFaceValue" step="0.01" placeholder="Optional" />
-          </label>
+        <mat-form-field appearance="outline">
+          <mat-label>Old Face Value</mat-label>
+          <input matInput type="number" [(ngModel)]="oldFaceValue" step="0.01" />
+        </mat-form-field>
 
-          <label>
-            New Face Value
-            <input type="number" [(ngModel)]="newFaceValue" step="0.01" placeholder="Optional" />
-          </label>
-        }
+        <mat-form-field appearance="outline">
+          <mat-label>New Face Value</mat-label>
+          <input matInput type="number" [(ngModel)]="newFaceValue" step="0.01" />
+        </mat-form-field>
+      }
 
-        <label class="full-width">
-          Notes
-          <input type="text" [(ngModel)]="notes" placeholder="e.g. Face value split 10:1" />
-        </label>
-      </div>
+      <mat-form-field appearance="outline">
+        <mat-label>Notes</mat-label>
+        <input matInput type="text" [(ngModel)]="notes" />
+      </mat-form-field>
 
       @if (formError()) {
-        <div class="error">{{ formError() }}</div>
+        <mat-card appearance="outlined">{{ formError() }}</mat-card>
       }
+    </mat-card-content>
+    <mat-card-actions>
+      <button mat-flat-button (click)="submitAction()" [disabled]="formLoading()">
+        {{ formLoading() ? 'Saving...' : 'Save Action' }}
+      </button>
+      <button mat-button (click)="closeForm()">Cancel</button>
+    </mat-card-actions>
+  </mat-card>
+}
 
-      <div class="modal-actions">
-        <button class="btn" (click)="submitAction()" [disabled]="formLoading()">
-          @if (formLoading()) {
-            <span class="spinner"></span>
-            Saving...
-          } @else {
-            Save Action
-          }
-        </button>
-        <button class="btn btn-outline" (click)="closeForm()">Cancel</button>
-      </div>
-    </app-modal>
-  }
-
-  <!-- Existing Actions Panel -->
-  @if (selectedSchemeCode() !== null) {
-    <app-modal (closed)="closeActions()">
-      <h2>Corporate Actions — Scheme {{ selectedSchemeCode() }}</h2>
-
+@if (selectedSchemeCode() !== null) {
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Corporate Actions - Scheme {{ selectedSchemeCode() }}</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
       @if (actionsLoading()) {
-        <p>Loading...</p>
+        <mat-progress-bar mode="indeterminate" />
       } @else if (existingActions().length === 0) {
-        <p class="empty">No corporate actions recorded for this fund.</p>
+        <p>No corporate actions recorded for this fund.</p>
       } @else {
-        <div class="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Type</th>
-                <th>Factor</th>
-                <th>Old FV</th>
-                <th>New FV</th>
-                <th>Notes</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (ca of existingActions(); track ca.id) {
-                <tr>
-                  <td>{{ ca.actionDate }}</td>
-                  <td>{{ ca.actionType }}</td>
-                  <td>{{ ca.adjustmentFactor }}</td>
-                  <td>{{ ca.oldFaceValue ?? '—' }}</td>
-                  <td>{{ ca.newFaceValue ?? '—' }}</td>
-                  <td>{{ ca.notes ?? '—' }}</td>
-                  <td>
-                    <button
-                      class="btn btn-sm btn-danger"
-                      (click)="deleteAction(selectedSchemeCode()!, ca.id)"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      }
+        <table mat-table [dataSource]="existingActions()">
+          <ng-container matColumnDef="date">
+            <th mat-header-cell *matHeaderCellDef>Date</th>
+            <td mat-cell *matCellDef="let ca">{{ ca.actionDate }}</td>
+          </ng-container>
 
-      <div class="modal-actions">
-        <button class="btn btn-outline" (click)="closeActions()">Close</button>
-      </div>
-    </app-modal>
-  }
-</div>
+          <ng-container matColumnDef="type">
+            <th mat-header-cell *matHeaderCellDef>Type</th>
+            <td mat-cell *matCellDef="let ca">{{ ca.actionType }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="factor">
+            <th mat-header-cell *matHeaderCellDef>Factor</th>
+            <td mat-cell *matCellDef="let ca">{{ ca.adjustmentFactor }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="oldFaceValue">
+            <th mat-header-cell *matHeaderCellDef>Old FV</th>
+            <td mat-cell *matCellDef="let ca">{{ ca.oldFaceValue ?? '-' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="newFaceValue">
+            <th mat-header-cell *matHeaderCellDef>New FV</th>
+            <td mat-cell *matCellDef="let ca">{{ ca.newFaceValue ?? '-' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="notes">
+            <th mat-header-cell *matHeaderCellDef>Notes</th>
+            <td mat-cell *matCellDef="let ca">{{ ca.notes ?? '-' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="delete">
+            <th mat-header-cell *matHeaderCellDef></th>
+            <td mat-cell *matCellDef="let ca">
+              <button mat-button (click)="deleteAction(selectedSchemeCode()!, ca.id)">
+                Delete
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="['date', 'type', 'factor', 'oldFaceValue', 'newFaceValue', 'notes', 'delete']"></tr>
+          <tr mat-row *matRowDef="let row; columns: ['date', 'type', 'factor', 'oldFaceValue', 'newFaceValue', 'notes', 'delete']"></tr>
+        </table>
+      }
+    </mat-card-content>
+    <mat-card-actions>
+      <button mat-button (click)="closeActions()">Close</button>
+    </mat-card-actions>
+  </mat-card>
+}

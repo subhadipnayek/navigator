@@ -1,47 +1,37 @@
-<div class="admin-sync-page">
-  <h1>Sync Fund Data</h1>
-  <p class="description">
-    Download and update the fund master list from AMFI. This may take 10–15 seconds.
-  </p>
-
-  <button class="btn" (click)="sync()" [disabled]="syncing()">
-    @if (syncing()) {
-      <span class="spinner"></span>
-      Syncing...
-    } @else {
-      Sync Now
-    }
-  </button>
-
-  @if (error()) {
-    <div class="error">{{ error() }}</div>
+<mat-card appearance="outlined">
+  <mat-card-header>
+    <mat-card-title>Sync Fund Data</mat-card-title>
+    <mat-card-subtitle>
+      Download and update the fund master list from AMFI. This may take 10-15 seconds.
+    </mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-actions>
+    <button mat-flat-button (click)="sync()" [disabled]="syncing()">
+      {{ syncing() ? 'Syncing...' : 'Sync Now' }}
+    </button>
+  </mat-card-actions>
+  @if (syncing()) {
+    <mat-progress-bar mode="indeterminate" />
   }
+</mat-card>
 
-  @if (result(); as r) {
-    <div class="result-card">
-      <h2>Sync Complete</h2>
-      <div class="result-grid">
-        <div class="result-item">
-          <span class="label">Total Parsed</span>
-          <span class="value">{{ r.totalParsed.toLocaleString() }}</span>
-        </div>
-        <div class="result-item">
-          <span class="label">Added</span>
-          <span class="value">{{ r.added.toLocaleString() }}</span>
-        </div>
-        <div class="result-item">
-          <span class="label">Updated</span>
-          <span class="value">{{ r.updated.toLocaleString() }}</span>
-        </div>
-        <div class="result-item">
-          <span class="label">Unchanged</span>
-          <span class="value">{{ r.unchanged.toLocaleString() }}</span>
-        </div>
-        <div class="result-item">
-          <span class="label">Duration</span>
-          <span class="value">{{ r.duration }}</span>
-        </div>
-      </div>
-    </div>
-  }
-</div>
+@if (error()) {
+  <mat-card appearance="outlined">{{ error() }}</mat-card>
+}
+
+@if (result(); as r) {
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Sync Complete</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <mat-list>
+        <mat-list-item>Total Parsed: {{ r.totalParsed.toLocaleString() }}</mat-list-item>
+        <mat-list-item>Added: {{ r.added.toLocaleString() }}</mat-list-item>
+        <mat-list-item>Updated: {{ r.updated.toLocaleString() }}</mat-list-item>
+        <mat-list-item>Unchanged: {{ r.unchanged.toLocaleString() }}</mat-list-item>
+        <mat-list-item>Duration: {{ r.duration }}</mat-list-item>
+      </mat-list>
+    </mat-card-content>
+  </mat-card>
+}

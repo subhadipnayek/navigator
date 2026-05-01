@@ -1,11 +1,18 @@
 import { Component, inject } from '@angular/core';
 import { Router, RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
-import { ToastContainer } from './shared/toast/toast-container';
 import { AuthService } from './services/auth.service';
+import { MatButtonModule } from '@angular/material/button';
+import { MatToolbarModule } from '@angular/material/toolbar';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, ToastContainer],
+  imports: [
+    RouterOutlet,
+    RouterLink,
+    RouterLinkActive,
+    MatButtonModule,
+    MatToolbarModule,
+  ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })

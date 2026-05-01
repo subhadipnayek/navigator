@@ -1,29 +1,32 @@
-<section class="auth-page">
-  <form class="auth-panel" [formGroup]="form" (ngSubmit)="submit()">
-    <h1>Login</h1>
+<mat-card appearance="outlined">
+  <mat-card-header>
+    <mat-card-title>Login</mat-card-title>
+  </mat-card-header>
 
-    <label>
-      Username or email
-      <input type="text" formControlName="usernameOrEmail" autocomplete="username" />
-    </label>
+  <mat-card-content>
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <mat-form-field appearance="outline">
+        <mat-label>Username or email</mat-label>
+        <input matInput type="text" formControlName="usernameOrEmail" autocomplete="username" />
+      </mat-form-field>
 
-    <label>
-      Password
-      <input type="password" formControlName="password" autocomplete="current-password" />
-    </label>
+      <mat-form-field appearance="outline">
+        <mat-label>Password</mat-label>
+        <input matInput type="password" formControlName="password" autocomplete="current-password" />
+      </mat-form-field>
 
-    @if (error()) {
-      <p class="error">{{ error() }}</p>
-    }
-
-    <button type="submit" [disabled]="submitting()">
-      @if (submitting()) {
-        Signing in...
-      } @else {
-        Login
+      @if (error()) {
+        <mat-card appearance="outlined">{{ error() }}</mat-card>
       }
-    </button>
 
-    <p class="switch-link">New here? <a routerLink="/register">Create an account</a></p>
-  </form>
-</section>
+      <button mat-flat-button type="submit" [disabled]="submitting()">
+        {{ submitting() ? 'Signing in...' : 'Login' }}
+      </button>
+    </form>
+  </mat-card-content>
+
+  <mat-card-actions>
+    <span>New here?</span>
+    <a mat-button routerLink="/register">Create an account</a>
+  </mat-card-actions>
+</mat-card>

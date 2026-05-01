@@ -12,14 +12,39 @@ import {
 } from '../../models/fund.model';
 import { LineChart, ChartSeriesData } from '../../shared/line-chart/line-chart';
 import { toChartDate } from '../../shared/date-utils';
-import { StatCard } from '../../shared/stat-card/stat-card';
-import { Skeleton } from '../../shared/skeleton/skeleton';
+import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatCardModule } from '@angular/material/card';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatDividerModule } from '@angular/material/divider';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatListModule } from '@angular/material/list';
+import { MatNativeDateModule } from '@angular/material/core';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 
 @Component({
   selector: 'app-fund-detail',
-  imports: [RouterLink, DecimalPipe, TitleCasePipe, LineChart, FormsModule, StatCard, Skeleton],
+  imports: [
+    RouterLink,
+    DecimalPipe,
+    TitleCasePipe,
+    LineChart,
+    FormsModule,
+    MatButtonModule,
+    MatButtonToggleModule,
+    MatCardModule,
+    MatCheckboxModule,
+    MatDividerModule,
+    MatDatepickerModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatListModule,
+    MatNativeDateModule,
+    MatProgressBarModule,
+  ],
   templateUrl: './fund-detail.html',
-  styleUrl: './fund-detail.scss',
 })
 export class FundDetail implements OnInit {
   private readonly fundService = inject(FundService);
@@ -37,8 +62,8 @@ export class FundDetail implements OnInit {
   readonly adjusted = signal(false);
   readonly selectedInterval = signal<'daily' | 'weekly' | 'monthly'>('daily');
 
-  startDate = '';
-  endDate = '';
+  startDate: Date | null = null;
+  endDate: Date | null = null;
 
   readonly corporateActions = computed<CorporateActionDto[]>(() => {
     return this.navData()?.corporateActions ?? [];
@@ -62,8 +87,8 @@ export class FundDetail implements OnInit {
     const today = new Date();
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(today.getFullYear() - 1);
-    this.endDate = this.toInputDate(today);
-    this.startDate = this.toInputDate(oneYearAgo);
+    this.endDate = today;
+    this.startDate = oneYearAgo;
 
     this.fundService.getFund(code).subscribe({
       next: (fund) => this.fund.set(fund),
@@ -106,11 +131,13 @@ export class FundDetail implements OnInit {
   }
 
   fetchReturns(): void {
-    if (!this.startDate || !this.endDate) return;
+    const startDate = this.toApiDate(this.startDate);
+    const endDate = this.toApiDate(this.endDate);
+    if (!startDate || !endDate) return;
     this.returnsLoading.set(true);
     this.returnsError.set(null);
 
-    this.navService.getReturns(Number(this.schemeCode()), this.startDate, this.endDate).subscribe({
+    this.navService.getReturns(Number(this.schemeCode()), startDate, endDate).subscribe({
       next: (data) => {
         this.returns.set(data);
         this.returnsLoading.set(false);
@@ -137,7 +164,11 @@ export class FundDetail implements OnInit {
     return value >= 0 ? 'positive' : 'negative';
   }
 
-  private toInputDate(d: Date): string {
-    return d.toISOString().slice(0, 10);
+  private toApiDate(d: Date | null): string {
+    if (!d) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 }

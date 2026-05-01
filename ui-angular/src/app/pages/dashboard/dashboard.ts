@@ -1,15 +1,15 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FundService } from '../../services/fund.service';
-import { StatCard } from '../../shared/stat-card/stat-card';
-import { Skeleton } from '../../shared/skeleton/skeleton';
 import { AuthService } from '../../services/auth.service';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, StatCard, Skeleton],
+  imports: [RouterLink, MatButtonModule, MatCardModule, MatProgressBarModule],
   templateUrl: './dashboard.html',
-  styleUrl: './dashboard.scss',
 })
 export class Dashboard implements OnInit {
   private readonly fundService = inject(FundService);

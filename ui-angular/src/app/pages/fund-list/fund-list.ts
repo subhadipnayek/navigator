@@ -5,12 +5,27 @@ import { Subject, debounceTime, distinctUntilChanged, switchMap, of, takeUntil }
 import { FundService } from '../../services/fund.service';
 import { Fund } from '../../models/fund.model';
 import { DecimalPipe } from '@angular/common';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatTableModule } from '@angular/material/table';
 
 @Component({
   selector: 'app-fund-list',
-  imports: [RouterLink, FormsModule, DecimalPipe],
+  imports: [
+    RouterLink,
+    FormsModule,
+    DecimalPipe,
+    MatButtonModule,
+    MatCardModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatProgressBarModule,
+    MatTableModule,
+  ],
   templateUrl: './fund-list.html',
-  styleUrl: './fund-list.scss',
 })
 export class FundList implements OnInit, OnDestroy {
   private readonly fundService = inject(FundService);

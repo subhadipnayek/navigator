@@ -2,12 +2,15 @@ import { Component, inject, signal } from '@angular/core';
 import { FundService } from '../../services/fund.service';
 import { FundSyncResult } from '../../models/fund.model';
 import { ToastService } from '../../shared/toast/toast.service';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
+import { MatListModule } from '@angular/material/list';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 
 @Component({
   selector: 'app-admin-sync',
-  imports: [],
+  imports: [MatButtonModule, MatCardModule, MatListModule, MatProgressBarModule],
   templateUrl: './admin-sync.html',
-  styleUrl: './admin-sync.scss',
 })
 export class AdminSync {
   private readonly fundService = inject(FundService);

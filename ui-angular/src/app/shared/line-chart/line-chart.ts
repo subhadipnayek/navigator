@@ -20,8 +20,8 @@ export interface ChartSeriesData {
 @Component({
   selector: 'app-line-chart',
   template: `
-    <div #chartWrapper class="chart-wrapper">
-      <div #chartContainer class="chart-container"></div>
+    <div class="chart-shell">
+      <div #chartContainer class="chart-host"></div>
       <div #tooltip class="chart-tooltip"></div>
     </div>
   `,
@@ -29,30 +29,32 @@ export interface ChartSeriesData {
     :host {
       display: block;
     }
-    .chart-wrapper {
+
+    .chart-shell {
       position: relative;
     }
-    .chart-container {
+
+    .chart-host {
       width: 100%;
-      height: 400px;
+      min-height: 400px;
     }
+
     .chart-tooltip {
       display: none;
       position: absolute;
       top: 12px;
-      z-index: 10;
+      z-index: 3;
+      max-width: min(360px, calc(100% - 24px));
+      padding: 10px 12px;
+      border: 1px solid rgba(15, 23, 42, 0.12);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
+      color: #0f172a;
+      font-size: 12px;
+      line-height: 1.45;
       pointer-events: none;
-      font-size: 0.8125rem;
-      line-height: 1.5;
-      background: rgba(255, 255, 255, 0.95);
-      border: 1px solid #e0e0e0;
-      border-radius: 6px;
-      padding: 6px 10px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-      white-space: nowrap;
-      transition:
-        left 0.05s ease,
-        right 0.05s ease;
+      white-space: normal;
     }
   `,
 })
@@ -97,6 +99,8 @@ export class LineChart implements OnDestroy {
     const container = this.chartContainer().nativeElement;
 
     this.chart = createChart(container, {
+      width: container.clientWidth || 800,
+      height: 400,
       layout: {
         background: { color: '#ffffff' },
         textColor: '#333',
@@ -125,9 +129,7 @@ export class LineChart implements OnDestroy {
     });
     this.resizeObserver.observe(container);
 
-    this.chart.subscribeCrosshairMove((param: any) => {
-      this.handleCrosshairMove(param);
-    });
+    this.chart.subscribeCrosshairMove((param: any) => this.handleCrosshairMove(param));
 
     const data = this.seriesList();
     if (data.length > 0) {
@@ -170,85 +172,91 @@ export class LineChart implements OnDestroy {
   }
 
   private handleCrosshairMove(param: any): void {
-    const el = this.tooltip().nativeElement;
+    const tooltip = this.tooltip().nativeElement;
     const container = this.chartContainer().nativeElement;
 
-    if (!param.time || param.seriesData.size === 0) {
-      el.style.display = 'none';
+    if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) {
+      tooltip.style.display = 'none';
       return;
     }
 
-    const timeStr =
-      typeof param.time === 'string'
-        ? param.time
-        : `${param.time.year}-${String(param.time.month).padStart(2, '0')}-${String(param.time.day).padStart(2, '0')}`;
-
-    const lines: string[] = [];
-    lines.push(`<div style="margin-bottom:2px;font-weight:600">${timeStr}</div>`);
+    const timeStr = this.formatCrosshairTime(param.time);
+    const rows: string[] = [`<strong>${timeStr}</strong>`];
 
     for (let i = 0; i < this.seriesInstances.length; i++) {
-      // First try exact match from param, then fall back to nearest lookup
       const exact = param.seriesData.get(this.seriesInstances[i]);
       const value = exact?.value ?? this.findNearestValue(this.seriesSortedData[i], timeStr);
       if (value === undefined) continue;
 
-      const name = this.seriesNames[i];
-      const color = this.seriesColors[i];
-      const val = value.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 4,
-      });
-      const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:4px;vertical-align:middle"></span>`;
-      lines.push(`<div>${dot}${name ? name + ': ' : ''}${val}</div>`);
+      rows.push(
+        `<div style="display:flex;gap:8px;align-items:center;margin-top:5px">
+          <span style="width:9px;height:9px;border-radius:999px;background:${this.seriesColors[i]};flex:0 0 auto"></span>
+          <span style="overflow:hidden;text-overflow:ellipsis">${this.escapeHtml(this.seriesNames[i])}</span>
+          <strong style="margin-left:auto">${this.formatValue(value)}</strong>
+        </div>`,
+      );
     }
 
-    el.innerHTML = lines.join('');
-    el.style.display = 'block';
+    if (rows.length === 1) {
+      tooltip.style.display = 'none';
+      return;
+    }
 
-    // Position tooltip near the crosshair, flip to left side if near right edge
-    const tooltipWidth = el.offsetWidth;
-    const containerWidth = container.clientWidth;
-    const x = param.point?.x ?? 0;
+    tooltip.innerHTML = rows.join('');
+    tooltip.style.display = 'block';
+
     const margin = 16;
+    const tooltipWidth = tooltip.offsetWidth;
+    const x = param.point.x;
+    const left =
+      x + margin + tooltipWidth > container.clientWidth
+        ? Math.max(12, x - tooltipWidth - margin)
+        : x + margin;
 
-    if (x + margin + tooltipWidth > containerWidth) {
-      el.style.left = '';
-      el.style.right = containerWidth - x + margin + 'px';
-    } else {
-      el.style.right = '';
-      el.style.left = x + margin + 'px';
-    }
+    tooltip.style.left = `${left}px`;
   }
 
-  /** Binary search for the nearest data point <= the given time string (yyyy-MM-dd). */
+  private formatCrosshairTime(time: unknown): string {
+    if (typeof time === 'string') return time;
+    if (typeof time === 'object' && time && 'year' in time && 'month' in time && 'day' in time) {
+      const t = time as { year: number; month: number; day: number };
+      return `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`;
+    }
+    return String(time);
+  }
+
+  private formatValue(value: number): string {
+    return value.toLocaleString(undefined, {
+      minimumFractionDigits: this.priceFormat().precision > 0 ? 2 : 0,
+      maximumFractionDigits: this.priceFormat().precision,
+    });
+  }
+
   private findNearestValue(
     sortedData: { time: string; value: number }[],
     timeStr: string,
   ): number | undefined {
     if (sortedData.length === 0) return undefined;
-
     let lo = 0;
     let hi = sortedData.length - 1;
-
-    // If before first point, return first
-    if (timeStr <= sortedData[0].time) return sortedData[0].value;
-    // If after last point, return last
-    if (timeStr >= sortedData[hi].time) return sortedData[hi].value;
-
     while (lo <= hi) {
       const mid = (lo + hi) >> 1;
       if (sortedData[mid].time === timeStr) return sortedData[mid].value;
       if (sortedData[mid].time < timeStr) lo = mid + 1;
       else hi = mid - 1;
     }
-
-    // hi is the largest index with time < timeStr, lo is the smallest with time > timeStr
-    // Return whichever is closer
     if (hi < 0) return sortedData[0].value;
     if (lo >= sortedData.length) return sortedData[sortedData.length - 1].value;
-    return timeStr.localeCompare(sortedData[hi].time) <= timeStr.localeCompare(sortedData[lo].time)
-      ? sortedData[hi].value
-      : sortedData[lo].value;
+    return sortedData[hi].value;
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
   ngOnDestroy(): void {

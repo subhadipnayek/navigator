@@ -1,56 +1,73 @@
-<div class="fund-list-page">
-  <h1>Search Funds</h1>
-
-  <div class="search-box">
-    <input
-      type="text"
-      placeholder="Search by name, fund house, or scheme code..."
-      [value]="searchQuery()"
-      (input)="onSearchInput($any($event.target).value)"
-      autofocus
-    />
+<mat-card appearance="outlined">
+  <mat-card-header>
+    <mat-card-title>Search Funds</mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+    <mat-form-field appearance="outline">
+      <mat-label>Search by name, fund house, or scheme code</mat-label>
+      <input
+        matInput
+        type="text"
+        [value]="searchQuery()"
+        (input)="onSearchInput($any($event.target).value)"
+        autofocus
+      />
+    </mat-form-field>
     @if (loading()) {
-      <span class="spinner"></span>
+      <mat-progress-bar mode="indeterminate" />
     }
-  </div>
+  </mat-card-content>
+</mat-card>
 
-  @if (funds().length > 0) {
-    <div class="results-count">{{ funds().length }} results</div>
-    <table class="fund-table">
-      <thead>
-        <tr>
-          <th>Scheme Code</th>
-          <th>Fund Name</th>
-          <th>Fund House</th>
-          <th>Category</th>
-          <th>Latest NAV</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (fund of funds(); track fund.schemeCode) {
-          <tr>
-            <td>
-              <a [routerLink]="['/funds', fund.schemeCode]">{{ fund.schemeCode }}</a>
-            </td>
-            <td>
-              <a [routerLink]="['/funds', fund.schemeCode]">{{ fund.schemeName }}</a>
-            </td>
-            <td>{{ fund.fundHouse ?? '—' }}</td>
-            <td>{{ fund.schemeCategory ?? '—' }}</td>
-            <td class="nav-value">
-              @if (fund.latestNav !== null) {
-                {{ fund.latestNav | number: '1.2-4' }}
-              } @else {
-                —
-              }
-            </td>
-          </tr>
-        }
-      </tbody>
-    </table>
-  } @else if (!loading() && searchQuery().trim().length > 0) {
-    <p class="empty">No funds found for "{{ searchQuery() }}"</p>
-  } @else if (!loading()) {
-    <p class="hint">Start typing to search for mutual funds and ETFs.</p>
-  }
-</div>
+@if (funds().length > 0) {
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>{{ funds().length }} results</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <table mat-table [dataSource]="funds()">
+        <ng-container matColumnDef="schemeCode">
+          <th mat-header-cell *matHeaderCellDef>Scheme Code</th>
+          <td mat-cell *matCellDef="let fund">
+            <a mat-button [routerLink]="['/funds', fund.schemeCode]">{{ fund.schemeCode }}</a>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="schemeName">
+          <th mat-header-cell *matHeaderCellDef>Fund Name</th>
+          <td mat-cell *matCellDef="let fund">
+            <a mat-button [routerLink]="['/funds', fund.schemeCode]">{{ fund.schemeName }}</a>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="fundHouse">
+          <th mat-header-cell *matHeaderCellDef>Fund House</th>
+          <td mat-cell *matCellDef="let fund">{{ fund.fundHouse ?? '-' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="category">
+          <th mat-header-cell *matHeaderCellDef>Category</th>
+          <td mat-cell *matCellDef="let fund">{{ fund.schemeCategory ?? '-' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="latestNav">
+          <th mat-header-cell *matHeaderCellDef>Latest NAV</th>
+          <td mat-cell *matCellDef="let fund">
+            @if (fund.latestNav !== null) {
+              {{ fund.latestNav | number: '1.2-4' }}
+            } @else {
+              -
+            }
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="['schemeCode', 'schemeName', 'fundHouse', 'category', 'latestNav']"></tr>
+        <tr mat-row *matRowDef="let row; columns: ['schemeCode', 'schemeName', 'fundHouse', 'category', 'latestNav']"></tr>
+      </table>
+    </mat-card-content>
+  </mat-card>
+} @else if (!loading() && searchQuery().trim().length > 0) {
+  <mat-card appearance="outlined">No funds found for "{{ searchQuery() }}"</mat-card>
+} @else if (!loading()) {
+  <mat-card appearance="outlined">Start typing to search for mutual funds and ETFs.</mat-card>
+}

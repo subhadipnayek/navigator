@@ -1,64 +1,76 @@
-<div class="rolling-returns-page">
-  <h1>Rolling Returns</h1>
-
-  @if (data(); as d) {
-    <p class="fund-name">{{ d.schemeName }}</p>
-  }
-
-  <div class="controls-row">
-    <div class="period-selector">
-      @for (p of periods; track p) {
-        <button [class.active]="selectedPeriod() === p" (click)="selectPeriod(p)">{{ p }}Y</button>
-      }
-    </div>
-    <div class="date-picker-row">
-      <label>
-        From
-        <input type="date" [(ngModel)]="fromDate" />
-      </label>
-      <label>
-        To
-        <input type="date" [(ngModel)]="toDate" />
-      </label>
-      <button class="btn" (click)="loadData()" [disabled]="loading()">Apply</button>
-    </div>
-  </div>
-
-  @if (error()) {
-    <div class="error">{{ error() }}</div>
-  } @else if (loading()) {
-    <div class="stats-grid">
-      @for (_ of [1, 2, 3, 4, 5]; track _) {
-        <app-stat-card label="">
-          <app-skeleton width="100%" height="1.25rem" />
-        </app-stat-card>
-      }
-    </div>
-  } @else if (data(); as d) {
-    <div class="stats-grid">
-      <app-stat-card label="Data Points">
-        {{ d.dataPoints.toLocaleString() }}
-      </app-stat-card>
-      <app-stat-card label="Min Return" variant="negative">
-        {{ formatPercent(d.minReturn) }}
-      </app-stat-card>
-      <app-stat-card label="Max Return" variant="positive">
-        {{ formatPercent(d.maxReturn) }}
-      </app-stat-card>
-      <app-stat-card label="Average">
-        {{ formatPercent(d.averageReturn) }}
-      </app-stat-card>
-      <app-stat-card label="Median">
-        {{ formatPercent(d.medianReturn) }}
-      </app-stat-card>
-    </div>
-
-    @if (chartSeries().length > 0) {
-      <app-line-chart
-        [seriesList]="chartSeries()"
-        yAxisLabel="Annualized Return %"
-        [priceFormat]="percentFormat"
-      />
+<mat-card appearance="outlined">
+  <mat-card-header>
+    <mat-card-title>Rolling Returns</mat-card-title>
+    @if (data(); as d) {
+      <mat-card-subtitle>{{ d.schemeName }}</mat-card-subtitle>
     }
+  </mat-card-header>
+  <mat-card-content>
+    <mat-button-toggle-group [value]="selectedPeriod()">
+      @for (p of periods; track p) {
+        <mat-button-toggle [value]="p" (click)="selectPeriod(p)">{{ p }}Y</mat-button-toggle>
+      }
+    </mat-button-toggle-group>
+
+    <mat-form-field appearance="outline" class="date-field">
+      <mat-label>From</mat-label>
+      <input
+        matInput
+        readonly
+        [matDatepicker]="rollingFromPicker"
+        [(ngModel)]="fromDate"
+        (click)="rollingFromPicker.open()"
+      />
+      <mat-datepicker-toggle matIconSuffix [for]="rollingFromPicker" />
+      <mat-datepicker #rollingFromPicker />
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="date-field">
+      <mat-label>To</mat-label>
+      <input
+        matInput
+        readonly
+        [matDatepicker]="rollingToPicker"
+        [(ngModel)]="toDate"
+        (click)="rollingToPicker.open()"
+      />
+      <mat-datepicker-toggle matIconSuffix [for]="rollingToPicker" />
+      <mat-datepicker #rollingToPicker />
+    </mat-form-field>
+    <button mat-flat-button (click)="loadData()" [disabled]="loading()">Apply</button>
+  </mat-card-content>
+</mat-card>
+
+@if (error()) {
+  <mat-card appearance="outlined">{{ error() }}</mat-card>
+} @else if (loading()) {
+  <mat-card appearance="outlined">
+    <mat-progress-bar mode="indeterminate" />
+  </mat-card>
+} @else if (data(); as d) {
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Summary</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <mat-list>
+        <mat-list-item>Data Points: {{ d.dataPoints.toLocaleString() }}</mat-list-item>
+        <mat-list-item>Min Return: {{ formatPercent(d.minReturn) }}</mat-list-item>
+        <mat-list-item>Max Return: {{ formatPercent(d.maxReturn) }}</mat-list-item>
+        <mat-list-item>Average: {{ formatPercent(d.averageReturn) }}</mat-list-item>
+        <mat-list-item>Median: {{ formatPercent(d.medianReturn) }}</mat-list-item>
+      </mat-list>
+    </mat-card-content>
+  </mat-card>
+
+  @if (chartSeries().length > 0) {
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <app-line-chart
+          [seriesList]="chartSeries()"
+          yAxisLabel="Annualized Return %"
+          [priceFormat]="percentFormat"
+        />
+      </mat-card-content>
+    </mat-card>
   }
-</div>
+}

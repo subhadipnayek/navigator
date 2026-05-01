@@ -1,31 +1,29 @@
-<header class="app-header">
-  <a class="brand" routerLink="/">NAVigator</a>
-
+<mat-toolbar>
+  <a mat-button routerLink="/">NAVigator</a>
+  <span class="toolbar-spacer"></span>
   <nav>
     @if (auth.isAuthenticated()) {
-      <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
-      <a routerLink="/funds" routerLinkActive="active">Funds</a>
-      <a routerLink="/compare" routerLinkActive="active">Compare</a>
+      <a mat-button routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
+      <a mat-button routerLink="/funds" routerLinkActive="active">Funds</a>
+      <a mat-button routerLink="/compare" routerLinkActive="active">Compare</a>
       @if (auth.isAdmin()) {
-        <a routerLink="/admin/sync" routerLinkActive="active">Sync</a>
-        <a routerLink="/admin/corporate-actions" routerLinkActive="active">Corporate Actions</a>
+        <a mat-button routerLink="/admin/sync" routerLinkActive="active">Sync</a>
+        <a mat-button routerLink="/admin/corporate-actions" routerLinkActive="active">
+          Corporate Actions
+        </a>
       }
     }
   </nav>
 
-  <div class="auth-nav">
-    @if (auth.user(); as user) {
-      <span>{{ user.username }} · {{ user.role }}</span>
-      <button type="button" (click)="logout()">Logout</button>
-    } @else {
-      <a routerLink="/login" routerLinkActive="active">Login</a>
-      <a routerLink="/register" routerLinkActive="active">Register</a>
-    }
-  </div>
-</header>
+  @if (auth.user(); as user) {
+    <button mat-button type="button" disabled>{{ user.username }} · {{ user.role }}</button>
+    <button mat-button type="button" (click)="logout()">Logout</button>
+  } @else {
+    <a mat-button routerLink="/login" routerLinkActive="active">Login</a>
+    <a mat-flat-button routerLink="/register" routerLinkActive="active">Register</a>
+  }
+</mat-toolbar>
 
 <main>
   <router-outlet />
 </main>
-
-<app-toast-container />
