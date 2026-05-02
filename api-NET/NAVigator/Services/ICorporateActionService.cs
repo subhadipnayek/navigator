@@ -10,11 +10,19 @@ public interface ICorporateActionService
     /// </summary>
     Task<List<NavAnomalyDto>> DetectAnomaliesAsync(decimal thresholdPercent = 30m, CancellationToken ct = default);
 
+    /// <summary>
+    /// Automatically records high-confidence, low-risk anomaly classifications.
+    /// </summary>
+    Task<AnomalyAutoRecordResultDto> AutoRecordAnomaliesAsync(decimal thresholdPercent = 30m, decimal minConfidence = 0.9m, CancellationToken ct = default);
+
     /// <summary>Gets all corporate actions for a fund.</summary>
     Task<List<CorporateActionDto>> GetActionsAsync(int schemeCode);
 
     /// <summary>Adds a new corporate action for a fund.</summary>
     Task<CorporateActionDto?> AddActionAsync(int schemeCode, CreateCorporateActionRequest request);
+
+    /// <summary>Updates an existing corporate action for post-record review corrections.</summary>
+    Task<CorporateActionDto?> UpdateActionAsync(int schemeCode, int actionId, UpdateCorporateActionRequest request);
 
     /// <summary>Deletes a corporate action by id.</summary>
     Task<bool> DeleteActionAsync(int schemeCode, int actionId);

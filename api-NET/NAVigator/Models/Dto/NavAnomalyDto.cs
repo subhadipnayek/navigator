@@ -13,4 +13,11 @@ public class NavAnomalyDto
     public decimal ChangePercent { get; set; }
     public required string Direction { get; set; }  // "Drop" or "Spike"
     public bool HasCorporateAction { get; set; }
+    public string? SuggestedActionType { get; set; }
+    public decimal? SuggestedAdjustmentFactor { get; set; }
+    public string? SuggestedNotes { get; set; }
+    public decimal Confidence { get; set; }
+    public string ReviewPriority { get; set; } = "Medium";
+    public bool IsAutoRecordable { get; set; }
+    public bool RequiresPreReview { get; set; }
 }

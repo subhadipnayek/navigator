@@ -5,6 +5,7 @@ import {
   NavAnomalyDto,
   CorporateActionDto,
   CreateCorporateActionRequest,
+  AnomalyAutoRecordResultDto,
 } from '../models/fund.model';
 import { ApiConfig } from '../core/api-config';
 
@@ -21,6 +22,20 @@ export class CorporateActionService {
     });
   }
 
+  autoRecordAnomalies(
+    threshold?: number,
+    minConfidence?: number,
+  ): Observable<AnomalyAutoRecordResultDto> {
+    let params = new HttpParams();
+    if (threshold != null) params = params.set('threshold', threshold);
+    if (minConfidence != null) params = params.set('minConfidence', minConfidence);
+    return this.http.post<AnomalyAutoRecordResultDto>(
+      `${this.api.baseUrl}/api/corporateactions/anomalies/auto-record`,
+      null,
+      { params },
+    );
+  }
+
   getActions(schemeCode: number): Observable<CorporateActionDto[]> {
     return this.http.get<CorporateActionDto[]>(
       `${this.api.baseUrl}/api/corporateactions/${schemeCode}`,
@@ -33,6 +48,17 @@ export class CorporateActionService {
   ): Observable<CorporateActionDto> {
     return this.http.post<CorporateActionDto>(
       `${this.api.baseUrl}/api/corporateactions/${schemeCode}`,
+      request,
+    );
+  }
+
+  updateAction(
+    schemeCode: number,
+    actionId: number,
+    request: CreateCorporateActionRequest,
+  ): Observable<CorporateActionDto> {
+    return this.http.put<CorporateActionDto>(
+      `${this.api.baseUrl}/api/corporateactions/${schemeCode}/${actionId}`,
       request,
     );
   }

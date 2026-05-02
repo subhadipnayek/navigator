@@ -117,19 +117,15 @@ export interface CorporateActionDto {
   id: number;
   schemeCode: number;
   actionDate: string;                 // "dd-MM-yyyy"
-  actionType: string;                 // "Split", "Merger", "Bonus", "Discontinuity", "Other"
-  adjustmentFactor: number;           // e.g. 10 for a 10:1 split, always 1 for Discontinuity
-  oldFaceValue: number | null;
-  newFaceValue: number | null;
+  actionType: string;                 // "Split", "Merger", "Bonus", "Discontinuity", "MissingData", "Other"
+  adjustmentFactor: number;           // e.g. 10 for a 10:1 split, always 1 for series breaks
   notes: string | null;
 }
 
 export interface CreateCorporateActionRequest {
   actionDate: string;                 // "yyyy-MM-dd" (DateOnly input)
-  actionType: string;                 // "Split", "Merger", "Bonus", "Discontinuity", "Other"
-  adjustmentFactor: number;           // ignored for Discontinuity (forced to 1 server-side)
-  oldFaceValue?: number | null;
-  newFaceValue?: number | null;
+  actionType: string;                 // "Split", "Merger", "Bonus", "Discontinuity", "MissingData", "Other"
+  adjustmentFactor: number;           // ignored for Discontinuity/MissingData (forced to 1 server-side)
   notes?: string | null;
 }
 
@@ -267,8 +263,6 @@ Supports optional date range filtering, interval-based sampling, and split-adjus
       "actionDate": "15-06-2023",
       "actionType": "Split",
       "adjustmentFactor": 10.0,
-      "oldFaceValue": 10.0,
-      "newFaceValue": 1.0,
       "notes": "Face value split 10:1"
     }
   ]
@@ -426,8 +420,6 @@ Get all recorded corporate actions for a fund.
     "actionDate": "19-12-2019",
     "actionType": "Split",
     "adjustmentFactor": 10.0,
-    "oldFaceValue": 10.0,
-    "newFaceValue": 1.0,
     "notes": "Face value split 10:1"
   },
   {
@@ -436,8 +428,6 @@ Get all recorded corporate actions for a fund.
     "actionDate": "03-07-2018",
     "actionType": "Discontinuity",
     "adjustmentFactor": 1.0,
-    "oldFaceValue": null,
-    "newFaceValue": null,
     "notes": "~4 year data gap, likely fund reconstitution"
   }
 ]
@@ -447,6 +437,8 @@ Get all recorded corporate actions for a fund.
 
 #### 11. POST `/api/corporateactions/{schemeCode}`
 Record a new corporate action for a fund.
+
+Auto-recorded actions are normal corporate action records immediately. The `[Auto-recorded]` notes prefix only marks them for post-record admin review; NAV charts and return calculations should use them right away.
 
 | Param | Type | In |
 |-------|------|----|
@@ -460,8 +452,6 @@ Split example:
   "actionDate": "2019-12-19",
   "actionType": "Split",
   "adjustmentFactor": 10.0,
-  "oldFaceValue": 10.0,
-  "newFaceValue": 1.0,
   "notes": "Face value split 10:1"
 }
 ```
@@ -477,10 +467,10 @@ Discontinuity example:
 ```
 
 **201:** `CorporateActionDto` (the created action)
-**400:** `{ "message": "actionType must be 'Split', 'Merger', 'Bonus', 'Discontinuity', or 'Other'." }`
+**400:** `{ "message": "actionType must be 'Split', 'Merger', 'Bonus', 'Discontinuity', 'MissingData', or 'Other'." }`
 **404:** `{ "message": "Fund with scheme code 999999 not found." }`
 
-> `adjustmentFactor` — the factor to divide pre-action NAVs by: **10** for a 10:1 split (FV 10→1), **0.2** for a 1:5 reverse split, **2** for a 1:1 bonus. For **Discontinuity**, this value is ignored and forced to **1** server-side. `actionDate` uses `yyyy-MM-dd` format in the request body.
+> `adjustmentFactor` is the factor used to normalize pre-action NAVs: **10** for a 10:1 split, **0.2** for a reverse split, **2** for a 1:1 bonus. For **Discontinuity** and **MissingData**, this value is ignored and forced to **1** server-side. `actionDate` uses `yyyy-MM-dd` format in the request body.
 
 ---
 

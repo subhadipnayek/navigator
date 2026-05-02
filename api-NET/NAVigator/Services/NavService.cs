@@ -349,22 +349,22 @@ public class NavService(
         // from that date to the latest date so pre-action NAVs become comparable.
         DateOnly? overallLatestDate = histories.Count > 0 ? histories[0].Date : null;
 
-        // When adjusted, truncate data before the latest discontinuity
-        // (pre-discontinuity NAVs are not meaningfully connected to post-discontinuity)
+        // When adjusted, truncate data before the latest series break.
+        // Pre-break NAVs are not meaningfully connected to post-break values.
         if (adjusted && actions.Count > 0)
         {
-            var latestDiscontinuity = actions
-                .Where(a => a.ActionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase))
+            var latestSeriesBreak = actions
+                .Where(a => IsSeriesBreakAction(a.ActionType))
                 .Select(a => DateOnly.TryParseExact(a.ActionDate, "dd-MM-yyyy",
                     System.Globalization.CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.None, out var d) ? d : (DateOnly?)null)
                 .Where(d => d.HasValue)
                 .Max();
 
-            if (latestDiscontinuity.HasValue)
+            if (latestSeriesBreak.HasValue)
             {
                 histories = histories
-                    .Where(h => h.Date >= latestDiscontinuity.Value)
+                    .Where(h => h.Date >= latestSeriesBreak.Value)
                     .ToList();
             }
         }
@@ -507,9 +507,9 @@ public class NavService(
         // Pre-load corporate actions for this fund to avoid repeated DB calls
         var actions = await corporateActionService.GetActionsAsync(schemeCode);
 
-        // Pre-compute discontinuity dates so we can skip windows that span them
+        // Pre-compute series-break dates so we can skip windows that span them.
         var discontinuityDates = actions
-            .Where(a => a.ActionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase))
+            .Where(a => IsSeriesBreakAction(a.ActionType))
             .Select(a => DateOnly.TryParseExact(a.ActionDate, "dd-MM-yyyy",
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out var d) ? d : (DateOnly?)null)
@@ -695,7 +695,7 @@ public class NavService(
                 continue;
 
             // Discontinuity actions have no meaningful adjustment factor — skip them
-            if (action.ActionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase))
+            if (IsSeriesBreakAction(action.ActionType))
                 continue;
 
             if (actionDate > fromDate && actionDate <= toDate)
@@ -703,5 +703,11 @@ public class NavService(
         }
 
         return factor;
+    }
+
+    private static bool IsSeriesBreakAction(string actionType)
+    {
+        return actionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase)
+               || actionType.Equals("MissingData", StringComparison.OrdinalIgnoreCase);
     }
 }

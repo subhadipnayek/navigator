@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using NAVigator.Data;
 using NAVigator.Models.Database;
@@ -12,14 +13,13 @@ public class CorporateActionService(
     IFundRepository fundRepo,
     ILogger<CorporateActionService> logger) : ICorporateActionService
 {
-    private static readonly string[] ValidActionTypes = ["Split", "Merger", "Bonus", "Discontinuity", "Other"];
+    private static readonly string[] ValidActionTypes = ["Split", "Merger", "Bonus", "Discontinuity", "MissingData", "Other"];
+    private static readonly decimal[] CommonAdjustmentFactors = [2m, 3m, 4m, 5m, 10m, 100m];
+    private const string AutoRecordedPrefix = "[Auto-recorded]";
 
     public async Task<List<NavAnomalyDto>> DetectAnomaliesAsync(decimal thresholdPercent = 30m, CancellationToken ct = default)
     {
         logger.LogInformation("Detecting NAV anomalies with threshold {Threshold}%", thresholdPercent);
-
-        // Get scheme codes that already have corporate actions recorded
-        var schemesWithActions = await actionRepo.GetSchemeCodesWithActionsAsync();
 
         // Query all funds that have at least 2 NAV entries, looking for large day-over-day swings.
         // Use a subquery for the filter (EF Core can't translate GroupBy+SelectMany with ordering).
@@ -75,6 +75,7 @@ public class CorporateActionService(
                 if (Math.Abs(changePercent) >= thresholdPercent)
                 {
                     funds.TryGetValue(schemeCode, out var fund);
+                    var classification = ClassifyAnomaly(prev.Nav, curr.Nav, changePercent, curr.Date.DayNumber - prev.Date.DayNumber);
 
                     result.Add(new NavAnomalyDto
                     {
@@ -88,7 +89,14 @@ public class CorporateActionService(
                         CurrentNav = curr.Nav,
                         ChangePercent = Math.Round(changePercent, 2),
                         Direction = changePercent < 0 ? "Drop" : "Spike",
-                        HasCorporateAction = actionDates.Contains(curr.Date)
+                        HasCorporateAction = actionDates.Contains(curr.Date),
+                        SuggestedActionType = classification.ActionType,
+                        SuggestedAdjustmentFactor = classification.AdjustmentFactor,
+                        SuggestedNotes = classification.Notes,
+                        Confidence = classification.Confidence,
+                        ReviewPriority = classification.ReviewPriority,
+                        IsAutoRecordable = classification.IsAutoRecordable && !actionDates.Contains(curr.Date),
+                        RequiresPreReview = classification.RequiresPreReview && !actionDates.Contains(curr.Date)
                     });
                 }
             }
@@ -99,6 +107,53 @@ public class CorporateActionService(
         return result
             .OrderByDescending(a => Math.Abs(a.ChangePercent))
             .ToList();
+    }
+
+    public async Task<AnomalyAutoRecordResultDto> AutoRecordAnomaliesAsync(
+        decimal thresholdPercent = 30m,
+        decimal minConfidence = 0.9m,
+        CancellationToken ct = default)
+    {
+        var anomalies = await DetectAnomaliesAsync(thresholdPercent, ct);
+        var eligible = anomalies
+            .Where(a => !a.HasCorporateAction
+                        && a.IsAutoRecordable
+                        && a.Confidence >= minConfidence
+                        && a.SuggestedActionType is not null
+                        && a.SuggestedAdjustmentFactor is not null)
+            .ToList();
+
+        var recordedActions = new List<CorporateActionDto>();
+
+        foreach (var anomaly in eligible)
+        {
+            if (!DateOnly.TryParseExact(anomaly.Date, "dd-MM-yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var actionDate))
+                continue;
+
+            var created = await AddActionAsync(anomaly.SchemeCode, new CreateCorporateActionRequest
+            {
+                ActionDate = actionDate,
+                ActionType = anomaly.SuggestedActionType!,
+                AdjustmentFactor = anomaly.SuggestedAdjustmentFactor!.Value,
+                Notes = $"{AutoRecordedPrefix} {anomaly.SuggestedNotes}"
+            });
+
+            if (created is not null)
+                recordedActions.Add(created);
+        }
+
+        logger.LogInformation(
+            "Auto-recorded {RecordedCount} corporate actions from {EligibleCount} eligible anomalies",
+            recordedActions.Count,
+            eligible.Count);
+
+        return new AnomalyAutoRecordResultDto
+        {
+            DetectedAnomalies = anomalies.Count,
+            EligibleAnomalies = eligible.Count,
+            RecordedActions = recordedActions.Count,
+            Actions = recordedActions
+        };
     }
 
     public async Task<List<CorporateActionDto>> GetActionsAsync(int schemeCode)
@@ -112,8 +167,6 @@ public class CorporateActionService(
             ActionDate = a.ActionDate.ToString("dd-MM-yyyy"),
             ActionType = a.ActionType,
             AdjustmentFactor = a.AdjustmentFactor,
-            OldFaceValue = a.OldFaceValue,
-            NewFaceValue = a.NewFaceValue,
             Notes = a.Notes
         }).ToList();
     }
@@ -127,19 +180,15 @@ public class CorporateActionService(
         if (!ValidActionTypes.Contains(request.ActionType, StringComparer.OrdinalIgnoreCase))
             return null;
 
-        // Discontinuity actions don't use adjustment factors — force to 1
-        var adjustmentFactor = request.ActionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase)
-            ? 1m
-            : request.AdjustmentFactor;
+        var actionType = NormalizeActionType(request.ActionType);
+        var adjustmentFactor = IsSeriesBreakAction(actionType) ? 1m : request.AdjustmentFactor;
 
         var action = new CorporateAction
         {
             SchemeCode = schemeCode,
             ActionDate = request.ActionDate,
-            ActionType = request.ActionType,
+            ActionType = actionType,
             AdjustmentFactor = adjustmentFactor,
-            OldFaceValue = request.OldFaceValue,
-            NewFaceValue = request.NewFaceValue,
             Notes = request.Notes
         };
 
@@ -147,19 +196,37 @@ public class CorporateActionService(
 
         logger.LogInformation(
             "Added corporate action for {SchemeCode}: {ActionType} on {Date} with factor {Factor}",
-            schemeCode, request.ActionType, request.ActionDate, request.AdjustmentFactor);
+            schemeCode, actionType, request.ActionDate, adjustmentFactor);
 
-        return new CorporateActionDto
-        {
-            Id = action.Id,
-            SchemeCode = action.SchemeCode,
-            ActionDate = action.ActionDate.ToString("dd-MM-yyyy"),
-            ActionType = action.ActionType,
-            AdjustmentFactor = action.AdjustmentFactor,
-            OldFaceValue = action.OldFaceValue,
-            NewFaceValue = action.NewFaceValue,
-            Notes = action.Notes
-        };
+        return ToDto(action);
+    }
+
+    public async Task<CorporateActionDto?> UpdateActionAsync(int schemeCode, int actionId, UpdateCorporateActionRequest request)
+    {
+        var action = await db.CorporateActions.FirstOrDefaultAsync(a => a.Id == actionId && a.SchemeCode == schemeCode);
+        if (action is null)
+            return null;
+
+        if (!ValidActionTypes.Contains(request.ActionType, StringComparer.OrdinalIgnoreCase))
+            return null;
+
+        var actionType = NormalizeActionType(request.ActionType);
+        var adjustmentFactor = IsSeriesBreakAction(actionType) ? 1m : request.AdjustmentFactor;
+
+        action.ActionDate = request.ActionDate;
+        action.ActionType = actionType;
+        action.AdjustmentFactor = adjustmentFactor;
+        action.OldFaceValue = null;
+        action.NewFaceValue = null;
+        action.Notes = request.Notes;
+
+        await db.SaveChangesAsync();
+
+        logger.LogInformation(
+            "Updated corporate action {ActionId} for {SchemeCode}: {ActionType} on {Date} with factor {Factor}",
+            actionId, schemeCode, actionType, request.ActionDate, adjustmentFactor);
+
+        return ToDto(action);
     }
 
     public async Task<bool> DeleteActionAsync(int schemeCode, int actionId)
@@ -185,7 +252,7 @@ public class CorporateActionService(
         foreach (var action in actions)
         {
             if (action.ActionDate > fromDate && action.ActionDate <= toDate
-                && !action.ActionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase))
+                && !IsSeriesBreakAction(action.ActionType))
             {
                 cumulativeFactor *= action.AdjustmentFactor;
             }
@@ -204,10 +271,107 @@ public class CorporateActionService(
 
         // Return the latest discontinuity date in the range (so callers can clamp to post-discontinuity)
         return actions
-            .Where(a => a.ActionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase)
+            .Where(a => IsSeriesBreakAction(a.ActionType)
                         && a.ActionDate > fromDate && a.ActionDate <= toDate)
             .OrderByDescending(a => a.ActionDate)
             .Select(a => (DateOnly?)a.ActionDate)
             .FirstOrDefault();
     }
+
+    private static AnomalyClassification ClassifyAnomaly(decimal previousNav, decimal currentNav, decimal changePercent, int daysSincePrevious)
+    {
+        var isSuspiciousGap = daysSincePrevious >= 8;
+        var ratio = changePercent < 0 ? previousNav / currentNav : currentNav / previousNav;
+        var roundedRatio = Math.Round(ratio, 4);
+        var nearestFactor = FindNearestCommonFactor(ratio);
+
+        if (nearestFactor.HasValue)
+        {
+            var relativeDifference = Math.Abs(ratio - nearestFactor.Value) / nearestFactor.Value;
+            var isNearExact = relativeDifference <= 0.01m;
+            var adjustmentFactor = changePercent < 0
+                ? nearestFactor.Value
+                : Math.Round(1m / nearestFactor.Value, 8);
+
+            return new AnomalyClassification(
+                "Split",
+                adjustmentFactor,
+                isNearExact
+                    ? $"NAV ratio matches a {nearestFactor.Value:0.####}x action over {daysSincePrevious} day(s). Auto-recorded actions still need post-record review."
+                    : $"NAV ratio is close to {nearestFactor.Value:0.####}x over {daysSincePrevious} day(s). Review before recording.",
+                isNearExact && !isSuspiciousGap ? 0.98m : 0.84m,
+                "High",
+                isNearExact && !isSuspiciousGap,
+                isSuspiciousGap);
+        }
+
+        if (isSuspiciousGap)
+        {
+            return new AnomalyClassification(
+                "MissingData",
+                1m,
+                $"{daysSincePrevious}-day data gap with a non-standard NAV jump. Try repairing the gap, or mark MissingData so returns do not cross it.",
+                0.78m,
+                "High",
+                false,
+                true);
+        }
+
+        return new AnomalyClassification(
+            "Other",
+            Math.Max(roundedRatio, 0.0001m),
+            $"Unusual {Math.Abs(changePercent):0.##}% {ChangeLabel(changePercent)} over {daysSincePrevious} day(s); manual review needed.",
+            0.55m,
+            Math.Abs(changePercent) >= 60 ? "High" : "Medium",
+            false,
+            true);
+    }
+
+    private static decimal? FindNearestCommonFactor(decimal ratio)
+    {
+        foreach (var factor in CommonAdjustmentFactors)
+        {
+            var relativeDifference = Math.Abs(ratio - factor) / factor;
+            if (relativeDifference <= 0.08m)
+                return factor;
+        }
+
+        return null;
+    }
+
+    private static string ChangeLabel(decimal changePercent) => changePercent < 0 ? "drop" : "spike";
+
+    private static bool IsSeriesBreakAction(string actionType)
+    {
+        return actionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase)
+               || actionType.Equals("MissingData", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeActionType(string actionType)
+    {
+        return ValidActionTypes.FirstOrDefault(t => t.Equals(actionType, StringComparison.OrdinalIgnoreCase))
+               ?? actionType;
+    }
+
+    private static CorporateActionDto ToDto(CorporateAction action)
+    {
+        return new CorporateActionDto
+        {
+            Id = action.Id,
+            SchemeCode = action.SchemeCode,
+            ActionDate = action.ActionDate.ToString("dd-MM-yyyy"),
+            ActionType = action.ActionType,
+            AdjustmentFactor = action.AdjustmentFactor,
+            Notes = action.Notes
+        };
+    }
+
+    private sealed record AnomalyClassification(
+        string ActionType,
+        decimal AdjustmentFactor,
+        string Notes,
+        decimal Confidence,
+        string ReviewPriority,
+        bool IsAutoRecordable,
+        bool RequiresPreReview);
 }

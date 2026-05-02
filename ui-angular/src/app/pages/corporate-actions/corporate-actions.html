@@ -1,22 +1,38 @@
 <mat-card appearance="outlined">
   <mat-card-header>
-    <mat-card-title>Corporate Actions</mat-card-title>
+    <mat-card-title>Anomaly Review Queue</mat-card-title>
     <mat-card-subtitle>
-      Detect NAV anomalies and record corporate actions for adjusted analysis.
+      Detect NAV jumps, auto-record obvious factor changes, and hold missing-data cases for review.
     </mat-card-subtitle>
   </mat-card-header>
   <mat-card-content>
     <mat-form-field appearance="outline">
-      <mat-label>Threshold (%)</mat-label>
+      <mat-label>Detection threshold (%)</mat-label>
       <input matInput type="number" [(ngModel)]="threshold" min="5" max="99" step="1" />
     </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Automation confidence</mat-label>
+      <input matInput type="number" [(ngModel)]="minConfidence" min="0.5" max="1" step="0.01" />
+    </mat-form-field>
+
+    @if (autoRecordSummary()) {
+      <div class="status-callout success">{{ autoRecordSummary() }}</div>
+    }
   </mat-card-content>
   <mat-card-actions>
-    <button mat-flat-button (click)="scanAnomalies()" [disabled]="anomaliesLoading()">
+    <button mat-flat-button (click)="scanAnomalies()" [disabled]="anomaliesLoading() || autoRecording()">
       {{ anomaliesLoading() ? 'Scanning...' : 'Scan Anomalies' }}
     </button>
+    <button
+      mat-button
+      (click)="autoRecordSafeSuggestions()"
+      [disabled]="autoRecording() || anomaliesLoading() || autoRecordableCount() === 0"
+    >
+      {{ autoRecording() ? 'Recording...' : 'Auto-record obvious suggestions' }}
+    </button>
   </mat-card-actions>
-  @if (anomaliesLoading()) {
+  @if (anomaliesLoading() || autoRecording()) {
     <mat-progress-bar mode="indeterminate" />
   }
 </mat-card>
@@ -26,6 +42,29 @@
 }
 
 @if (anomalies().length > 0) {
+  <section class="anomaly-summary">
+    <mat-card appearance="outlined">
+      <strong>{{ pendingCount().toLocaleString() }}</strong>
+      <span>Pending</span>
+    </mat-card>
+    <mat-card appearance="outlined">
+      <strong>{{ autoRecordableCount().toLocaleString() }}</strong>
+      <span>Auto-recordable</span>
+    </mat-card>
+    <mat-card appearance="outlined">
+      <strong>{{ highPriorityCount().toLocaleString() }}</strong>
+      <span>High priority</span>
+    </mat-card>
+    <mat-card appearance="outlined">
+      <strong>{{ preReviewCount().toLocaleString() }}</strong>
+      <span>Pre-review</span>
+    </mat-card>
+    <mat-card appearance="outlined">
+      <strong>{{ recordedCount().toLocaleString() }}</strong>
+      <span>Recorded</span>
+    </mat-card>
+  </section>
+
   <mat-card appearance="outlined">
     <mat-card-header>
       <mat-card-title>Detected Anomalies ({{ anomalies().length }})</mat-card-title>
@@ -37,33 +76,32 @@
           <td mat-cell *matCellDef="let a">
             {{ a.schemeName }}
             <br />
-            <small>{{ a.schemeCode }} - {{ a.fundHouse }}</small>
+            <small>{{ a.schemeCode }} - {{ a.fundHouse ?? '-' }}</small>
           </td>
         </ng-container>
 
-        <ng-container matColumnDef="date">
-          <th mat-header-cell *matHeaderCellDef>Date</th>
-          <td mat-cell *matCellDef="let a">{{ a.date }}</td>
+        <ng-container matColumnDef="movement">
+          <th mat-header-cell *matHeaderCellDef>Movement</th>
+          <td mat-cell *matCellDef="let a">
+            <strong>{{ a.changePercent | number: '1.2-2' }}%</strong>
+            <br />
+            <small>{{ a.previousDate }} to {{ a.date }} · {{ a.daysSincePrevious }}d</small>
+            <br />
+            <small>{{ a.previousNav | number: '1.4-4' }} → {{ a.currentNav | number: '1.4-4' }}</small>
+          </td>
         </ng-container>
 
-        <ng-container matColumnDef="gap">
-          <th mat-header-cell *matHeaderCellDef>Gap</th>
-          <td mat-cell *matCellDef="let a">{{ a.daysSincePrevious }}d</td>
-        </ng-container>
-
-        <ng-container matColumnDef="previousNav">
-          <th mat-header-cell *matHeaderCellDef>Previous NAV</th>
-          <td mat-cell *matCellDef="let a">{{ a.previousNav | number: '1.4-4' }}</td>
-        </ng-container>
-
-        <ng-container matColumnDef="currentNav">
-          <th mat-header-cell *matHeaderCellDef>Current NAV</th>
-          <td mat-cell *matCellDef="let a">{{ a.currentNav | number: '1.4-4' }}</td>
-        </ng-container>
-
-        <ng-container matColumnDef="change">
-          <th mat-header-cell *matHeaderCellDef>Change</th>
-          <td mat-cell *matCellDef="let a">{{ a.changePercent | number: '1.2-2' }}%</td>
+        <ng-container matColumnDef="suggestion">
+          <th mat-header-cell *matHeaderCellDef>Suggestion</th>
+          <td mat-cell *matCellDef="let a" class="suggestion-cell">
+            <div>
+              <strong>{{ a.suggestedActionType ?? 'Review' }}</strong>
+              @if (a.suggestedAdjustmentFactor !== null) {
+                <span>Factor {{ a.suggestedAdjustmentFactor | number: '1.0-4' }}</span>
+              }
+            </div>
+            <small>{{ a.suggestedNotes ?? 'Manual review needed.' }}</small>
+          </td>
         </ng-container>
 
         <ng-container matColumnDef="status">
@@ -71,6 +109,14 @@
           <td mat-cell *matCellDef="let a">
             <mat-chip-set>
               <mat-chip>{{ a.direction }}</mat-chip>
+              <mat-chip [class]="priorityClass(a)">{{ a.reviewPriority }}</mat-chip>
+              <mat-chip>{{ confidencePercent(a) }}</mat-chip>
+              @if (a.isAutoRecordable) {
+                <mat-chip>Auto</mat-chip>
+              }
+              @if (a.requiresPreReview) {
+                <mat-chip>Pre-review</mat-chip>
+              }
               <mat-chip>{{ a.hasCorporateAction ? 'Recorded' : 'Pending' }}</mat-chip>
             </mat-chip-set>
           </td>
@@ -80,14 +126,14 @@
           <th mat-header-cell *matHeaderCellDef>Actions</th>
           <td mat-cell *matCellDef="let a">
             @if (!a.hasCorporateAction) {
-              <button mat-button (click)="openForm(a)">Record</button>
+              <button mat-button (click)="openForm(a)">Review</button>
             }
             <button mat-button (click)="viewActions(a.schemeCode)">View</button>
           </td>
         </ng-container>
 
-        <tr mat-header-row *matHeaderRowDef="['scheme', 'date', 'gap', 'previousNav', 'currentNav', 'change', 'status', 'actions']"></tr>
-        <tr mat-row *matRowDef="let row; columns: ['scheme', 'date', 'gap', 'previousNav', 'currentNav', 'change', 'status', 'actions']"></tr>
+        <tr mat-header-row *matHeaderRowDef="['scheme', 'movement', 'suggestion', 'status', 'actions']"></tr>
+        <tr mat-row *matRowDef="let row; columns: ['scheme', 'movement', 'suggestion', 'status', 'actions']"></tr>
       </table>
     </mat-card-content>
   </mat-card>
@@ -103,12 +149,16 @@
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
-      @if (anomaly.daysSincePrevious > 30) {
-        <mat-card appearance="outlined">
-          {{ anomaly.daysSincePrevious }}-day gap from previous NAV ({{ anomaly.previousDate }}).
-          This is likely a Discontinuity, not a split.
-        </mat-card>
+      @if (anomaly.suggestedNotes) {
+        <div class="status-callout">
+          {{ anomaly.suggestedNotes }}
+        </div>
       }
+
+      <mat-form-field appearance="outline">
+        <mat-label>Action Date</mat-label>
+        <input matInput type="text" [(ngModel)]="actionDate" />
+      </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>Action Type</mat-label>
@@ -117,24 +167,15 @@
           <mat-option value="Merger">Merger</mat-option>
           <mat-option value="Bonus">Bonus</mat-option>
           <mat-option value="Discontinuity">Discontinuity</mat-option>
+          <mat-option value="MissingData">Missing Data</mat-option>
           <mat-option value="Other">Other</mat-option>
         </mat-select>
       </mat-form-field>
 
-      @if (actionType !== 'Discontinuity') {
+      @if (!isSeriesBreakAction()) {
         <mat-form-field appearance="outline">
           <mat-label>Adjustment Factor</mat-label>
           <input matInput type="number" [(ngModel)]="adjustmentFactor" min="0.01" step="0.1" />
-        </mat-form-field>
-
-        <mat-form-field appearance="outline">
-          <mat-label>Old Face Value</mat-label>
-          <input matInput type="number" [(ngModel)]="oldFaceValue" step="0.01" />
-        </mat-form-field>
-
-        <mat-form-field appearance="outline">
-          <mat-label>New Face Value</mat-label>
-          <input matInput type="number" [(ngModel)]="newFaceValue" step="0.01" />
         </mat-form-field>
       }
 
@@ -144,12 +185,69 @@
       </mat-form-field>
 
       @if (formError()) {
-        <mat-card appearance="outlined">{{ formError() }}</mat-card>
+        <div class="status-callout danger">{{ formError() }}</div>
       }
     </mat-card-content>
     <mat-card-actions>
       <button mat-flat-button (click)="submitAction()" [disabled]="formLoading()">
         {{ formLoading() ? 'Saving...' : 'Save Action' }}
+      </button>
+      <button mat-button (click)="closeForm()">Cancel</button>
+    </mat-card-actions>
+  </mat-card>
+}
+
+@if (editingAction(); as action) {
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Post-record Review</mat-card-title>
+      <mat-card-subtitle>
+        Scheme {{ action.schemeCode }} - {{ action.actionDate }} - {{ action.actionType }}
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      @if (needsPostRecordReview(action)) {
+        <div class="status-callout success">
+          This action was auto-recorded and is already applied to charts and return calculations. Adjust the type, factor, or notes if review finds a better explanation.
+        </div>
+      }
+
+      <mat-form-field appearance="outline">
+        <mat-label>Action Date</mat-label>
+        <input matInput type="text" [(ngModel)]="actionDate" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Action Type</mat-label>
+        <mat-select [(ngModel)]="actionType">
+          <mat-option value="Split">Split</mat-option>
+          <mat-option value="Merger">Merger</mat-option>
+          <mat-option value="Bonus">Bonus</mat-option>
+          <mat-option value="Discontinuity">Discontinuity</mat-option>
+          <mat-option value="MissingData">Missing Data</mat-option>
+          <mat-option value="Other">Other</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      @if (!isSeriesBreakAction()) {
+        <mat-form-field appearance="outline">
+          <mat-label>Adjustment Factor</mat-label>
+          <input matInput type="number" [(ngModel)]="adjustmentFactor" min="0.01" step="0.1" />
+        </mat-form-field>
+      }
+
+      <mat-form-field appearance="outline">
+        <mat-label>Notes</mat-label>
+        <input matInput type="text" [(ngModel)]="notes" />
+      </mat-form-field>
+
+      @if (formError()) {
+        <div class="status-callout danger">{{ formError() }}</div>
+      }
+    </mat-card-content>
+    <mat-card-actions>
+      <button mat-flat-button (click)="submitAction()" [disabled]="formLoading()">
+        {{ formLoading() ? 'Saving...' : 'Save Correction' }}
       </button>
       <button mat-button (click)="closeForm()">Cancel</button>
     </mat-card-actions>
@@ -183,32 +281,32 @@
             <td mat-cell *matCellDef="let ca">{{ ca.adjustmentFactor }}</td>
           </ng-container>
 
-          <ng-container matColumnDef="oldFaceValue">
-            <th mat-header-cell *matHeaderCellDef>Old FV</th>
-            <td mat-cell *matCellDef="let ca">{{ ca.oldFaceValue ?? '-' }}</td>
-          </ng-container>
-
-          <ng-container matColumnDef="newFaceValue">
-            <th mat-header-cell *matHeaderCellDef>New FV</th>
-            <td mat-cell *matCellDef="let ca">{{ ca.newFaceValue ?? '-' }}</td>
-          </ng-container>
-
           <ng-container matColumnDef="notes">
             <th mat-header-cell *matHeaderCellDef>Notes</th>
             <td mat-cell *matCellDef="let ca">{{ ca.notes ?? '-' }}</td>
           </ng-container>
 
-          <ng-container matColumnDef="delete">
-            <th mat-header-cell *matHeaderCellDef></th>
+          <ng-container matColumnDef="review">
+            <th mat-header-cell *matHeaderCellDef>Review</th>
             <td mat-cell *matCellDef="let ca">
+              <mat-chip-set>
+                <mat-chip>{{ needsPostRecordReview(ca) ? 'Applied, review pending' : 'Reviewed' }}</mat-chip>
+              </mat-chip-set>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="delete">
+            <th mat-header-cell *matHeaderCellDef>Actions</th>
+            <td mat-cell *matCellDef="let ca">
+              <button mat-button (click)="editAction(ca)">Edit</button>
               <button mat-button (click)="deleteAction(selectedSchemeCode()!, ca.id)">
                 Delete
               </button>
             </td>
           </ng-container>
 
-          <tr mat-header-row *matHeaderRowDef="['date', 'type', 'factor', 'oldFaceValue', 'newFaceValue', 'notes', 'delete']"></tr>
-          <tr mat-row *matRowDef="let row; columns: ['date', 'type', 'factor', 'oldFaceValue', 'newFaceValue', 'notes', 'delete']"></tr>
+          <tr mat-header-row *matHeaderRowDef="['date', 'type', 'factor', 'notes', 'review', 'delete']"></tr>
+          <tr mat-row *matRowDef="let row; columns: ['date', 'type', 'factor', 'notes', 'review', 'delete']"></tr>
         </table>
       }
     </mat-card-content>

@@ -120,16 +120,28 @@ export interface NavAnomalyDto {
   changePercent: number;
   direction: string; // "Drop" or "Spike"
   hasCorporateAction: boolean;
+  suggestedActionType: string | null;
+  suggestedAdjustmentFactor: number | null;
+  suggestedNotes: string | null;
+  confidence: number;
+  reviewPriority: string;
+  isAutoRecordable: boolean;
+  requiresPreReview: boolean;
+}
+
+export interface AnomalyAutoRecordResultDto {
+  detectedAnomalies: number;
+  eligibleAnomalies: number;
+  recordedActions: number;
+  actions: CorporateActionDto[];
 }
 
 export interface CorporateActionDto {
   id: number;
   schemeCode: number;
   actionDate: string; // "dd-MM-yyyy"
-  actionType: string; // "Split", "Merger", "Bonus", "Discontinuity", "Other"
+  actionType: string; // "Split", "Merger", "Bonus", "Discontinuity", "MissingData", "Other"
   adjustmentFactor: number;
-  oldFaceValue: number | null;
-  newFaceValue: number | null;
   notes: string | null;
 }
 
@@ -137,8 +149,6 @@ export interface CreateCorporateActionRequest {
   actionDate: string; // "yyyy-MM-dd"
   actionType: string;
   adjustmentFactor: number;
-  oldFaceValue?: number | null;
-  newFaceValue?: number | null;
   notes?: string | null;
 }
 
