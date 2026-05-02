@@ -17,9 +17,12 @@ public class CorporateActionService(
     private static readonly decimal[] CommonAdjustmentFactors = [2m, 3m, 4m, 5m, 10m, 100m];
     private const string AutoRecordedPrefix = "[Auto-recorded]";
 
-    public async Task<List<NavAnomalyDto>> DetectAnomaliesAsync(decimal thresholdPercent = 30m, CancellationToken ct = default)
+    public async Task<List<NavAnomalyDto>> DetectAnomaliesAsync(decimal thresholdPercent = 30m, int minDaysSincePrevious = 1, CancellationToken ct = default)
     {
-        logger.LogInformation("Detecting NAV anomalies with threshold {Threshold}%", thresholdPercent);
+        logger.LogInformation(
+            "Detecting NAV anomalies with threshold {Threshold}% and minimum NAV point spacing {MinDays} day(s)",
+            thresholdPercent,
+            minDaysSincePrevious);
 
         // Query all funds that have at least 2 NAV entries, looking for large day-over-day swings.
         // Use a subquery for the filter (EF Core can't translate GroupBy+SelectMany with ordering).
@@ -70,12 +73,15 @@ public class CorporateActionService(
 
                 if (prev.Nav <= 0) continue;
 
+                var daysSincePrevious = curr.Date.DayNumber - prev.Date.DayNumber;
+                if (daysSincePrevious < minDaysSincePrevious) continue;
+
                 var changePercent = (curr.Nav - prev.Nav) / prev.Nav * 100m;
 
                 if (Math.Abs(changePercent) >= thresholdPercent)
                 {
                     funds.TryGetValue(schemeCode, out var fund);
-                    var classification = ClassifyAnomaly(prev.Nav, curr.Nav, changePercent, curr.Date.DayNumber - prev.Date.DayNumber);
+                    var classification = ClassifyAnomaly(prev.Nav, curr.Nav, changePercent, daysSincePrevious);
 
                     result.Add(new NavAnomalyDto
                     {
@@ -84,7 +90,7 @@ public class CorporateActionService(
                         FundHouse = fund?.FundHouse,
                         Date = curr.Date.ToString("dd-MM-yyyy"),
                         PreviousDate = prev.Date.ToString("dd-MM-yyyy"),
-                        DaysSincePrevious = curr.Date.DayNumber - prev.Date.DayNumber,
+                        DaysSincePrevious = daysSincePrevious,
                         PreviousNav = prev.Nav,
                         CurrentNav = curr.Nav,
                         ChangePercent = Math.Round(changePercent, 2),
@@ -114,7 +120,7 @@ public class CorporateActionService(
         decimal minConfidence = 0.9m,
         CancellationToken ct = default)
     {
-        var anomalies = await DetectAnomaliesAsync(thresholdPercent, ct);
+        var anomalies = await DetectAnomaliesAsync(thresholdPercent, ct: ct);
         var eligible = anomalies
             .Where(a => !a.HasCorporateAction
                         && a.IsAutoRecordable

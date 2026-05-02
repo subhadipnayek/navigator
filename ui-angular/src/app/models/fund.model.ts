@@ -24,6 +24,39 @@ export interface FundCount {
   count: number;
 }
 
+export interface PagedResponse<T> {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  items: T[];
+}
+
+export interface AdminDatabaseSummary {
+  totalFunds: number;
+  fundsWithNavHistory: number;
+  fundsWithoutNavHistory: number;
+  navHistoryRecords: number;
+  corporateActions: number;
+  oldestNavDate: string | null;
+  latestNavDate: string | null;
+}
+
+export interface AdminFundStorage {
+  schemeCode: number;
+  schemeName: string;
+  fundHouse: string | null;
+  schemeType: string | null;
+  schemeCategory: string | null;
+  latestNav: number | null;
+  latestNavDate: string | null;
+  navHistoryCount: number;
+  firstStoredNavDate: string | null;
+  lastStoredNavDate: string | null;
+  corporateActionCount: number;
+  hasNavHistory: boolean;
+}
+
 // ---------- NAV History Models ----------
 
 export interface NavHistoryEntry {
@@ -127,6 +160,49 @@ export interface NavAnomalyDto {
   reviewPriority: string;
   isAutoRecordable: boolean;
   requiresPreReview: boolean;
+}
+
+export interface CorporateActionReviewQueueDto {
+  rows: CorporateActionReviewRowDto[];
+  summary: CorporateActionReviewSummaryDto;
+  anomalies: NavAnomalyDto[];
+  gaps: NavGapDto[];
+}
+
+export interface CorporateActionReviewSummaryDto {
+  pendingVisible: number;
+  navGaps: number;
+  autoRecordable: number;
+  highPriority: number;
+  preReview: number;
+  recordedItems: number;
+}
+
+export interface CorporateActionReviewRowDto {
+  kind: 'Movement' | 'Gap';
+  schemeCode: number;
+  schemeName: string;
+  fundHouse: string | null;
+  date: string;
+  previousDate: string;
+  daysSincePrevious: number;
+  title: string;
+  detail: string;
+  navDetail: string;
+  suggestionTitle: string;
+  suggestionDetail: string;
+  priority: string;
+  confidence: string;
+  hasCorporateAction: boolean;
+  isAutoRecordable: boolean;
+  requiresPreReview: boolean;
+  sortMagnitude: number;
+  hasMovement: boolean;
+  hasGap: boolean;
+  canRepairGap: boolean;
+  canSyncNav: boolean;
+  anomaly?: NavAnomalyDto | null;
+  gap?: NavGapDto | null;
 }
 
 export interface AnomalyAutoRecordResultDto {

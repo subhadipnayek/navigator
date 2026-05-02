@@ -36,6 +36,19 @@ public class NavController(INavService navService) : ControllerBase
             : Ok(result);
     }
 
+    [HttpGet("gaps")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> DetectAllGaps(
+        [FromQuery] int minGapDays = 30,
+        CancellationToken ct = default)
+    {
+        if (minGapDays is < 7 or > 3650)
+            return BadRequest(new { message = "minGapDays must be between 7 and 3650." });
+
+        var result = await navService.DetectAllNavGapsAsync(minGapDays, ct);
+        return Ok(result);
+    }
+
     [HttpGet("{schemeCode:int}/gaps")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DetectGaps(

@@ -1,11 +1,19 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DecimalPipe } from '@angular/common';
+import { RouterLink, RouterLinkActive } from '@angular/router';
+import { catchError, of } from 'rxjs';
 import { CorporateActionService } from '../../services/corporate-action.service';
+import { NavService } from '../../services/nav.service';
+import { FundService } from '../../services/fund.service';
 import {
   NavAnomalyDto,
   CorporateActionDto,
   CreateCorporateActionRequest,
+  NavGapDto,
+  NavGapRepairResultDto,
+  CorporateActionReviewRowDto,
+  CorporateActionReviewSummaryDto,
 } from '../../models/fund.model';
 import { ToastService } from '../../shared/toast/toast.service';
 import { MatButtonModule } from '@angular/material/button';
@@ -17,11 +25,22 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
 
+type ReviewFilter =
+  | 'all'
+  | 'factor-actions'
+  | 'gaps'
+  | 'missing-data'
+  | 'large-moves'
+  | 'recorded'
+  | 'needs-review';
+
 @Component({
   selector: 'app-corporate-actions',
   imports: [
     FormsModule,
     DecimalPipe,
+    RouterLink,
+    RouterLinkActive,
     MatButtonModule,
     MatCardModule,
     MatChipsModule,
@@ -35,32 +54,40 @@ import { MatTableModule } from '@angular/material/table';
 })
 export class CorporateActions {
   private readonly caService = inject(CorporateActionService);
+  private readonly navService = inject(NavService);
+  private readonly fundService = inject(FundService);
   private readonly toast = inject(ToastService);
 
-  // Anomaly detection
   threshold = 30;
   minConfidence = 0.9;
+  minGapDays = 1;
+  readonly reviewFilter = signal<ReviewFilter>('all');
+  readonly rows = signal<CorporateActionReviewRowDto[]>([]);
   readonly anomalies = signal<NavAnomalyDto[]>([]);
+  readonly gaps = signal<NavGapDto[]>([]);
   readonly anomaliesLoading = signal(false);
-  readonly anomaliesError = signal<string | null>(null);
   readonly autoRecording = signal(false);
+  readonly repairingSchemeCode = signal<number | null>(null);
+  readonly syncingSchemeCode = signal<number | null>(null);
+  readonly anomaliesError = signal<string | null>(null);
   readonly autoRecordSummary = signal<string | null>(null);
-  readonly pendingCount = computed(() => this.anomalies().filter((a) => !a.hasCorporateAction).length);
-  readonly recordedCount = computed(() => this.anomalies().filter((a) => a.hasCorporateAction).length);
-  readonly autoRecordableCount = computed(
-    () =>
-      this.anomalies().filter(
-        (a) => !a.hasCorporateAction && a.isAutoRecordable && a.confidence >= this.minConfidence,
-      ).length,
-  );
-  readonly highPriorityCount = computed(
-    () => this.anomalies().filter((a) => a.reviewPriority === 'High' && !a.hasCorporateAction).length,
-  );
-  readonly preReviewCount = computed(
-    () => this.anomalies().filter((a) => a.requiresPreReview && !a.hasCorporateAction).length,
-  );
+  readonly repairResult = signal<NavGapRepairResultDto | null>(null);
+  readonly summary = signal<CorporateActionReviewSummaryDto>({
+    pendingVisible: 0,
+    navGaps: 0,
+    autoRecordable: 0,
+    highPriority: 0,
+    preReview: 0,
+    recordedItems: 0,
+  });
 
-  // Action form
+  readonly pendingCount = computed(() => this.summary().pendingVisible);
+  readonly gapCount = computed(() => this.summary().navGaps);
+  readonly recordedCount = computed(() => this.summary().recordedItems);
+  readonly autoRecordableCount = computed(() => this.summary().autoRecordable);
+  readonly highPriorityCount = computed(() => this.summary().highPriority);
+  readonly preReviewCount = computed(() => this.summary().preReview);
+
   readonly showForm = signal<NavAnomalyDto | null>(null);
   actionType = 'Split';
   actionDate = '';
@@ -70,7 +97,6 @@ export class CorporateActions {
   readonly formError = signal<string | null>(null);
   readonly editingAction = signal<CorporateActionDto | null>(null);
 
-  // Existing actions for a scheme
   readonly selectedSchemeCode = signal<number | null>(null);
   readonly existingActions = signal<CorporateActionDto[]>([]);
   readonly actionsLoading = signal(false);
@@ -78,21 +104,47 @@ export class CorporateActions {
   scanAnomalies(preserveSummary = false): void {
     this.anomaliesLoading.set(true);
     this.anomaliesError.set(null);
+    this.repairResult.set(null);
     if (!preserveSummary) {
       this.autoRecordSummary.set(null);
     }
     this.anomalies.set([]);
+    this.gaps.set([]);
+    this.rows.set([]);
+    this.resetSummary();
 
-    this.caService.getAnomalies(this.threshold).subscribe({
-      next: (data) => {
-        this.anomalies.set(data);
+    this.caService
+      .getReviewQueue({
+        threshold: this.threshold,
+        minGapDays: this.minGapDays,
+        filter: this.reviewFilter(),
+        minAutoRecordConfidence: this.minConfidence,
+      })
+      .pipe(
+        catchError((err) => {
+          this.anomaliesError.set(err.error?.message ?? 'Failed to scan review queue');
+          return of({
+            rows: [] as CorporateActionReviewRowDto[],
+            summary: this.emptySummary(),
+            anomalies: [] as NavAnomalyDto[],
+            gaps: [] as NavGapDto[],
+          });
+        }),
+      )
+      .subscribe(({ rows, summary, anomalies, gaps }) => {
+        this.rows.set(rows);
+        this.summary.set(summary);
+        this.anomalies.set(anomalies);
+        this.gaps.set(gaps);
         this.anomaliesLoading.set(false);
-      },
-      error: (err) => {
-        this.anomaliesError.set(err.error?.message ?? 'Failed to scan anomalies');
-        this.anomaliesLoading.set(false);
-      },
-    });
+      });
+  }
+
+  setReviewFilter(filter: ReviewFilter): void {
+    this.reviewFilter.set(filter);
+    if (this.rows().length > 0) {
+      this.scanAnomalies(true);
+    }
   }
 
   openForm(anomaly: NavAnomalyDto): void {
@@ -103,6 +155,29 @@ export class CorporateActions {
     this.actionDate = anomaly.date;
     this.adjustmentFactor = anomaly.suggestedAdjustmentFactor ?? 10;
     this.notes = anomaly.suggestedNotes ?? '';
+  }
+
+  openGapForm(gap: NavGapDto): void {
+    this.openForm({
+      schemeCode: gap.schemeCode,
+      schemeName: gap.schemeName,
+      fundHouse: gap.fundHouse,
+      date: gap.nextDate,
+      previousDate: gap.previousDate,
+      daysSincePrevious: gap.gapDays,
+      previousNav: 0,
+      currentNav: 0,
+      changePercent: 0,
+      direction: 'Gap',
+      hasCorporateAction: false,
+      suggestedActionType: 'MissingData',
+      suggestedAdjustmentFactor: 1,
+      suggestedNotes: `${gap.gapDays}-day NAV gap from ${gap.missingFrom} to ${gap.missingTo}. Repair from AMFI first when possible; otherwise mark MissingData so returns do not cross it.`,
+      confidence: 0.78,
+      reviewPriority: 'High',
+      isAutoRecordable: false,
+      requiresPreReview: true,
+    });
   }
 
   closeForm(): void {
@@ -124,11 +199,8 @@ export class CorporateActions {
     this.formLoading.set(true);
     this.formError.set(null);
 
-    // Convert dd-MM-yyyy to yyyy-MM-dd
-    const actionDate = this.toApiDate(this.actionDate || anomaly.date);
-
     const request: CreateCorporateActionRequest = {
-      actionDate,
+      actionDate: this.toApiDate(this.actionDate || anomaly.date),
       actionType: this.actionType,
       adjustmentFactor: this.adjustmentFactor,
       notes: this.notes || null,
@@ -139,7 +211,6 @@ export class CorporateActions {
         this.formLoading.set(false);
         this.showForm.set(null);
         this.toast.success('Corporate action recorded');
-        // Mark the anomaly as having a corporate action
         this.anomalies.update((list) =>
           list.map((a) =>
             a.schemeCode === anomaly.schemeCode && a.date === anomaly.date
@@ -147,12 +218,61 @@ export class CorporateActions {
               : a,
           ),
         );
+        if (this.isSeriesBreakAction(request.actionType)) {
+          this.gaps.update((list) =>
+            list.filter((g) => !(g.schemeCode === anomaly.schemeCode && g.nextDate === anomaly.date)),
+          );
+        }
+        this.scanAnomalies(true);
         this.viewActions(anomaly.schemeCode);
       },
       error: (err) => {
         this.formError.set(err.error?.message ?? 'Failed to create action');
         this.formLoading.set(false);
         this.toast.error('Failed to create action');
+      },
+    });
+  }
+
+  repairGap(gap: NavGapDto): void {
+    this.repairingSchemeCode.set(gap.schemeCode);
+    this.anomaliesError.set(null);
+    this.repairResult.set(null);
+
+    this.navService.repairNavGaps(gap.schemeCode, this.gapDetectionDays()).subscribe({
+      next: (result) => {
+        this.repairResult.set(result);
+        this.repairingSchemeCode.set(null);
+        this.toast.success(`Inserted ${result.insertedRecords} NAV records`);
+        this.scanAnomalies(true);
+      },
+      error: (err) => {
+        this.anomaliesError.set(err.error?.message ?? 'Gap repair failed');
+        this.repairingSchemeCode.set(null);
+        this.toast.error('Gap repair failed');
+      },
+    });
+  }
+
+  syncNav(row: CorporateActionReviewRowDto): void {
+    if (row.gap) {
+      this.repairGap(row.gap);
+      return;
+    }
+
+    this.syncingSchemeCode.set(row.schemeCode);
+    this.anomaliesError.set(null);
+
+    this.fundService.syncFundNavHistory(row.schemeCode).subscribe({
+      next: (result) => {
+        this.syncingSchemeCode.set(null);
+        this.toast.success(`NAV synced - ${result.data.length.toLocaleString()} stored rows available`);
+        this.scanAnomalies(true);
+      },
+      error: (err) => {
+        this.syncingSchemeCode.set(null);
+        this.anomaliesError.set(err.error?.message ?? 'NAV sync failed');
+        this.toast.error('NAV sync failed');
       },
     });
   }
@@ -244,8 +364,31 @@ export class CorporateActions {
     return `${Math.round((anomaly.confidence ?? 0) * 100)}%`;
   }
 
-  priorityClass(anomaly: NavAnomalyDto): string {
-    return `priority-${(anomaly.reviewPriority || 'Medium').toLowerCase()}`;
+  priorityClass(priorityOrAnomaly: string | NavAnomalyDto): string {
+    const priority =
+      typeof priorityOrAnomaly === 'string'
+        ? priorityOrAnomaly
+        : priorityOrAnomaly.reviewPriority || 'Medium';
+    return `priority-${priority.toLowerCase()}`;
+  }
+
+  private gapDetectionDays(): number {
+    return Math.max(this.minGapDays, 7);
+  }
+
+  private resetSummary(): void {
+    this.summary.set(this.emptySummary());
+  }
+
+  private emptySummary(): CorporateActionReviewSummaryDto {
+    return {
+      pendingVisible: 0,
+      navGaps: 0,
+      autoRecordable: 0,
+      highPriority: 0,
+      preReview: 0,
+      recordedItems: 0,
+    };
   }
 
   private toApiDate(date: string): string {

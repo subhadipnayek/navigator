@@ -43,18 +43,24 @@ export const routes: Routes = [
   {
     path: 'admin',
     canActivate: [authGuard, adminGuard],
-    loadComponent: () => import('./pages/admin-sync/admin-sync').then((m) => m.AdminSync),
+    children: [
+      {
+        path: '',
+        redirectTo: 'anomalies',
+        pathMatch: 'full',
+      },
+      {
+        path: 'funds',
+        loadComponent: () => import('./pages/admin-sync/admin-sync').then((m) => m.AdminSync),
+      },
+      {
+        path: 'anomalies',
+        loadComponent: () =>
+          import('./pages/corporate-actions/corporate-actions').then((m) => m.CorporateActions),
+      },
+    ],
   },
-  {
-    path: 'admin/sync',
-    redirectTo: '/admin',
-  },
-  {
-    path: 'admin/corporate-actions',
-    canActivate: [authGuard, adminGuard],
-    loadComponent: () =>
-      import('./pages/corporate-actions/corporate-actions').then((m) => m.CorporateActions),
-  },
+
   {
     path: '**',
     redirectTo: '',

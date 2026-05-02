@@ -173,7 +173,8 @@ mat-chip-set {
 
 .anomaly-summary span,
 .suggestion-cell small,
-td small {
+td small,
+.table-footnote {
   color: #64748b;
 }
 
@@ -222,6 +223,205 @@ td small {
   background: #e8f2ef !important;
 }
 
+.admin-workbar {
+  position: sticky;
+  top: 64px;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 10px 14px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(14px);
+}
+
+.admin-workbar h1 {
+  margin: 2px 0 0;
+  color: #0f172a;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.admin-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.admin-breadcrumb a {
+  color: #64748b;
+  text-decoration: none;
+}
+
+.admin-breadcrumb a::after,
+.admin-breadcrumb span::after {
+  content: '/';
+  margin-left: 6px;
+  color: #94a3b8;
+}
+
+.admin-breadcrumb strong {
+  color: #0f513f;
+  font-weight: 700;
+}
+
+.admin-workbar nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-workbar a {
+  padding: 7px 10px;
+  border-radius: 7px;
+  color: #0f513f;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.admin-workbar a:hover {
+  background: #e8f2ef;
+}
+
+.admin-workbar a.active {
+  background: #e8f2ef;
+  color: #0f513f;
+}
+
+.admin-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.admin-metrics div {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.admin-metrics strong {
+  display: block;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 24px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-metrics span {
+  display: block;
+  margin-top: 5px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.admin-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-compact-card .mat-mdc-card-header {
+  padding: 14px 16px 4px !important;
+}
+
+.admin-compact-card .mat-mdc-card-title {
+  font-size: 18px !important;
+}
+
+.admin-compact-card .mat-mdc-card-subtitle {
+  font-size: 13px;
+}
+
+.admin-compact-card .mat-mdc-card-content {
+  padding: 10px 16px 14px !important;
+}
+
+.admin-compact-card .mat-mdc-card-actions {
+  padding: 6px 16px 14px !important;
+}
+
+.admin-filter-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 190px 120px;
+  gap: 10px;
+  align-items: start;
+}
+
+.admin-filter-row .mat-mdc-form-field {
+  width: 100%;
+  margin-right: 0;
+}
+
+.admin-anomalies {
+  scroll-margin-top: 136px;
+}
+
+.admin-anomalies app-corporate-actions {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  gap: 12px;
+}
+
+.admin-anomalies app-corporate-actions > .mat-mdc-card .mat-mdc-card-header,
+.admin-anomalies app-corporate-actions > .mat-mdc-card .mat-mdc-card-content,
+.admin-anomalies app-corporate-actions > .mat-mdc-card .mat-mdc-card-actions {
+  padding-inline: 16px !important;
+}
+
+.admin-anomalies app-corporate-actions .anomaly-summary {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.admin-anomalies app-corporate-actions .anomaly-summary .mat-mdc-card {
+  min-height: 72px;
+  padding: 12px;
+}
+
+.admin-anomalies app-corporate-actions .anomaly-summary strong {
+  font-size: 24px;
+}
+
+.admin-fund-table .mat-mdc-card-content {
+  max-height: 560px;
+  overflow: auto;
+}
+
+.admin-fund-table table.mat-mdc-table {
+  min-width: 900px;
+}
+
+.admin-fund-table .mat-mdc-cell,
+.admin-fund-table .mat-mdc-header-cell,
+.admin-anomalies .mat-mdc-cell,
+.admin-anomalies .mat-mdc-header-cell {
+  padding-block: 6px !important;
+  font-size: 13px;
+}
+
+.admin-fund-table mat-chip-set,
+.admin-anomalies mat-chip-set {
+  margin-bottom: 0;
+}
+
+.admin-fund-table .mat-mdc-row,
+.admin-anomalies .mat-mdc-row {
+  min-height: 44px;
+}
+
 .mat-mdc-unelevated-button:not(:disabled) {
   background-color: #0f766e !important;
   color: #ffffff !important;
@@ -250,6 +450,19 @@ td small {
 
   .anomaly-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-workbar {
+    top: 0;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-metrics,
+  .admin-action-grid,
+  .admin-filter-row,
+  .admin-anomalies app-corporate-actions .anomaly-summary {
+    grid-template-columns: 1fr;
   }
 
   .mat-mdc-card-header {

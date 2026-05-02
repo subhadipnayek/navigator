@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using Microsoft.EntityFrameworkCore;
+using NAVigator.Data;
 using NAVigator.Models.Database;
 using NAVigator.Models.Dto;
 using NAVigator.Repositories;
@@ -7,6 +9,7 @@ using NAVigator.Repositories;
 namespace NAVigator.Services;
 
 public class NavService(
+    AppDbContext db,
     INavHistoryRepository navRepo,
     IFundRepository fundRepo,
     IAmfiService amfiService,
@@ -187,6 +190,42 @@ public class NavService(
 
         var histories = await navRepo.GetBySchemeCodeAsync(schemeCode);
         return DetectGaps(fund, histories, minGapDays);
+    }
+
+    public async Task<List<NavGapDto>> DetectAllNavGapsAsync(int minGapDays = 30, CancellationToken ct = default)
+    {
+        logger.LogInformation("Detecting NAV gaps across all funds with minimum gap {MinGapDays} days", minGapDays);
+
+        var histories = await db.NavHistories
+            .AsNoTracking()
+            .OrderBy(h => h.SchemeCode)
+            .ThenBy(h => h.Date)
+            .ToListAsync(ct);
+
+        if (histories.Count == 0)
+            return [];
+
+        var schemeCodes = histories.Select(h => h.SchemeCode).Distinct().ToList();
+        var funds = await db.Funds
+            .AsNoTracking()
+            .Where(f => schemeCodes.Contains(f.SchemeCode))
+            .ToDictionaryAsync(f => f.SchemeCode, ct);
+
+        var gaps = new List<NavGapDto>();
+        foreach (var group in histories.GroupBy(h => h.SchemeCode))
+        {
+            if (!funds.TryGetValue(group.Key, out var fund))
+                continue;
+
+            gaps.AddRange(DetectGaps(fund, group.ToList(), minGapDays));
+        }
+
+        logger.LogInformation("Found {Count} NAV gaps across all funds", gaps.Count);
+
+        return gaps
+            .OrderByDescending(g => g.GapDays)
+            .ThenBy(g => g.SchemeName)
+            .ToList();
     }
 
     public async Task<NavGapRepairResultDto?> RepairNavGapsAsync(int schemeCode, int minGapDays = 30, CancellationToken ct = default)

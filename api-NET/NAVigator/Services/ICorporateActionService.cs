@@ -8,7 +8,7 @@ public interface ICorporateActionService
     /// Detects NAV anomalies (sudden large drops/spikes) across all funds that have NAV history.
     /// Flags whether each anomaly already has a corporate action recorded.
     /// </summary>
-    Task<List<NavAnomalyDto>> DetectAnomaliesAsync(decimal thresholdPercent = 30m, CancellationToken ct = default);
+    Task<List<NavAnomalyDto>> DetectAnomaliesAsync(decimal thresholdPercent = 30m, int minDaysSincePrevious = 1, CancellationToken ct = default);
 
     /// <summary>
     /// Automatically records high-confidence, low-risk anomaly classifications.

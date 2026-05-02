@@ -61,6 +61,13 @@ export class NavService {
     });
   }
 
+  getAllNavGaps(minGapDays: number): Observable<NavGapDto[]> {
+    const params = new HttpParams().set('minGapDays', minGapDays);
+    return this.http.get<NavGapDto[]>(`${this.api.baseUrl}/api/nav/gaps`, {
+      params,
+    });
+  }
+
   repairNavGaps(schemeCode: number, minGapDays: number): Observable<NavGapRepairResultDto> {
     const params = new HttpParams().set('minGapDays', minGapDays);
     return this.http.post<NavGapRepairResultDto>(
