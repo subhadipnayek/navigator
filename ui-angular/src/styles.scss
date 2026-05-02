@@ -19,9 +19,7 @@ body {
 body {
   margin: 0;
   font-family: Roboto, Arial, sans-serif;
-  background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 34rem),
-    #f6f7fb;
+  background: #f4f6f8;
   color: #0f172a;
 }
 
@@ -47,39 +45,29 @@ app-register {
   padding: 56px 0;
 }
 
-app-dashboard > mat-card:first-child,
-app-fund-list > mat-card:first-child,
-app-fund-detail > mat-card:first-child,
-app-compare > mat-card:first-child,
-app-rolling-returns > mat-card:first-child,
-app-admin-sync > mat-card:first-child,
-app-corporate-actions > mat-card:first-child {
-  background: linear-gradient(135deg, #ffffff, #f8fbff);
-}
-
 .mat-mdc-card {
-  border-radius: 20px !important;
-  border-color: rgba(15, 23, 42, 0.08) !important;
-  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.06) !important;
+  border-radius: 8px !important;
+  border-color: rgba(15, 23, 42, 0.1) !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045) !important;
 }
 
 .mat-mdc-card-header {
-  padding: 22px 24px 8px !important;
+  padding: 20px 22px 8px !important;
 }
 
 .mat-mdc-card-content {
-  padding: 16px 24px 24px !important;
+  padding: 16px 22px 22px !important;
   overflow-x: auto;
 }
 
 .mat-mdc-card-actions {
   gap: 12px;
-  padding: 8px 24px 24px !important;
+  padding: 8px 22px 22px !important;
 }
 
 .mat-mdc-card-title {
   color: #0f172a;
-  font-size: 24px !important;
+  font-size: 22px !important;
   font-weight: 700 !important;
 }
 
@@ -103,11 +91,11 @@ table.mat-mdc-table {
 }
 
 .mat-mdc-header-row {
-  background: #f8fafc;
+  background: #eef4f1;
 }
 
 .mat-mdc-header-cell {
-  color: #475569;
+  color: #315246;
   font-weight: 700;
 }
 
@@ -136,6 +124,43 @@ mat-chip-set {
   margin-bottom: 12px;
 }
 
+.dashboard-hero {
+  background: #ffffff;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.1fr);
+  gap: 20px;
+}
+
+.stat-card strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #0f172a;
+  font-size: 42px;
+  line-height: 1;
+}
+
+.stat-card span {
+  color: #64748b;
+}
+
+.workflow-card .mat-mdc-card-actions {
+  align-items: center;
+  min-height: 84px;
+}
+
+.mat-mdc-unelevated-button:not(:disabled) {
+  background-color: #0f766e !important;
+  color: #ffffff !important;
+}
+
+.mat-mdc-outlined-button:not(:disabled),
+.mat-mdc-button:not(:disabled) {
+  color: #0f513f;
+}
+
 @media (max-width: 760px) {
   app-dashboard,
   app-fund-list,
@@ -146,6 +171,10 @@ mat-chip-set {
   app-corporate-actions {
     width: min(100% - 24px, 1180px);
     padding-top: 20px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
   }
 
   .mat-mdc-card-header {

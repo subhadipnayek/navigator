@@ -7,10 +7,29 @@ mat-toolbar {
   position: sticky;
   top: 0;
   z-index: 10;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(14px);
+  min-height: 64px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(16px);
   gap: 8px;
+  padding-inline: max(16px, calc((100vw - 1180px) / 2));
+}
+
+.brand {
+  font-weight: 800;
+}
+
+.brand-mark {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  margin-right: 8px;
+  place-items: center;
+  border-radius: 7px;
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 15px;
+  line-height: 1;
 }
 
 .toolbar-spacer {
@@ -21,6 +40,16 @@ nav {
   display: flex;
   gap: 4px;
   align-items: center;
+}
+
+nav a.active {
+  background: #e8f2ef;
+  color: #0f513f;
+}
+
+.user-pill {
+  max-width: 220px;
+  opacity: 1;
 }
 
 main {
@@ -34,6 +63,7 @@ main {
     flex-wrap: wrap;
     align-content: center;
     gap: 8px;
+    padding-inline: 12px;
     padding-block: 8px;
   }
 
@@ -41,9 +71,10 @@ main {
     order: 3;
     width: 100%;
     overflow-x: auto;
+    padding-bottom: 2px;
   }
 
-  mat-toolbar > a:first-child {
-    font-weight: 700;
+  .user-pill {
+    display: none;
   }
 }

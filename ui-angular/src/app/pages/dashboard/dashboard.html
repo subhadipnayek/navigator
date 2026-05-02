@@ -1,32 +1,35 @@
-<mat-card appearance="outlined">
+<mat-card appearance="outlined" class="dashboard-hero">
   <mat-card-header>
-    <mat-card-title>NAVigator</mat-card-title>
-    <mat-card-subtitle>Mutual Fund & ETF Comparison Tool</mat-card-subtitle>
+    <mat-card-title>Research Dashboard</mat-card-title>
+    <mat-card-subtitle>Start with fund discovery, then compare performance and audit data quality.</mat-card-subtitle>
   </mat-card-header>
 </mat-card>
 
-<mat-card appearance="outlined">
-  <mat-card-header>
-    <mat-card-title>Funds in Database</mat-card-title>
-  </mat-card-header>
-  <mat-card-content>
-    @if (loading()) {
-      <mat-progress-bar mode="indeterminate" />
-    } @else if (fundCount() !== null) {
-      <h2>{{ fundCount()!.toLocaleString() }}</h2>
-    }
-  </mat-card-content>
-</mat-card>
+<section class="dashboard-grid">
+  <mat-card appearance="outlined" class="stat-card">
+    <mat-card-header>
+      <mat-card-title>Funds in Database</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      @if (loading()) {
+        <mat-progress-bar mode="indeterminate" />
+      } @else if (fundCount() !== null) {
+        <strong>{{ fundCount()!.toLocaleString() }}</strong>
+        <span>schemes available for search and comparison</span>
+      }
+    </mat-card-content>
+  </mat-card>
 
-<mat-card appearance="outlined">
-  <mat-card-header>
-    <mat-card-title>Research Workflows</mat-card-title>
-  </mat-card-header>
-  <mat-card-actions>
-    <a mat-button routerLink="/funds">Search Funds</a>
-    <a mat-button routerLink="/compare">Compare Funds</a>
-    @if (auth.isAdmin()) {
-      <a mat-button routerLink="/admin/sync">Sync Data</a>
-    }
-  </mat-card-actions>
-</mat-card>
+  <mat-card appearance="outlined" class="workflow-card">
+    <mat-card-header>
+      <mat-card-title>Research Workflows</mat-card-title>
+    </mat-card-header>
+    <mat-card-actions>
+      <a mat-flat-button routerLink="/funds">Search Funds</a>
+      <a mat-button routerLink="/compare">Compare Funds</a>
+      @if (auth.isAdmin()) {
+        <a mat-button routerLink="/admin/sync">Sync Data</a>
+      }
+    </mat-card-actions>
+  </mat-card>
+</section>

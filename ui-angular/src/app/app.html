@@ -1,7 +1,10 @@
 <mat-toolbar>
-  <a mat-button routerLink="/">NAVigator</a>
+  <a class="brand" mat-button routerLink="/">
+    <span class="brand-mark">N</span>
+    <span>NAVigator</span>
+  </a>
   <span class="toolbar-spacer"></span>
-  <nav>
+  <nav aria-label="Primary navigation">
     @if (auth.isAuthenticated()) {
       <a mat-button routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
       <a mat-button routerLink="/funds" routerLinkActive="active">Funds</a>
@@ -13,7 +16,7 @@
   </nav>
 
   @if (auth.user(); as user) {
-    <button mat-button type="button" disabled>{{ user.username }} · {{ user.role }}</button>
+    <button class="user-pill" mat-button type="button" disabled>{{ user.username }} · {{ user.role }}</button>
     <button mat-button type="button" (click)="logout()">Logout</button>
   } @else {
     <a mat-button routerLink="/login" routerLinkActive="active">Login</a>
