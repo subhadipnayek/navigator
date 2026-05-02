@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Serialization;
 using System.Text.Json;
 using NAVigator.Models.Database;
 using NAVigator.Models.Dto;
@@ -8,7 +9,12 @@ namespace NAVigator.Services;
 public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiService> logger) : IAmfiService
 {
     private const string AmfiMasterUrl = "https://portal.amfiindia.com/spages/NAVAll.txt";
-    private const string MfApiBaseUrl = "https://api.mfapi.in/mf/";
+    private const string AmfiNavHistoryUrl = "https://www.amfiindia.com/api/nav-history";
+    private const int NavHistoryChunkYears = 4;
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        NumberHandling = JsonNumberHandling.AllowReadingFromString
+    };
 
     public async Task<List<Fund>> FetchFundMasterListAsync(CancellationToken ct = default)
     {
@@ -17,21 +23,117 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
         return ParseAmfiMasterData(response);
     }
 
-    public async Task<MfApiResponse?> FetchNavHistoryAsync(int schemeCode, CancellationToken ct = default)
+    public async Task<MfApiResponse?> FetchNavHistoryAsync(
+        int schemeCode,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken ct = default,
+        bool stopAtFirstOlderEmptyChunk = true)
     {
-        var client = httpClientFactory.CreateClient("MfApi");
-        var url = $"{MfApiBaseUrl}{schemeCode}";
+        if (from > to)
+            return new MfApiResponse();
 
-        try
+        var client = httpClientFactory.CreateClient("AmfiHistory");
+        var entriesByDate = new Dictionary<DateOnly, MfApiNavEntry>();
+        var foundAnyRecords = false;
+
+        foreach (var (chunkFrom, chunkTo) in BuildHistoryChunks(from, to))
         {
-            var response = await client.GetStringAsync(url, ct);
-            return JsonSerializer.Deserialize<MfApiResponse>(response);
+            var url = BuildNavHistoryUrl(schemeCode, chunkFrom, chunkTo);
+
+            try
+            {
+                var response = await client.GetStringAsync(url, ct);
+
+                var amfiResponse = JsonSerializer.Deserialize<AmfiNavHistoryResponse>(response, JsonOptions);
+                var chunkHadRecords = false;
+                if (amfiResponse?.Data?.NavGroups is null || amfiResponse.Data.NavGroups.Count == 0)
+                {
+                    logger.LogDebug(
+                        "AMFI returned no NAV records for scheme {SchemeCode} from {From} to {To}: {Message}",
+                        schemeCode,
+                        chunkFrom,
+                        chunkTo,
+                        amfiResponse?.Message ?? "empty response");
+
+                    if (foundAnyRecords && stopAtFirstOlderEmptyChunk)
+                        break;
+
+                    continue;
+                }
+
+                foreach (var record in amfiResponse.Data.NavGroups.SelectMany(group => group.HistoricalRecords))
+                {
+                    if (!DateOnly.TryParseExact(record.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                            DateTimeStyles.None, out var date))
+                        continue;
+
+                    if (record.Nav <= 0)
+                        continue;
+
+                    chunkHadRecords = true;
+                    entriesByDate[date] = new MfApiNavEntry
+                    {
+                        Date = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                        Nav = record.Nav
+                    };
+                }
+
+                if (chunkHadRecords)
+                    foundAnyRecords = true;
+                else if (foundAnyRecords && stopAtFirstOlderEmptyChunk)
+                    break;
+            }
+            catch (HttpRequestException ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Failed to fetch AMFI NAV history for scheme {SchemeCode} from {From} to {To}",
+                    schemeCode,
+                    chunkFrom,
+                    chunkTo);
+                return null;
+            }
+            catch (JsonException ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Failed to parse AMFI NAV history for scheme {SchemeCode} from {From} to {To}",
+                    schemeCode,
+                    chunkFrom,
+                    chunkTo);
+                return null;
+            }
         }
-        catch (HttpRequestException ex)
+
+        return new MfApiResponse
         {
-            logger.LogWarning(ex, "Failed to fetch NAV history for scheme {SchemeCode}", schemeCode);
-            return null;
+            Data = entriesByDate
+                .OrderBy(entry => entry.Key)
+                .Select(entry => entry.Value)
+                .ToList()
+        };
+    }
+
+    private static IEnumerable<(DateOnly From, DateOnly To)> BuildHistoryChunks(DateOnly from, DateOnly to)
+    {
+        var chunkTo = to;
+        while (chunkTo >= from)
+        {
+            var chunkFrom = chunkTo.AddYears(-NavHistoryChunkYears).AddDays(1);
+            if (chunkFrom < from)
+                chunkFrom = from;
+
+            yield return (chunkFrom, chunkTo);
+            chunkTo = chunkFrom.AddDays(-1);
         }
+    }
+
+    private static string BuildNavHistoryUrl(int schemeCode, DateOnly from, DateOnly to)
+    {
+        var fromDate = from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var toDate = to.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        return $"{AmfiNavHistoryUrl}?query_type=historical_period&from_date={fromDate}&to_date={toDate}&sd_id={schemeCode}";
     }
 
     private List<Fund> ParseAmfiMasterData(string rawData)

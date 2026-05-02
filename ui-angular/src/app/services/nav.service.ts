@@ -1,7 +1,13 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { NavDataResponse, ReturnsResponse, RollingReturnResponse } from '../models/fund.model';
+import {
+  NavDataResponse,
+  NavGapDto,
+  NavGapRepairResultDto,
+  ReturnsResponse,
+  RollingReturnResponse,
+} from '../models/fund.model';
 import { ApiConfig } from '../core/api-config';
 
 @Injectable({ providedIn: 'root' })
@@ -44,6 +50,22 @@ export class NavService {
     if (options?.interval) params = params.set('interval', options.interval);
     return this.http.get<RollingReturnResponse>(
       `${this.api.baseUrl}/api/nav/${schemeCode}/rolling-returns`,
+      { params },
+    );
+  }
+
+  getNavGaps(schemeCode: number, minGapDays: number): Observable<NavGapDto[]> {
+    const params = new HttpParams().set('minGapDays', minGapDays);
+    return this.http.get<NavGapDto[]>(`${this.api.baseUrl}/api/nav/${schemeCode}/gaps`, {
+      params,
+    });
+  }
+
+  repairNavGaps(schemeCode: number, minGapDays: number): Observable<NavGapRepairResultDto> {
+    const params = new HttpParams().set('minGapDays', minGapDays);
+    return this.http.post<NavGapRepairResultDto>(
+      `${this.api.baseUrl}/api/nav/${schemeCode}/repair-gaps`,
+      null,
       { params },
     );
   }

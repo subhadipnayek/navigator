@@ -42,6 +42,35 @@ export interface NavDataResponse {
   corporateActions: CorporateActionDto[];
 }
 
+export interface NavGapDto {
+  schemeCode: number;
+  schemeName: string;
+  fundHouse: string | null;
+  previousDate: string;
+  nextDate: string;
+  missingFrom: string;
+  missingTo: string;
+  gapDays: number;
+  missingCalendarDays: number;
+  status?: string;
+  insertedRecords?: number;
+}
+
+export interface NavGapRepairItemDto extends NavGapDto {
+  insertedRecords: number;
+  status: string;
+}
+
+export interface NavGapRepairResultDto {
+  schemeCode: number;
+  schemeName: string;
+  detectedGaps: number;
+  repairedGaps: number;
+  verifiedEmptyGaps: number;
+  insertedRecords: number;
+  gaps: NavGapRepairItemDto[];
+}
+
 // ---------- Returns Models ----------
 
 export interface ReturnsResponse {

@@ -14,6 +14,10 @@ public interface INavService
     /// </summary>
     Task<NavDataResponse?> GetNavHistoryAsync(int schemeCode, DateOnly? from = null, DateOnly? to = null, string? interval = null, bool adjusted = false, CancellationToken ct = default);
 
+    Task<List<NavGapDto>?> DetectNavGapsAsync(int schemeCode, int minGapDays = 30, CancellationToken ct = default);
+
+    Task<NavGapRepairResultDto?> RepairNavGapsAsync(int schemeCode, int minGapDays = 30, CancellationToken ct = default);
+
     /// <summary>
     /// Computes point-to-point returns (absolute + CAGR) between the specified dates.
     /// Ensures NAV data is up-to-date before calculating.

@@ -41,7 +41,7 @@ builder.Services.AddHttpClient("Amfi", client =>
     client.Timeout = TimeSpan.FromMinutes(2);
 }).AddPolicyHandler(retryPolicy);
 
-builder.Services.AddHttpClient("MfApi", client =>
+builder.Services.AddHttpClient("AmfiHistory", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
 }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using NAVigator.Services;
 
 namespace NAVigator.Controllers;
@@ -30,6 +31,38 @@ public class NavController(INavService navService) : ControllerBase
             return BadRequest(new { message = error });
 
         var result = await navService.GetNavHistoryAsync(schemeCode, from, to, interval, adjusted, ct);
+        return result is null
+            ? NotFound(new { message = $"Fund with scheme code {schemeCode} not found." })
+            : Ok(result);
+    }
+
+    [HttpGet("{schemeCode:int}/gaps")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> DetectGaps(
+        int schemeCode,
+        [FromQuery] int minGapDays = 30,
+        CancellationToken ct = default)
+    {
+        if (minGapDays is < 7 or > 3650)
+            return BadRequest(new { message = "minGapDays must be between 7 and 3650." });
+
+        var result = await navService.DetectNavGapsAsync(schemeCode, minGapDays, ct);
+        return result is null
+            ? NotFound(new { message = $"Fund with scheme code {schemeCode} not found." })
+            : Ok(result);
+    }
+
+    [HttpPost("{schemeCode:int}/repair-gaps")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> RepairGaps(
+        int schemeCode,
+        [FromQuery] int minGapDays = 30,
+        CancellationToken ct = default)
+    {
+        if (minGapDays is < 7 or > 3650)
+            return BadRequest(new { message = "minGapDays must be between 7 and 3650." });
+
+        var result = await navService.RepairNavGapsAsync(schemeCode, minGapDays, ct);
         return result is null
             ? NotFound(new { message = $"Fund with scheme code {schemeCode} not found." })
             : Ok(result);

@@ -20,6 +20,12 @@ public class NavService(
     private static readonly TimeSpan ApiCooldown = TimeSpan.FromHours(1);
 
     /// <summary>
+    /// Starting point for first-time historical syncs. AMFI returns empty slices for
+    /// periods before a scheme exists, so this is safe for older and newer funds.
+    /// </summary>
+    private static readonly DateOnly HistoricalFetchStartDate = new(1990, 1, 1);
+
+    /// <summary>
     /// Per-scheme lock to prevent concurrent API fetches and DB inserts for the same fund.
     /// </summary>
     private static readonly ConcurrentDictionary<int, SemaphoreSlim> SchemeLocks = new();
@@ -57,17 +63,25 @@ public class NavService(
                 }
             }
 
-            // 3. If latest NAV in DB is today, serve from DB — no API call needed
-            if (latestDbDate.HasValue && latestDbDate.Value >= today)
+            // 3. If latest NAV in DB has reached the known master-list date, serve from DB.
+            var syncTargetDate = fund.LatestNavDate.HasValue && fund.LatestNavDate.Value < today
+                ? fund.LatestNavDate.Value
+                : today;
+
+            if (latestDbDate.HasValue && latestDbDate.Value >= syncTargetDate)
             {
-                logger.LogDebug("Fund {SchemeCode}: NAV is current ({Date}), serving from DB", schemeCode, latestDbDate);
+                logger.LogDebug(
+                    "Fund {SchemeCode}: NAV is current ({DbDate}) for sync target {TargetDate}, serving from DB",
+                    schemeCode,
+                    latestDbDate,
+                    syncTargetDate);
                 return await BuildResponseFromDb(fund, false, from, to, interval, adjusted);
             }
 
             // 4. Check cooldown tracker — should we call the API?
             //    Always call the API if the DB has no data at all (bypass cooldown).
             var tracker = await navRepo.GetSyncTrackerAsync(schemeCode);
-            bool shouldCallApi = !latestDbDate.HasValue || ShouldCallApi(tracker, today);
+            bool shouldCallApi = !latestDbDate.HasValue || ShouldCallApi(tracker, syncTargetDate);
 
             if (!shouldCallApi)
             {
@@ -77,9 +91,14 @@ public class NavService(
                 return await BuildResponseFromDb(fund, false, from, to, interval, adjusted);
             }
 
-            // 5. Call the external API
-            logger.LogInformation("Fund {SchemeCode}: Fetching NAV history from API", schemeCode);
-            var apiResponse = await amfiService.FetchNavHistoryAsync(schemeCode, ct);
+            // 5. Call the external API for the missing date range only.
+            var fetchFrom = latestDbDate.HasValue ? latestDbDate.Value.AddDays(1) : HistoricalFetchStartDate;
+            logger.LogInformation(
+                "Fund {SchemeCode}: Fetching NAV history from AMFI from {From} to {To}",
+                schemeCode,
+                fetchFrom,
+                syncTargetDate);
+            var apiResponse = await amfiService.FetchNavHistoryAsync(schemeCode, fetchFrom, syncTargetDate, ct);
 
             if (apiResponse is null || apiResponse.Data.Count == 0)
             {
@@ -101,11 +120,12 @@ public class NavService(
 
             foreach (var entry in apiResponse.Data)
             {
-                if (!DateOnly.TryParseExact(entry.Date, "dd-MM-yyyy", CultureInfo.InvariantCulture,
+                if (!DateOnly.TryParseExact(entry.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture,
                         DateTimeStyles.None, out var date))
                     continue;
 
-                if (!decimal.TryParse(entry.Nav, CultureInfo.InvariantCulture, out var nav))
+                var nav = entry.Nav;
+                if (nav <= 0)
                     continue;
 
                 if (apiLatestDate is null || date > apiLatestDate)
@@ -159,6 +179,82 @@ public class NavService(
         }
     }
 
+    public async Task<List<NavGapDto>?> DetectNavGapsAsync(int schemeCode, int minGapDays = 30, CancellationToken ct = default)
+    {
+        var fund = await fundRepo.GetBySchemeCodeAsync(schemeCode);
+        if (fund is null)
+            return null;
+
+        var histories = await navRepo.GetBySchemeCodeAsync(schemeCode);
+        return DetectGaps(fund, histories, minGapDays);
+    }
+
+    public async Task<NavGapRepairResultDto?> RepairNavGapsAsync(int schemeCode, int minGapDays = 30, CancellationToken ct = default)
+    {
+        var fund = await fundRepo.GetBySchemeCodeAsync(schemeCode);
+        if (fund is null)
+            return null;
+
+        var histories = await navRepo.GetBySchemeCodeAsync(schemeCode);
+        var gaps = DetectGaps(fund, histories, minGapDays);
+        var result = new NavGapRepairResultDto
+        {
+            SchemeCode = fund.SchemeCode,
+            SchemeName = fund.SchemeName,
+            DetectedGaps = gaps.Count
+        };
+
+        foreach (var gap in gaps)
+        {
+            if (!DateOnly.TryParseExact(gap.MissingFrom, "dd-MM-yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var missingFrom)
+                || !DateOnly.TryParseExact(gap.MissingTo, "dd-MM-yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var missingTo))
+                continue;
+
+            var apiResponse = await amfiService.FetchNavHistoryAsync(
+                schemeCode,
+                missingFrom,
+                missingTo,
+                ct,
+                stopAtFirstOlderEmptyChunk: false);
+            if (apiResponse is null)
+            {
+                result.Gaps.Add(ToRepairItem(gap, "FetchFailed", 0));
+                continue;
+            }
+
+            var entries = new List<NavHistory>();
+            foreach (var entry in apiResponse.Data)
+            {
+                if (!DateOnly.TryParseExact(entry.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                    continue;
+
+                if (date < missingFrom || date > missingTo || entry.Nav <= 0)
+                    continue;
+
+                entries.Add(new NavHistory
+                {
+                    SchemeCode = schemeCode,
+                    Date = date,
+                    Nav = entry.Nav
+                });
+            }
+
+            if (entries.Count == 0)
+            {
+                result.VerifiedEmptyGaps++;
+                result.Gaps.Add(ToRepairItem(gap, "NoRecordsReturned", 0));
+                continue;
+            }
+
+            await navRepo.AddRangeAsync(entries);
+            result.RepairedGaps++;
+            result.InsertedRecords += entries.Count;
+            result.Gaps.Add(ToRepairItem(gap, "Repaired", entries.Count));
+        }
+
+        return result;
+    }
+
     /// <summary>
     /// Determines whether we should call the external API based on the sync tracker state.
     /// </summary>
@@ -183,6 +279,58 @@ public class NavService(
         }
 
         return true;
+    }
+
+    private static List<NavGapDto> DetectGaps(Fund fund, List<NavHistory> histories, int minGapDays)
+    {
+        var sorted = histories.OrderBy(h => h.Date).ToList();
+        if (sorted.Count < 2)
+            return [];
+
+        var gaps = new List<NavGapDto>();
+        for (var i = 1; i < sorted.Count; i++)
+        {
+            var previous = sorted[i - 1];
+            var next = sorted[i];
+            var gapDays = next.Date.DayNumber - previous.Date.DayNumber;
+            if (gapDays <= minGapDays)
+                continue;
+
+            var missingFrom = previous.Date.AddDays(1);
+            var missingTo = next.Date.AddDays(-1);
+            gaps.Add(new NavGapDto
+            {
+                SchemeCode = fund.SchemeCode,
+                SchemeName = fund.SchemeName,
+                FundHouse = fund.FundHouse,
+                PreviousDate = previous.Date.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture),
+                NextDate = next.Date.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture),
+                MissingFrom = missingFrom.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture),
+                MissingTo = missingTo.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture),
+                GapDays = gapDays,
+                MissingCalendarDays = missingTo.DayNumber - missingFrom.DayNumber + 1
+            });
+        }
+
+        return gaps;
+    }
+
+    private static NavGapRepairItemDto ToRepairItem(NavGapDto gap, string status, int insertedRecords)
+    {
+        return new NavGapRepairItemDto
+        {
+            SchemeCode = gap.SchemeCode,
+            SchemeName = gap.SchemeName,
+            FundHouse = gap.FundHouse,
+            PreviousDate = gap.PreviousDate,
+            NextDate = gap.NextDate,
+            MissingFrom = gap.MissingFrom,
+            MissingTo = gap.MissingTo,
+            GapDays = gap.GapDays,
+            MissingCalendarDays = gap.MissingCalendarDays,
+            InsertedRecords = insertedRecords,
+            Status = status
+        };
     }
 
     private async Task<NavDataResponse> BuildResponseFromDb(Fund fund, bool wasFetchedFromApi, DateOnly? from = null, DateOnly? to = null, string? interval = null, bool adjusted = false)

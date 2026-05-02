@@ -7,10 +7,7 @@
       <a mat-button routerLink="/funds" routerLinkActive="active">Funds</a>
       <a mat-button routerLink="/compare" routerLinkActive="active">Compare</a>
       @if (auth.isAdmin()) {
-        <a mat-button routerLink="/admin/sync" routerLinkActive="active">Sync</a>
-        <a mat-button routerLink="/admin/corporate-actions" routerLinkActive="active">
-          Corporate Actions
-        </a>
+        <a mat-button routerLink="/admin" routerLinkActive="active">Admin</a>
       }
     }
   </nav>

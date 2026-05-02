@@ -41,9 +41,13 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/register/register').then((m) => m.Register),
   },
   {
-    path: 'admin/sync',
+    path: 'admin',
     canActivate: [authGuard, adminGuard],
     loadComponent: () => import('./pages/admin-sync/admin-sync').then((m) => m.AdminSync),
+  },
+  {
+    path: 'admin/sync',
+    redirectTo: '/admin',
   },
   {
     path: 'admin/corporate-actions',
