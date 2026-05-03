@@ -203,6 +203,9 @@ public class NavService(
 
                 // Keep cached count in sync
                 fund.NavHistoryCount += newEntries.Count;
+
+                // Auto-record any obvious anomalies immediately
+                await corporateActionService.AutoRecordAnomaliesAsync(specificSchemeCode: schemeCode, ct: ct);
             }
             else
             {
