@@ -30,6 +30,7 @@ builder.Services.AddScoped<IAmfiService, AmfiService>();
 builder.Services.AddScoped<IFundService, FundService>();
 builder.Services.AddScoped<INavService, NavService>();
 builder.Services.AddScoped<ICorporateActionService, CorporateActionService>();
+builder.Services.AddScoped<IPortfolioSimulationService, PortfolioSimulationService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
 
