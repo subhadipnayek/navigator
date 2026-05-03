@@ -27,9 +27,9 @@ public class CorporateActionService(
         // Use SQL LAG() window function to compute day-over-day changes in the database,
         // avoiding loading the entire NavHistories table into memory.
         var sql = @"
-            SELECT scheme_code AS ""SchemeCode"", date AS ""CurrentDate2"", nav AS ""CurrentNav"",
-                   LAG(date) OVER (PARTITION BY scheme_code ORDER BY date) AS ""PreviousDate"",
-                   LAG(nav)  OVER (PARTITION BY scheme_code ORDER BY date) AS ""PreviousNav""
+            SELECT scheme_code AS scheme_code, date AS current_date2, nav AS current_nav,
+                   LAG(date) OVER (PARTITION BY scheme_code ORDER BY date) AS previous_date,
+                   LAG(nav)  OVER (PARTITION BY scheme_code ORDER BY date) AS previous_nav
             FROM ""NavHistories""
             ORDER BY scheme_code, date";
 

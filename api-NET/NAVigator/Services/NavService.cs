@@ -244,8 +244,8 @@ public class NavService(
 
         // Use SQL LAG() window function to detect gaps without loading full history into memory
         var sql = @"
-            SELECT scheme_code AS ""SchemeCode"", date AS ""CurrentDate"", nav AS ""Nav"",
-                   LAG(date) OVER (PARTITION BY scheme_code ORDER BY date) AS ""PreviousDate""
+            SELECT scheme_code AS scheme_code, date AS current_date, nav AS nav,
+                   LAG(date) OVER (PARTITION BY scheme_code ORDER BY date) AS previous_date
             FROM ""NavHistories""
             ORDER BY scheme_code, date";
 

@@ -51,6 +51,8 @@ builder.Services.AddHttpClient("AmfiHistory", client =>
     AutomaticDecompression = System.Net.DecompressionMethods.All
 }).AddPolicyHandler(retryPolicy);
 
+builder.Services.AddHostedService<NavSyncWorker>();
+
 // ----- Controllers & OpenAPI -----
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
