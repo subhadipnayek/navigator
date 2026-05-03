@@ -41,6 +41,22 @@ public class AdminController(
         });
     }
 
+    [HttpGet("test-regex")]
+    public async Task<IActionResult> TestRegex([FromQuery] string query = "icici")
+    {
+        try
+        {
+            var term = System.Text.RegularExpressions.Regex.Escape(query);
+            var pattern = $@"(?i)\y{term}\y";
+            var result = await db.Funds.Where(f => System.Text.RegularExpressions.Regex.IsMatch(f.SchemeName, pattern)).FirstOrDefaultAsync();
+            return Ok(new { success = true, pattern, found = result != null });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { success = false, error = ex.Message, inner = ex.InnerException?.Message });
+        }
+    }
+
     [HttpGet("funds")]
     public async Task<IActionResult> GetFunds(
         [FromQuery] string? q = null,
@@ -90,10 +106,8 @@ public class AdminController(
                 f.NavStartDate,
                 f.NavEndDate,
                 LastApiCheckUtc = f.NavSyncTracker == null ? (DateTime?)null : f.NavSyncTracker.LastApiCheckUtc,
-                NavHistoryCount = f.NavHistories.Count(),
-                FirstStoredNavDate = f.NavHistories.Min(n => (DateOnly?)n.Date),
-                LastStoredNavDate = f.NavHistories.Max(n => (DateOnly?)n.Date),
-                CorporateActionCount = f.CorporateActions.Count()
+                f.NavHistoryCount,
+                f.CorporateActionCount
             })
             .OrderByDescending(f => f.NavHistoryCount)
             .ThenBy(f => f.SchemeName)
@@ -115,8 +129,8 @@ public class AdminController(
             NavStatus = GetNavStatus(f.LatestNavDate, f.LastApiCheckUtc),
             IsLikelyDiscontinued = IsLikelyDiscontinued(f.LatestNavDate, f.LastApiCheckUtc),
             NavHistoryCount = f.NavHistoryCount,
-            FirstStoredNavDate = FormatDate(f.FirstStoredNavDate),
-            LastStoredNavDate = FormatDate(f.LastStoredNavDate),
+            FirstStoredNavDate = FormatDate(f.NavStartDate),
+            LastStoredNavDate = FormatDate(f.NavEndDate),
             CorporateActionCount = f.CorporateActionCount
         }).ToList();
 

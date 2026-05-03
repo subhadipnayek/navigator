@@ -24,12 +24,72 @@ public class FundRepository(AppDbContext db) : IFundRepository
 
     public async Task<List<Fund>> SearchAsync(string query, int maxResults = 50)
     {
-        return await db.Funds
+        // Enforce minimum query length to avoid expensive full-table ILIKE scans
+        if (query.Trim().Length < 2)
+            return [];
+
+        var trimmed = query.Trim();
+
+        // If the query is a pure integer, search by exact scheme code first
+        if (int.TryParse(trimmed, out var schemeCode))
+        {
+            var exactMatch = await db.Funds
+                .AsNoTracking()
+                .Include(f => f.NavSyncTracker)
+                .Where(f => f.SchemeCode == schemeCode)
+                .ToListAsync();
+
+            if (exactMatch.Count > 0)
+                return exactMatch;
+        }
+
+        var terms = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        bool endsWithSpace = query.EndsWith(" ");
+
+        var queryable = db.Funds
             .AsNoTracking()
             .Include(f => f.NavSyncTracker)
-            .Where(f => EF.Functions.ILike(f.SchemeName, $"%{query}%")
-                     || EF.Functions.ILike(f.FundHouse!, $"%{query}%")
-                     || f.SchemeCode.ToString() == query)
+            .AsQueryable();
+
+        for (int i = 0; i < terms.Length; i++)
+        {
+            var term = terms[i];
+            bool isCompletedWord = (i < terms.Length - 1) || endsWithSpace;
+
+            if (isCompletedWord)
+            {
+                // Enforce boundaries on BOTH sides
+                // It must either start the string or have a space before it, AND end the string or have a space after it.
+                var matchMidSpace = $"% {term} %";
+                var matchStartSpace = $"{term} %";
+                var matchMidEnd = $"% {term}";
+                
+                queryable = queryable.Where(f => 
+                    f.SchemeName == term ||
+                    EF.Functions.ILike(f.SchemeName, matchMidSpace) || 
+                    EF.Functions.ILike(f.SchemeName, matchStartSpace) ||
+                    EF.Functions.ILike(f.SchemeName, matchMidEnd) ||
+                    f.FundHouse == term ||
+                    EF.Functions.ILike(f.FundHouse!, matchMidSpace) || 
+                    EF.Functions.ILike(f.FundHouse!, matchStartSpace) ||
+                    EF.Functions.ILike(f.FundHouse!, matchMidEnd));
+            }
+            else
+            {
+                // Enforce boundary only on the START side (prefix match)
+                // It must either start the string or have a space before it.
+                var matchMidStart = $"% {term}%";
+                var matchStartOnly = $"{term}%";
+
+                queryable = queryable.Where(f => 
+                    EF.Functions.ILike(f.SchemeName, matchMidStart) || 
+                    EF.Functions.ILike(f.SchemeName, matchStartOnly) ||
+                    EF.Functions.ILike(f.FundHouse!, matchMidStart) || 
+                    EF.Functions.ILike(f.FundHouse!, matchStartOnly));
+            }
+        }
+
+        return await queryable
             .OrderBy(f => f.SchemeName)
             .Take(maxResults)
             .ToListAsync();

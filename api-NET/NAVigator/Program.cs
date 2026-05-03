@@ -1,4 +1,10 @@
+using System.Text;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using NAVigator.Data;
 using NAVigator.Repositories;
 using NAVigator.Services;
@@ -6,10 +12,6 @@ using Npgsql.EntityFrameworkCore.PostgreSQL;
 using Polly;
 using Polly.Extensions.Http;
 using EFCore.NamingConventions;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -81,6 +83,18 @@ builder.Services.AddAuthorization(options =>
         .Build();
 });
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("login", limiter =>
+    {
+        limiter.PermitLimit = 5;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiter.QueueLimit = 0;
+    });
+});
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("CorsPolicy", policy =>
@@ -99,11 +113,27 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// ----- Auto-migrate database on startup -----
-using (var scope = app.Services.CreateScope())
+// ----- Auto-migrate database on startup (development only) -----
+if (app.Environment.IsDevelopment())
 {
+    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+
+    // Backfill cached counts if they haven't been populated yet
+    await db.Database.ExecuteSqlRawAsync(@"
+        UPDATE ""Funds"" f SET
+            nav_history_count = sub.cnt,
+            corporate_action_count = sub.ca_cnt
+        FROM (
+            SELECT f2.scheme_code,
+                   (SELECT COUNT(*) FROM ""NavHistories"" n WHERE n.scheme_code = f2.scheme_code) AS cnt,
+                   (SELECT COUNT(*) FROM ""CorporateActions"" ca WHERE ca.scheme_code = f2.scheme_code) AS ca_cnt
+            FROM ""Funds"" f2
+            WHERE f2.nav_history_count = 0
+        ) sub
+        WHERE f.scheme_code = sub.scheme_code
+          AND f.nav_history_count = 0");
 }
 
 if (app.Environment.IsDevelopment())
@@ -117,6 +147,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseCors("CorsPolicy");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

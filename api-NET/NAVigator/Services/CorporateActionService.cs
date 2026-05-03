@@ -24,25 +24,30 @@ public class CorporateActionService(
             thresholdPercent,
             minDaysSincePrevious);
 
-        // Query all funds that have at least 2 NAV entries, looking for large day-over-day swings.
-        // Use a subquery for the filter (EF Core can't translate GroupBy+SelectMany with ordering).
-        var schemesWithMultipleNavs = db.NavHistories
-            .GroupBy(n => n.SchemeCode)
-            .Where(g => g.Count() > 1)
-            .Select(g => g.Key);
+        // Use SQL LAG() window function to compute day-over-day changes in the database,
+        // avoiding loading the entire NavHistories table into memory.
+        var sql = @"
+            SELECT scheme_code AS ""SchemeCode"", date AS ""CurrentDate2"", nav AS ""CurrentNav"",
+                   LAG(date) OVER (PARTITION BY scheme_code ORDER BY date) AS ""PreviousDate"",
+                   LAG(nav)  OVER (PARTITION BY scheme_code ORDER BY date) AS ""PreviousNav""
+            FROM ""NavHistories""
+            ORDER BY scheme_code, date";
 
-        var anomalies = await db.NavHistories
-            .AsNoTracking()
-            .Where(n => schemesWithMultipleNavs.Contains(n.SchemeCode))
-            .OrderBy(n => n.SchemeCode)
-            .ThenBy(n => n.Date)
-            .Select(n => new { n.SchemeCode, n.Date, n.Nav })
-            .ToListAsync(ct);
+        var rawRows = await db.Database.SqlQueryRaw<AnomalyRawRow>(sql).ToListAsync(ct);
 
-        // Process in memory — group by scheme, detect day-over-day anomalies
-        var grouped = anomalies
-            .GroupBy(n => n.SchemeCode)
-            .ToDictionary(g => g.Key, g => g.OrderBy(n => n.Date).ToList());
+        // Filter to anomaly candidates in memory (threshold + spacing checks)
+        var candidates = rawRows
+            .Where(r => r.PreviousDate.HasValue && r.PreviousNav.HasValue && r.PreviousNav.Value > 0)
+            .Where(r => (r.CurrentDate2.DayNumber - r.PreviousDate!.Value.DayNumber) >= minDaysSincePrevious)
+            .Where(r =>
+            {
+                var change = (r.CurrentNav - r.PreviousNav!.Value) / r.PreviousNav.Value * 100m;
+                return Math.Abs(change) >= thresholdPercent;
+            })
+            .ToList();
+
+        if (candidates.Count == 0)
+            return [];
 
         // Get all corporate action dates for quick lookup
         var allActions = await db.CorporateActions
@@ -52,60 +57,46 @@ public class CorporateActionService(
         var actionLookup = allActions
             .ToLookup(a => a.SchemeCode, a => a.ActionDate);
 
-        var result = new List<NavAnomalyDto>();
-
         // Load fund names in bulk
-        var schemeCodes = grouped.Keys.ToList();
+        var schemeCodes = candidates.Select(r => r.SchemeCode).Distinct().ToList();
         var funds = await db.Set<Fund>()
             .AsNoTracking()
             .Where(f => schemeCodes.Contains(f.SchemeCode))
             .Select(f => new { f.SchemeCode, f.SchemeName, f.FundHouse })
             .ToDictionaryAsync(f => f.SchemeCode, ct);
 
-        foreach (var (schemeCode, navEntries) in grouped)
+        var result = new List<NavAnomalyDto>();
+
+        foreach (var row in candidates)
         {
-            var actionDates = actionLookup[schemeCode].ToHashSet();
+            var daysSincePrevious = row.CurrentDate2.DayNumber - row.PreviousDate!.Value.DayNumber;
+            var changePercent = (row.CurrentNav - row.PreviousNav!.Value) / row.PreviousNav.Value * 100m;
 
-            for (int i = 1; i < navEntries.Count; i++)
+            funds.TryGetValue(row.SchemeCode, out var fund);
+            var actionDates = actionLookup[row.SchemeCode].ToHashSet();
+            var classification = ClassifyAnomaly(row.PreviousNav.Value, row.CurrentNav, changePercent, daysSincePrevious);
+
+            result.Add(new NavAnomalyDto
             {
-                var prev = navEntries[i - 1];
-                var curr = navEntries[i];
-
-                if (prev.Nav <= 0) continue;
-
-                var daysSincePrevious = curr.Date.DayNumber - prev.Date.DayNumber;
-                if (daysSincePrevious < minDaysSincePrevious) continue;
-
-                var changePercent = (curr.Nav - prev.Nav) / prev.Nav * 100m;
-
-                if (Math.Abs(changePercent) >= thresholdPercent)
-                {
-                    funds.TryGetValue(schemeCode, out var fund);
-                    var classification = ClassifyAnomaly(prev.Nav, curr.Nav, changePercent, daysSincePrevious);
-
-                    result.Add(new NavAnomalyDto
-                    {
-                        SchemeCode = schemeCode,
-                        SchemeName = fund?.SchemeName ?? "Unknown",
-                        FundHouse = fund?.FundHouse,
-                        Date = curr.Date.ToString("dd-MM-yyyy"),
-                        PreviousDate = prev.Date.ToString("dd-MM-yyyy"),
-                        DaysSincePrevious = daysSincePrevious,
-                        PreviousNav = prev.Nav,
-                        CurrentNav = curr.Nav,
-                        ChangePercent = Math.Round(changePercent, 2),
-                        Direction = changePercent < 0 ? "Drop" : "Spike",
-                        HasCorporateAction = actionDates.Contains(curr.Date),
-                        SuggestedActionType = classification.ActionType,
-                        SuggestedAdjustmentFactor = classification.AdjustmentFactor,
-                        SuggestedNotes = classification.Notes,
-                        Confidence = classification.Confidence,
-                        ReviewPriority = classification.ReviewPriority,
-                        IsAutoRecordable = classification.IsAutoRecordable && !actionDates.Contains(curr.Date),
-                        RequiresPreReview = classification.RequiresPreReview && !actionDates.Contains(curr.Date)
-                    });
-                }
-            }
+                SchemeCode = row.SchemeCode,
+                SchemeName = fund?.SchemeName ?? "Unknown",
+                FundHouse = fund?.FundHouse,
+                Date = row.CurrentDate2.ToString("dd-MM-yyyy"),
+                PreviousDate = row.PreviousDate.Value.ToString("dd-MM-yyyy"),
+                DaysSincePrevious = daysSincePrevious,
+                PreviousNav = row.PreviousNav.Value,
+                CurrentNav = row.CurrentNav,
+                ChangePercent = Math.Round(changePercent, 2),
+                Direction = changePercent < 0 ? "Drop" : "Spike",
+                HasCorporateAction = actionDates.Contains(row.CurrentDate2),
+                SuggestedActionType = classification.ActionType,
+                SuggestedAdjustmentFactor = classification.AdjustmentFactor,
+                SuggestedNotes = classification.Notes,
+                Confidence = classification.Confidence,
+                ReviewPriority = classification.ReviewPriority,
+                IsAutoRecordable = classification.IsAutoRecordable && !actionDates.Contains(row.CurrentDate2),
+                RequiresPreReview = classification.RequiresPreReview && !actionDates.Contains(row.CurrentDate2)
+            });
         }
 
         logger.LogInformation("Found {Count} anomalies across all funds", result.Count);
@@ -200,6 +191,11 @@ public class CorporateActionService(
 
         await actionRepo.AddAsync(action);
 
+        // Update cached corporate action count
+        fund.CorporateActionCount = await db.CorporateActions.CountAsync(ca => ca.SchemeCode == schemeCode);
+        fund.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
         logger.LogInformation(
             "Added corporate action for {SchemeCode}: {ActionType} on {Date} with factor {Factor}",
             schemeCode, actionType, request.ActionDate, adjustmentFactor);
@@ -242,6 +238,15 @@ public class CorporateActionService(
             return false;
 
         await actionRepo.DeleteAsync(action);
+
+        // Update cached corporate action count
+        var fund = await fundRepo.GetBySchemeCodeAsync(schemeCode);
+        if (fund is not null)
+        {
+            fund.CorporateActionCount = await db.CorporateActions.CountAsync(ca => ca.SchemeCode == schemeCode);
+            fund.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        }
 
         logger.LogInformation("Deleted corporate action {Id} for scheme {SchemeCode}", actionId, schemeCode);
         return true;
@@ -380,4 +385,16 @@ public class CorporateActionService(
         string ReviewPriority,
         bool IsAutoRecordable,
         bool RequiresPreReview);
+}
+
+/// <summary>
+/// Raw row returned by the SQL LAG() window function query for anomaly detection.
+/// </summary>
+public class AnomalyRawRow
+{
+    public int SchemeCode { get; set; }
+    public DateOnly CurrentDate2 { get; set; }
+    public decimal CurrentNav { get; set; }
+    public DateOnly? PreviousDate { get; set; }
+    public decimal? PreviousNav { get; set; }
 }

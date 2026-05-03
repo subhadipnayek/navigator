@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnDestroy } from '@angular/core';
+import { Component, inject, signal, OnDestroy, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DecimalPipe } from '@angular/common';
 import {
@@ -9,6 +9,7 @@ import {
   of,
   takeUntil,
   forkJoin,
+  finalize,
 } from 'rxjs';
 import { FundService } from '../../services/fund.service';
 import { NavService } from '../../services/nav.service';
@@ -77,6 +78,25 @@ export class Compare implements OnDestroy {
   readonly growthPriceFormat = { type: 'price' as const, precision: 0, minMove: 1 };
   readonly percentFormat = { type: 'price' as const, precision: 2, minMove: 0.01 };
 
+  // Computed signals — cached, only recomputed when selectedFunds changes
+  readonly minSelectableDate = computed<Date | null>(() => {
+    const dates = this.selectedFunds()
+      .map((fund) => this.parseApiDisplayDate(fund.navStartDate))
+      .filter((date): date is Date => date !== null)
+      .sort((a, b) => b.getTime() - a.getTime());
+
+    return dates[0] ?? null;
+  });
+
+  readonly maxSelectableDate = computed<Date | null>(() => {
+    const dates = this.selectedFunds()
+      .map((fund) => this.parseApiDisplayDate(fund.navEndDate))
+      .filter((date): date is Date => date !== null)
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    return dates[0] ?? null;
+  });
+
   constructor() {
     const today = new Date();
     const oneYearAgo = new Date();
@@ -128,24 +148,6 @@ export class Compare implements OnDestroy {
     this.clearResults();
   }
 
-  minSelectableDate(): Date | null {
-    const dates = this.selectedFunds()
-      .map((fund) => this.parseApiDisplayDate(fund.navStartDate))
-      .filter((date): date is Date => date !== null)
-      .sort((a, b) => b.getTime() - a.getTime());
-
-    return dates[0] ?? null;
-  }
-
-  maxSelectableDate(): Date | null {
-    const dates = this.selectedFunds()
-      .map((fund) => this.parseApiDisplayDate(fund.navEndDate))
-      .filter((date): date is Date => date !== null)
-      .sort((a, b) => a.getTime() - b.getTime());
-
-    return dates[0] ?? null;
-  }
-
   compare(): void {
     const funds = this.selectedFunds();
     if (funds.length < 2) {
@@ -158,35 +160,50 @@ export class Compare implements OnDestroy {
     const startDate = this.toApiDate(this.startDate);
     const endDate = this.toApiDate(this.endDate);
 
-    // 1. Point-to-point returns for each fund
-    forkJoin(funds.map((f) => this.navService.getReturns(f.schemeCode, startDate, endDate)))
+    // Single forkJoin orchestrates all three parallel request batches
+    // and owns the comparing state until everything finishes or fails.
+    forkJoin({
+      returns: forkJoin(funds.map((f) => this.navService.getReturns(f.schemeCode, startDate, endDate))),
+      growth: forkJoin(
+        funds.map((f) =>
+          this.navService.getNavHistory(f.schemeCode, {
+            from: startDate,
+            to: endDate,
+            interval: 'monthly',
+            adjusted: true,
+          }),
+        ),
+      ),
+      rolling: forkJoin(
+        funds.map((f) =>
+          this.navService.getRollingReturns(f.schemeCode, this.selectedRollingPeriod(), {
+            from: this.toApiDate(this.startDate),
+            to: this.toApiDate(this.endDate),
+            interval: 'monthly',
+          }),
+        ),
+      ),
+    })
+      .pipe(finalize(() => this.comparing.set(false)))
       .subscribe({
-        next: (results) => {
-          this.returnsResults.set(results);
-          this.comparing.set(false);
+        next: ({ returns, growth, rolling }) => {
+          this.returnsResults.set(returns);
+          this.buildGrowthChart(growth);
+          this.rollingResults.set(rolling);
+          this.rollingChartSeries.set(
+            rolling.map((r) => ({
+              name: r.schemeName,
+              data: r.data.map((pt) => ({
+                time: toChartDate(pt.date),
+                value: pt.returnPercentage,
+              })),
+            })),
+          );
         },
         error: (err) => {
           this.error.set(err.error?.message ?? 'Comparison failed');
-          this.comparing.set(false);
         },
       });
-
-    // 2. Growth of ₹10,000 chart — fetch split-adjusted NAV history per fund with monthly interval
-    forkJoin(
-      funds.map((f) =>
-        this.navService.getNavHistory(f.schemeCode, {
-          from: startDate,
-          to: endDate,
-          interval: 'monthly',
-          adjusted: true,
-        }),
-      ),
-    ).subscribe({
-      next: (navResults) => this.buildGrowthChart(navResults),
-    });
-
-    // 3. Rolling returns comparison
-    this.loadRollingComparison(funds, this.selectedRollingPeriod());
   }
 
   selectRollingPeriod(period: number): void {

@@ -37,6 +37,17 @@ public class Fund
     [MaxLength(300)]
     public string? SchemeCategory { get; set; }
 
+    /// <summary>
+    /// Cached aggregate count updated when NAV history is synced.
+    /// Avoids expensive COUNT subqueries in the admin funds list.
+    /// </summary>
+    public int NavHistoryCount { get; set; }
+
+    /// <summary>
+    /// Cached aggregate count updated when corporate actions are added/removed.
+    /// </summary>
+    public int CorporateActionCount { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

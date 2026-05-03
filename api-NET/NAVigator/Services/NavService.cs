@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using NAVigator.Data;
@@ -30,9 +29,10 @@ public class NavService(
     private static readonly DateOnly HistoricalFetchStartDate = new(1990, 1, 1);
 
     /// <summary>
-    /// Per-scheme lock to prevent concurrent API fetches and DB inserts for the same fund.
+    /// Maximum age of Fund.UpdatedAt before we stop trusting its LatestNavDate
+    /// as a sync target and fall back to today.
     /// </summary>
-    private static readonly ConcurrentDictionary<int, SemaphoreSlim> SchemeLocks = new();
+    private static readonly TimeSpan MasterFreshnessTtl = TimeSpan.FromHours(24);
 
     public async Task<NavDataResponse?> GetNavHistoryAsync(int schemeCode, DateOnly? from = null, DateOnly? to = null, string? interval = null, bool adjusted = false, CancellationToken ct = default)
     {
@@ -44,10 +44,18 @@ public class NavService(
             return null;
         }
 
-        // Acquire a per-scheme lock so concurrent requests for the same fund
-        // don't race through the check-then-insert sequence simultaneously.
-        var schemeLock = SchemeLocks.GetOrAdd(schemeCode, _ => new SemaphoreSlim(1, 1));
-        await schemeLock.WaitAsync(ct);
+        // Acquire a PostgreSQL advisory lock so concurrent requests — even across
+        // multiple API instances — don't race through check-then-insert for the same fund.
+        await using var advisoryTx = await db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "SELECT pg_advisory_xact_lock({0})", schemeCode);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to acquire advisory lock for {SchemeCode}", schemeCode);
+        }
         try
         {
             // 2. Get stored NAV date range. Prefer the cached Fund range so
@@ -78,7 +86,10 @@ public class NavService(
             }
 
             // 3. If latest NAV in DB has reached the known master-list date, serve from DB.
-            var syncTargetDate = fund.LatestNavDate.HasValue && fund.LatestNavDate.Value < today
+            // Only trust the master LatestNavDate when the fund record itself is fresh;
+            // otherwise the app may have been offline and the master date is stale.
+            var masterFresh = (DateTime.UtcNow - fund.UpdatedAt) < MasterFreshnessTtl;
+            var syncTargetDate = masterFresh && fund.LatestNavDate.HasValue && fund.LatestNavDate.Value < today
                 ? fund.LatestNavDate.Value
                 : today;
 
@@ -189,6 +200,9 @@ public class NavService(
                 await fundRepo.UpdateNavDateRangeAsync(schemeCode, navStartDate, navEndDate);
                 fund.NavStartDate = navStartDate;
                 fund.NavEndDate = navEndDate;
+
+                // Keep cached count in sync
+                fund.NavHistoryCount += newEntries.Count;
             }
             else
             {
@@ -210,7 +224,7 @@ public class NavService(
         }
         finally
         {
-            schemeLock.Release();
+            await advisoryTx.CommitAsync(ct);
         }
     }
 
@@ -228,28 +242,55 @@ public class NavService(
     {
         logger.LogInformation("Detecting NAV gaps across all funds with minimum gap {MinGapDays} days", minGapDays);
 
-        var histories = await db.NavHistories
-            .AsNoTracking()
-            .OrderBy(h => h.SchemeCode)
-            .ThenBy(h => h.Date)
-            .ToListAsync(ct);
+        // Use SQL LAG() window function to detect gaps without loading full history into memory
+        var sql = @"
+            SELECT scheme_code AS ""SchemeCode"", date AS ""CurrentDate"", nav AS ""Nav"",
+                   LAG(date) OVER (PARTITION BY scheme_code ORDER BY date) AS ""PreviousDate""
+            FROM ""NavHistories""
+            ORDER BY scheme_code, date";
 
-        if (histories.Count == 0)
+        var rawGaps = await db.Database.SqlQueryRaw<NavGapRawRow>(sql).ToListAsync(ct);
+
+        if (rawGaps.Count == 0)
             return [];
 
-        var schemeCodes = histories.Select(h => h.SchemeCode).Distinct().ToList();
+        // Filter to only rows with gaps exceeding threshold
+        var gapRows = rawGaps
+            .Where(r => r.PreviousDate.HasValue
+                        && (r.CurrentDate.DayNumber - r.PreviousDate.Value.DayNumber) > minGapDays)
+            .ToList();
+
+        if (gapRows.Count == 0)
+            return [];
+
+        var schemeCodes = gapRows.Select(r => r.SchemeCode).Distinct().ToList();
         var funds = await db.Funds
             .AsNoTracking()
             .Where(f => schemeCodes.Contains(f.SchemeCode))
             .ToDictionaryAsync(f => f.SchemeCode, ct);
 
         var gaps = new List<NavGapDto>();
-        foreach (var group in histories.GroupBy(h => h.SchemeCode))
+        foreach (var row in gapRows)
         {
-            if (!funds.TryGetValue(group.Key, out var fund))
+            if (!funds.TryGetValue(row.SchemeCode, out var fund))
                 continue;
 
-            gaps.AddRange(DetectGaps(fund, group.ToList(), minGapDays));
+            var gapDays = row.CurrentDate.DayNumber - row.PreviousDate!.Value.DayNumber;
+            var missingFrom = row.PreviousDate.Value.AddDays(1);
+            var missingTo = row.CurrentDate.AddDays(-1);
+
+            gaps.Add(new NavGapDto
+            {
+                SchemeCode = fund.SchemeCode,
+                SchemeName = fund.SchemeName,
+                FundHouse = fund.FundHouse,
+                PreviousDate = row.PreviousDate.Value.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture),
+                NextDate = row.CurrentDate.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture),
+                MissingFrom = missingFrom.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture),
+                MissingTo = missingTo.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture),
+                GapDays = gapDays,
+                MissingCalendarDays = missingTo.DayNumber - missingFrom.DayNumber + 1
+            });
         }
 
         logger.LogInformation("Found {Count} NAV gaps across all funds", gaps.Count);
@@ -408,49 +449,46 @@ public class NavService(
 
     private async Task<NavDataResponse> BuildResponseFromDb(Fund fund, bool wasFetchedFromApi, DateOnly? from = null, DateOnly? to = null, string? interval = null, bool adjusted = false)
     {
-        var histories = await navRepo.GetBySchemeCodeAsync(fund.SchemeCode);
-
-        // Capture the latest date before any filtering (for freshness indicator)
-        var latestNavDate = histories.Count > 0
-            ? histories[0].Date.ToString("dd-MM-yyyy")
+        // Use cached fund metadata for freshness info without hitting the DB
+        var latestNavDate = fund.NavEndDate.HasValue
+            ? fund.NavEndDate.Value.ToString("dd-MM-yyyy")
             : null;
-        var navStartDate = fund.NavStartDate ?? (histories.Count > 0 ? histories.Min(h => h.Date) : null);
-        var navEndDate = fund.NavEndDate ?? (histories.Count > 0 ? histories.Max(h => h.Date) : null);
+        var navStartDate = fund.NavStartDate;
+        var navEndDate = fund.NavEndDate;
 
         // Load corporate actions for this fund (always needed for the response)
         var actions = await corporateActionService.GetActionsAsync(fund.SchemeCode);
 
-        // Build adjustment lookup: for each NAV entry, compute the cumulative factor
-        // from that date to the latest date so pre-action NAVs become comparable.
-        DateOnly? overallLatestDate = histories.Count > 0 ? histories[0].Date : null;
-
-        // When adjusted, truncate data before the latest series break.
-        // Pre-break NAVs are not meaningfully connected to post-break values.
+        // When adjusted, determine a floor date from the latest series break
+        DateOnly? adjustedFloor = null;
         if (adjusted && actions.Count > 0)
         {
-            var latestSeriesBreak = actions
+            adjustedFloor = actions
                 .Where(a => IsSeriesBreakAction(a.ActionType))
                 .Select(a => DateOnly.TryParseExact(a.ActionDate, "dd-MM-yyyy",
                     System.Globalization.CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.None, out var d) ? d : (DateOnly?)null)
                 .Where(d => d.HasValue)
                 .Max();
-
-            if (latestSeriesBreak.HasValue)
-            {
-                histories = histories
-                    .Where(h => h.Date >= latestSeriesBreak.Value)
-                    .ToList();
-            }
         }
 
-        // Apply date range filter
-        if (from.HasValue || to.HasValue)
-        {
-            histories = histories
-                .Where(h => (!from.HasValue || h.Date >= from.Value) && (!to.HasValue || h.Date <= to.Value))
-                .ToList();
-        }
+        // Compute effective date bounds for the DB query
+        var effectiveFrom = from;
+        if (adjustedFloor.HasValue)
+            effectiveFrom = effectiveFrom.HasValue && effectiveFrom.Value > adjustedFloor.Value
+                ? effectiveFrom
+                : adjustedFloor;
+
+        // Fetch only the needed date range from the database
+        var histories = await navRepo.GetBySchemeCodeAsync(fund.SchemeCode, effectiveFrom, to);
+
+        // If we had no cached metadata, compute it from what we loaded
+        if (!navStartDate.HasValue && histories.Count > 0)
+            navStartDate = histories.Min(h => h.Date);
+        if (!navEndDate.HasValue && histories.Count > 0)
+            navEndDate = histories.Max(h => h.Date);
+
+        DateOnly? overallLatestDate = histories.Count > 0 ? histories[0].Date : null;
 
         // Apply interval sampling (data is newest-first, sampling needs ascending order)
         if (!string.IsNullOrEmpty(interval) && !interval.Equals("daily", StringComparison.OrdinalIgnoreCase))

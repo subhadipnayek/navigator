@@ -1,3 +1,4 @@
+using System.Data;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -21,28 +22,44 @@ public class AuthService(
         var normalizedUsername = Normalize(username);
         var normalizedEmail = Normalize(email);
 
-        var exists = await db.Users.AnyAsync(
-            u => u.NormalizedUsername == normalizedUsername || u.NormalizedEmail == normalizedEmail,
-            ct);
-
-        if (exists)
-            return null;
-
-        var isFirstUser = !await db.Users.AnyAsync(ct);
-        var user = new AppUser
+        // Use a serializable transaction so two concurrent first registrations
+        // cannot both observe an empty users table and both become Admin.
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        try
         {
-            Username = username,
-            NormalizedUsername = normalizedUsername,
-            Email = email,
-            NormalizedEmail = normalizedEmail,
-            PasswordHash = passwordHasher.HashPassword(request.Password),
-            Role = isFirstUser ? "Admin" : "User"
-        };
+            var exists = await db.Users.AnyAsync(
+                u => u.NormalizedUsername == normalizedUsername || u.NormalizedEmail == normalizedEmail,
+                ct);
 
-        db.Users.Add(user);
-        await db.SaveChangesAsync(ct);
+            if (exists)
+            {
+                await transaction.RollbackAsync(ct);
+                return null;
+            }
 
-        return CreateResponse(user);
+            var isFirstUser = !await db.Users.AnyAsync(ct);
+            var user = new AppUser
+            {
+                Username = username,
+                NormalizedUsername = normalizedUsername,
+                Email = email,
+                NormalizedEmail = normalizedEmail,
+                PasswordHash = passwordHasher.HashPassword(request.Password),
+                Role = isFirstUser ? "Admin" : "User"
+            };
+
+            db.Users.Add(user);
+            await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+
+            return CreateResponse(user);
+        }
+        catch (DbUpdateException)
+        {
+            await transaction.RollbackAsync(ct);
+            // Unique constraint violation from concurrent insert — treat as duplicate
+            return null;
+        }
     }
 
     public async Task<AuthResponse?> LoginAsync(LoginRequest request, CancellationToken ct)

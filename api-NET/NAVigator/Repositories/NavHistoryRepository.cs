@@ -6,11 +6,19 @@ namespace NAVigator.Repositories;
 
 public class NavHistoryRepository(AppDbContext db) : INavHistoryRepository
 {
-    public async Task<List<NavHistory>> GetBySchemeCodeAsync(int schemeCode)
+    public async Task<List<NavHistory>> GetBySchemeCodeAsync(int schemeCode, DateOnly? from = null, DateOnly? to = null)
     {
-        return await db.NavHistories
+        var query = db.NavHistories
             .AsNoTracking()
-            .Where(n => n.SchemeCode == schemeCode)
+            .Where(n => n.SchemeCode == schemeCode);
+
+        if (from.HasValue)
+            query = query.Where(n => n.Date >= from.Value);
+
+        if (to.HasValue)
+            query = query.Where(n => n.Date <= to.Value);
+
+        return await query
             .OrderByDescending(n => n.Date)
             .ToListAsync();
     }

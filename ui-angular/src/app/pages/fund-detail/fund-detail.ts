@@ -109,6 +109,10 @@ export class FundDetail implements OnInit {
       },
     });
 
+    // Load NAV history first, clamp dates, then request returns.
+    // This avoids duplicate backend sync work (getReturns also calls
+    // getNavHistory internally) and ensures dates are clamped before
+    // returns are computed.
     this.navService
       .getNavHistory(code, { adjusted: this.adjusted(), interval: this.selectedInterval() })
       .subscribe({
@@ -116,11 +120,10 @@ export class FundDetail implements OnInit {
           this.navData.set(data);
           this.clampSelectedDateRange();
           this.loading.set(false);
+          this.fetchReturns();
         },
         error: () => this.loading.set(false),
       });
-
-    this.fetchReturns();
   }
 
   reloadNav(): void {

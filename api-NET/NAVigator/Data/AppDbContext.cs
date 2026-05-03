@@ -15,6 +15,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     {
         base.OnModelCreating(modelBuilder);
 
+        modelBuilder.HasPostgresExtension("pg_trgm");
+
         modelBuilder.Entity<Fund>(e =>
         {
             e.HasMany(f => f.NavHistories)
@@ -31,6 +33,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .WithOne(ca => ca.Fund)
              .HasForeignKey(ca => ca.SchemeCode)
              .OnDelete(DeleteBehavior.Cascade);
+
+            // Add GIN indexes with pg_trgm operator classes to accelerate ILIKE "%query%" searches
+            e.HasIndex(f => f.SchemeName)
+             .HasMethod("gin")
+             .HasOperators("gin_trgm_ops");
+
+            e.HasIndex(f => f.FundHouse)
+             .HasMethod("gin")
+             .HasOperators("gin_trgm_ops");
         });
 
         modelBuilder.Entity<NavHistory>(e =>

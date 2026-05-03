@@ -20,6 +20,7 @@ namespace NAVigator.Migrations
                 .HasAnnotation("ProductVersion", "9.0.1")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "pg_trgm");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("NAVigator.Models.Database.AppUser", b =>
@@ -147,6 +148,10 @@ namespace NAVigator.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("scheme_code");
 
+                    b.Property<int>("CorporateActionCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("corporate_action_count");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -178,6 +183,10 @@ namespace NAVigator.Migrations
                         .HasColumnType("date")
                         .HasColumnName("nav_end_date");
 
+                    b.Property<int>("NavHistoryCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("nav_history_count");
+
                     b.Property<DateOnly?>("NavStartDate")
                         .HasColumnType("date")
                         .HasColumnName("nav_start_date");
@@ -204,6 +213,18 @@ namespace NAVigator.Migrations
 
                     b.HasKey("SchemeCode")
                         .HasName("pk_funds");
+
+                    b.HasIndex("FundHouse")
+                        .HasDatabaseName("ix_funds_fund_house");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("FundHouse"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("FundHouse"), new[] { "gin_trgm_ops" });
+
+                    b.HasIndex("SchemeName")
+                        .HasDatabaseName("ix_funds_scheme_name");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SchemeName"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("SchemeName"), new[] { "gin_trgm_ops" });
 
                     b.ToTable("Funds");
                 });
