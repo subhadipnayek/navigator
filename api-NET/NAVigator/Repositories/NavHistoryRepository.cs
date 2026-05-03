@@ -15,6 +15,21 @@ public class NavHistoryRepository(AppDbContext db) : INavHistoryRepository
             .ToListAsync();
     }
 
+    public async Task<(DateOnly? StartDate, DateOnly? EndDate)> GetDateRangeAsync(int schemeCode)
+    {
+        var range = await db.NavHistories
+            .Where(n => n.SchemeCode == schemeCode)
+            .GroupBy(n => n.SchemeCode)
+            .Select(g => new
+            {
+                StartDate = g.Min(n => (DateOnly?)n.Date),
+                EndDate = g.Max(n => (DateOnly?)n.Date)
+            })
+            .FirstOrDefaultAsync();
+
+        return range is null ? (null, null) : (range.StartDate, range.EndDate);
+    }
+
     public async Task<DateOnly?> GetLatestNavDateAsync(int schemeCode)
     {
         return await db.NavHistories

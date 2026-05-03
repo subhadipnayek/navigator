@@ -18,6 +18,8 @@
         matInput
         readonly
         [matDatepicker]="rollingFromPicker"
+        [min]="minSelectableDate()"
+        [max]="maxSelectableDate()"
         [(ngModel)]="fromDate"
         (click)="rollingFromPicker.open()"
       />
@@ -30,6 +32,8 @@
         matInput
         readonly
         [matDatepicker]="rollingToPicker"
+        [min]="minSelectableDate()"
+        [max]="maxSelectableDate()"
         [(ngModel)]="toDate"
         (click)="rollingToPicker.open()"
       />

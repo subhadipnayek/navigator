@@ -116,6 +116,7 @@ export class Compare implements OnDestroy {
       return;
     }
     this.selectedFunds.update((list) => [...list, fund]);
+    this.clampSelectedDateRange();
     this.searchQuery.set('');
     this.searchResults.set([]);
     this.error.set(null);
@@ -123,7 +124,26 @@ export class Compare implements OnDestroy {
 
   removeFund(schemeCode: number): void {
     this.selectedFunds.update((list) => list.filter((f) => f.schemeCode !== schemeCode));
+    this.clampSelectedDateRange();
     this.clearResults();
+  }
+
+  minSelectableDate(): Date | null {
+    const dates = this.selectedFunds()
+      .map((fund) => this.parseApiDisplayDate(fund.navStartDate))
+      .filter((date): date is Date => date !== null)
+      .sort((a, b) => b.getTime() - a.getTime());
+
+    return dates[0] ?? null;
+  }
+
+  maxSelectableDate(): Date | null {
+    const dates = this.selectedFunds()
+      .map((fund) => this.parseApiDisplayDate(fund.navEndDate))
+      .filter((date): date is Date => date !== null)
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    return dates[0] ?? null;
   }
 
   compare(): void {
@@ -254,6 +274,24 @@ export class Compare implements OnDestroy {
     this.growthChartSeries.set([]);
     this.rollingResults.set([]);
     this.rollingChartSeries.set([]);
+  }
+
+  private clampSelectedDateRange(): void {
+    const minDate = this.minSelectableDate();
+    const maxDate = this.maxSelectableDate();
+
+    if (minDate && this.startDate && this.startDate < minDate) this.startDate = minDate;
+    if (maxDate && this.endDate && this.endDate > maxDate) this.endDate = maxDate;
+    if (this.startDate && this.endDate && this.startDate > this.endDate) this.startDate = this.endDate;
+  }
+
+  private parseApiDisplayDate(value: string | null): Date | null {
+    if (!value) return null;
+
+    const [day, month, year] = value.split('-').map(Number);
+    if (!day || !month || !year) return null;
+
+    return new Date(year, month - 1, day);
   }
 
   private toApiDate(d: Date | null): string {

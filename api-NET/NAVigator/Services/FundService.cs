@@ -10,6 +10,8 @@ public class FundService(
     IAmfiService amfiService,
     ILogger<FundService> logger) : IFundService
 {
+    private const int LikelyDiscontinuedGraceDays = 30;
+
     public async Task<List<FundDto>> GetAllFundsAsync()
     {
         var funds = await fundRepo.GetAllAsync();
@@ -70,8 +72,51 @@ public class FundService(
         SchemeName = fund.SchemeName,
         LatestNav = fund.LatestNav,
         LatestNavDate = fund.LatestNavDate?.ToString("dd-MMM-yyyy"),
+        NavStartDate = FormatDate(fund.NavStartDate),
+        NavEndDate = FormatDate(fund.NavEndDate),
+        LastSuccessfulNavCheckUtc = FormatUtc(fund.NavSyncTracker?.LastApiCheckUtc),
+        NavStatus = GetNavStatus(fund.LatestNavDate, fund.NavSyncTracker?.LastApiCheckUtc),
+        IsLikelyDiscontinued = IsLikelyDiscontinued(fund.LatestNavDate, fund.NavSyncTracker?.LastApiCheckUtc),
         FundHouse = fund.FundHouse,
         SchemeType = fund.SchemeType,
         SchemeCategory = fund.SchemeCategory
     };
+
+    private static string? FormatDate(DateOnly? date)
+        => date?.ToString("dd-MM-yyyy");
+
+    private static string? FormatUtc(DateTime? dateTime)
+        => dateTime?.ToUniversalTime().ToString("O");
+
+    private static string GetNavStatus(DateOnly? latestNavDate, DateTime? lastSuccessfulCheckUtc)
+    {
+        if (!latestNavDate.HasValue)
+            return "Unknown";
+
+        var today = GetIndiaToday();
+        if (today.DayNumber - latestNavDate.Value.DayNumber <= LikelyDiscontinuedGraceDays)
+            return "Active";
+
+        if (!lastSuccessfulCheckUtc.HasValue)
+            return "NeedsCheck";
+
+        return IsLikelyDiscontinued(latestNavDate, lastSuccessfulCheckUtc)
+            ? "LikelyDiscontinued"
+            : "NeedsCheck";
+    }
+
+    private static bool IsLikelyDiscontinued(DateOnly? latestNavDate, DateTime? lastSuccessfulCheckUtc)
+    {
+        if (!latestNavDate.HasValue || !lastSuccessfulCheckUtc.HasValue)
+            return false;
+
+        var lastCheckDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
+            lastSuccessfulCheckUtc.Value.ToUniversalTime(),
+            TimeZoneInfo.FindSystemTimeZoneById("India Standard Time")));
+        return lastCheckDate.DayNumber - latestNavDate.Value.DayNumber > LikelyDiscontinuedGraceDays;
+    }
+
+    private static DateOnly GetIndiaToday()
+        => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
+            DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("India Standard Time")));
 }

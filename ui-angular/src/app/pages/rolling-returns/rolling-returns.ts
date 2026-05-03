@@ -57,6 +57,14 @@ export class RollingReturns implements OnInit {
     ];
   });
 
+  readonly minSelectableDate = computed<Date | null>(() =>
+    this.parseApiDisplayDate(this.data()?.navStartDate ?? null),
+  );
+
+  readonly maxSelectableDate = computed<Date | null>(() =>
+    this.parseApiDisplayDate(this.data()?.navEndDate ?? null),
+  );
+
   readonly percentFormat = { type: 'price' as const, precision: 2, minMove: 0.01 };
 
   ngOnInit(): void {
@@ -87,6 +95,7 @@ export class RollingReturns implements OnInit {
       .subscribe({
         next: (res) => {
           this.data.set(res);
+          this.clampSelectedDateRange();
           this.loading.set(false);
         },
         error: (err) => {
@@ -107,5 +116,23 @@ export class RollingReturns implements OnInit {
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  }
+
+  private clampSelectedDateRange(): void {
+    const minDate = this.minSelectableDate();
+    const maxDate = this.maxSelectableDate();
+
+    if (minDate && this.fromDate && this.fromDate < minDate) this.fromDate = minDate;
+    if (maxDate && this.toDate && this.toDate > maxDate) this.toDate = maxDate;
+    if (this.fromDate && this.toDate && this.fromDate > this.toDate) this.fromDate = this.toDate;
+  }
+
+  private parseApiDisplayDate(value: string | null): Date | null {
+    if (!value) return null;
+
+    const [day, month, year] = value.split('-').map(Number);
+    if (!day || !month || !year) return null;
+
+    return new Date(year, month - 1, day);
   }
 }

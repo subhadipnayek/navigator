@@ -69,6 +69,14 @@ export class FundDetail implements OnInit {
     return this.navData()?.corporateActions ?? [];
   });
 
+  readonly minSelectableDate = computed<Date | null>(() =>
+    this.parseApiDisplayDate(this.navData()?.navStartDate ?? this.fund()?.navStartDate ?? null),
+  );
+
+  readonly maxSelectableDate = computed<Date | null>(() =>
+    this.parseApiDisplayDate(this.navData()?.navEndDate ?? this.fund()?.navEndDate ?? null),
+  );
+
   readonly navChartSeries = computed<ChartSeriesData[]>(() => {
     const nav = this.navData();
     if (!nav || nav.data.length === 0) return [];
@@ -91,7 +99,10 @@ export class FundDetail implements OnInit {
     this.startDate = oneYearAgo;
 
     this.fundService.getFund(code).subscribe({
-      next: (fund) => this.fund.set(fund),
+      next: (fund) => {
+        this.fund.set(fund);
+        this.clampSelectedDateRange();
+      },
       error: (err) => {
         this.error.set(err.error?.message ?? 'Fund not found');
         this.loading.set(false);
@@ -103,6 +114,7 @@ export class FundDetail implements OnInit {
       .subscribe({
         next: (data) => {
           this.navData.set(data);
+          this.clampSelectedDateRange();
           this.loading.set(false);
         },
         error: () => this.loading.set(false),
@@ -116,7 +128,10 @@ export class FundDetail implements OnInit {
     this.navService
       .getNavHistory(code, { adjusted: this.adjusted(), interval: this.selectedInterval() })
       .subscribe({
-        next: (data) => this.navData.set(data),
+        next: (data) => {
+          this.navData.set(data);
+          this.clampSelectedDateRange();
+        },
       });
   }
 
@@ -170,5 +185,23 @@ export class FundDetail implements OnInit {
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  }
+
+  private clampSelectedDateRange(): void {
+    const minDate = this.minSelectableDate();
+    const maxDate = this.maxSelectableDate();
+
+    if (minDate && this.startDate && this.startDate < minDate) this.startDate = minDate;
+    if (maxDate && this.endDate && this.endDate > maxDate) this.endDate = maxDate;
+    if (this.startDate && this.endDate && this.startDate > this.endDate) this.startDate = this.endDate;
+  }
+
+  private parseApiDisplayDate(value: string | null): Date | null {
+    if (!value) return null;
+
+    const [day, month, year] = value.split('-').map(Number);
+    if (!day || !month || !year) return null;
+
+    return new Date(year, month - 1, day);
   }
 }

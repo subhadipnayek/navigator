@@ -51,6 +51,8 @@
           matInput
           readonly
           [matDatepicker]="compareStartPicker"
+          [min]="minSelectableDate()"
+          [max]="maxSelectableDate()"
           [(ngModel)]="startDate"
           (click)="compareStartPicker.open()"
         />
@@ -64,6 +66,8 @@
           matInput
           readonly
           [matDatepicker]="compareEndPicker"
+          [min]="minSelectableDate()"
+          [max]="maxSelectableDate()"
           [(ngModel)]="endDate"
           (click)="compareEndPicker.open()"
         />

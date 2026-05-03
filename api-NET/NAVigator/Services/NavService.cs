@@ -21,6 +21,7 @@ public class NavService(
     /// don't hit the API again for this fund until this duration elapses.
     /// </summary>
     private static readonly TimeSpan ApiCooldown = TimeSpan.FromHours(1);
+    private const int LikelyDiscontinuedGraceDays = 30;
 
     /// <summary>
     /// Starting point for first-time historical syncs. AMFI returns empty slices for
@@ -49,10 +50,20 @@ public class NavService(
         await schemeLock.WaitAsync(ct);
         try
         {
-            // 2. Get latest NAV date from DB
-            var latestDbDate = await navRepo.GetLatestNavDateAsync(schemeCode);
+            // 2. Get stored NAV date range. Prefer the cached Fund range so
+            // closed funds do not need an aggregate query or an external check.
+            var latestDbDate = fund.NavEndDate ?? await navRepo.GetLatestNavDateAsync(schemeCode);
             var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
                 DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("India Standard Time")));
+
+            if (latestDbDate.HasValue && (!fund.NavStartDate.HasValue || !fund.NavEndDate.HasValue))
+            {
+                var range = await navRepo.GetDateRangeAsync(schemeCode);
+                await fundRepo.UpdateNavDateRangeAsync(schemeCode, range.StartDate, range.EndDate);
+                fund.NavStartDate = range.StartDate;
+                fund.NavEndDate = range.EndDate;
+                latestDbDate = range.EndDate;
+            }
 
             // 2b. Reconcile: if NavHistory has newer data than the Fund record, sync it
             if (latestDbDate.HasValue && (!fund.LatestNavDate.HasValue || latestDbDate.Value > fund.LatestNavDate.Value))
@@ -103,16 +114,23 @@ public class NavService(
                 syncTargetDate);
             var apiResponse = await amfiService.FetchNavHistoryAsync(schemeCode, fetchFrom, syncTargetDate, ct);
 
-            if (apiResponse is null || apiResponse.Data.Count == 0)
+            if (apiResponse is null)
+            {
+                return await BuildResponseFromDb(fund, false, from, to, interval, adjusted);
+            }
+
+            if (apiResponse.Data.Count == 0)
             {
                 // API failed or returned empty — mark tracker so we don't retry immediately
-                await navRepo.UpsertSyncTrackerAsync(new NavSyncTracker
+                var successfulEmptyCheck = new NavSyncTracker
                 {
                     SchemeCode = schemeCode,
                     LastApiCheckUtc = DateTime.UtcNow,
                     LatestNavDateFromApi = latestDbDate,
                     LastCheckHadNewData = false
-                });
+                };
+                await navRepo.UpsertSyncTrackerAsync(successfulEmptyCheck);
+                fund.NavSyncTracker = successfulEmptyCheck;
 
                 return await BuildResponseFromDb(fund, false, from, to, interval, adjusted);
             }
@@ -159,6 +177,18 @@ public class NavService(
                 {
                     await fundRepo.UpdateLatestNavAsync(schemeCode, latestEntry.Nav, latestEntry.Date);
                 }
+
+                var newStartDate = newEntries.Min(e => e.Date);
+                var newEndDate = newEntries.Max(e => e.Date);
+                var navStartDate = fund.NavStartDate.HasValue && fund.NavStartDate.Value < newStartDate
+                    ? fund.NavStartDate.Value
+                    : newStartDate;
+                var navEndDate = fund.NavEndDate.HasValue && fund.NavEndDate.Value > newEndDate
+                    ? fund.NavEndDate.Value
+                    : newEndDate;
+                await fundRepo.UpdateNavDateRangeAsync(schemeCode, navStartDate, navEndDate);
+                fund.NavStartDate = navStartDate;
+                fund.NavEndDate = navEndDate;
             }
             else
             {
@@ -166,13 +196,15 @@ public class NavService(
             }
 
             // 7. Update the sync tracker
-            await navRepo.UpsertSyncTrackerAsync(new NavSyncTracker
+            var successfulCheck = new NavSyncTracker
             {
                 SchemeCode = schemeCode,
                 LastApiCheckUtc = DateTime.UtcNow,
                 LatestNavDateFromApi = apiLatestDate ?? latestDbDate,
                 LastCheckHadNewData = hadNewData
-            });
+            };
+            await navRepo.UpsertSyncTrackerAsync(successfulCheck);
+            fund.NavSyncTracker = successfulCheck;
 
             return await BuildResponseFromDb(fund, true, from, to, interval, adjusted);
         }
@@ -286,6 +318,8 @@ public class NavService(
             }
 
             await navRepo.AddRangeAsync(entries);
+            var range = await navRepo.GetDateRangeAsync(schemeCode);
+            await fundRepo.UpdateNavDateRangeAsync(schemeCode, range.StartDate, range.EndDate);
             result.RepairedGaps++;
             result.InsertedRecords += entries.Count;
             result.Gaps.Add(ToRepairItem(gap, "Repaired", entries.Count));
@@ -380,6 +414,8 @@ public class NavService(
         var latestNavDate = histories.Count > 0
             ? histories[0].Date.ToString("dd-MM-yyyy")
             : null;
+        var navStartDate = fund.NavStartDate ?? (histories.Count > 0 ? histories.Min(h => h.Date) : null);
+        var navEndDate = fund.NavEndDate ?? (histories.Count > 0 ? histories.Max(h => h.Date) : null);
 
         // Load corporate actions for this fund (always needed for the response)
         var actions = await corporateActionService.GetActionsAsync(fund.SchemeCode);
@@ -430,6 +466,11 @@ public class NavService(
             SchemeName = fund.SchemeName,
             FundHouse = fund.FundHouse,
             LatestNavDate = latestNavDate,
+            NavStartDate = FormatDate(navStartDate),
+            NavEndDate = FormatDate(navEndDate),
+            LastSuccessfulNavCheckUtc = FormatUtc(fund.NavSyncTracker?.LastApiCheckUtc),
+            NavStatus = GetNavStatus(fund.LatestNavDate, fund.NavSyncTracker?.LastApiCheckUtc),
+            IsLikelyDiscontinued = IsLikelyDiscontinued(fund.LatestNavDate, fund.NavSyncTracker?.LastApiCheckUtc),
             WasFetchedFromApi = wasFetchedFromApi,
             IsAdjusted = adjusted,
             Data = histories.Select(h =>
@@ -537,6 +578,11 @@ public class NavService(
                 SchemeCode = schemeCode,
                 SchemeName = fund.SchemeName,
                 FundHouse = fund.FundHouse,
+                NavStartDate = FormatDate(fund.NavStartDate),
+                NavEndDate = FormatDate(fund.NavEndDate),
+                LastSuccessfulNavCheckUtc = FormatUtc(fund.NavSyncTracker?.LastApiCheckUtc),
+                NavStatus = GetNavStatus(fund.LatestNavDate, fund.NavSyncTracker?.LastApiCheckUtc),
+                IsLikelyDiscontinued = IsLikelyDiscontinued(fund.LatestNavDate, fund.NavSyncTracker?.LastApiCheckUtc),
                 PeriodInYears = periodInYears
             };
 
@@ -613,6 +659,11 @@ public class NavService(
             SchemeCode = schemeCode,
             SchemeName = fund.SchemeName,
             FundHouse = fund.FundHouse,
+            NavStartDate = FormatDate(fund.NavStartDate ?? navByDate[0].Date),
+            NavEndDate = FormatDate(fund.NavEndDate ?? navByDate[^1].Date),
+            LastSuccessfulNavCheckUtc = FormatUtc(fund.NavSyncTracker?.LastApiCheckUtc),
+            NavStatus = GetNavStatus(fund.LatestNavDate, fund.NavSyncTracker?.LastApiCheckUtc),
+            IsLikelyDiscontinued = IsLikelyDiscontinued(fund.LatestNavDate, fund.NavSyncTracker?.LastApiCheckUtc),
             PeriodInYears = periodInYears,
             DataPoints = rollingReturns.Count,
             MinReturn = min,
@@ -748,5 +799,40 @@ public class NavService(
     {
         return actionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase)
                || actionType.Equals("MissingData", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? FormatDate(DateOnly? date)
+        => date?.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture);
+
+    private static string? FormatUtc(DateTime? dateTime)
+        => dateTime?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+
+    private static string GetNavStatus(DateOnly? latestNavDate, DateTime? lastSuccessfulCheckUtc)
+    {
+        if (!latestNavDate.HasValue)
+            return "Unknown";
+
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
+            DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("India Standard Time")));
+        if (today.DayNumber - latestNavDate.Value.DayNumber <= LikelyDiscontinuedGraceDays)
+            return "Active";
+
+        if (!lastSuccessfulCheckUtc.HasValue)
+            return "NeedsCheck";
+
+        return IsLikelyDiscontinued(latestNavDate, lastSuccessfulCheckUtc)
+            ? "LikelyDiscontinued"
+            : "NeedsCheck";
+    }
+
+    private static bool IsLikelyDiscontinued(DateOnly? latestNavDate, DateTime? lastSuccessfulCheckUtc)
+    {
+        if (!latestNavDate.HasValue || !lastSuccessfulCheckUtc.HasValue)
+            return false;
+
+        var lastCheckDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
+            lastSuccessfulCheckUtc.Value.ToUniversalTime(),
+            TimeZoneInfo.FindSystemTimeZoneById("India Standard Time")));
+        return lastCheckDate.DayNumber - latestNavDate.Value.DayNumber > LikelyDiscontinuedGraceDays;
     }
 }

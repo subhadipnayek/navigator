@@ -5,6 +5,7 @@ namespace NAVigator.Repositories;
 public interface INavHistoryRepository
 {
     Task<List<NavHistory>> GetBySchemeCodeAsync(int schemeCode);
+    Task<(DateOnly? StartDate, DateOnly? EndDate)> GetDateRangeAsync(int schemeCode);
     Task<DateOnly?> GetLatestNavDateAsync(int schemeCode);
     Task<NavHistory?> GetLatestNavEntryAsync(int schemeCode);
     Task AddRangeAsync(List<NavHistory> entries);

@@ -17,6 +17,7 @@ public class AdminController(
     INavService navService) : ControllerBase
 {
     private static readonly string[] ValidNavStatuses = ["all", "with-nav", "without-nav"];
+    private const int LikelyDiscontinuedGraceDays = 30;
 
     [HttpGet("funds/summary")]
     public async Task<IActionResult> GetFundsSummary(CancellationToken ct)
@@ -86,6 +87,9 @@ public class AdminController(
                 f.SchemeCategory,
                 f.LatestNav,
                 f.LatestNavDate,
+                f.NavStartDate,
+                f.NavEndDate,
+                LastApiCheckUtc = f.NavSyncTracker == null ? (DateTime?)null : f.NavSyncTracker.LastApiCheckUtc,
                 NavHistoryCount = f.NavHistories.Count(),
                 FirstStoredNavDate = f.NavHistories.Min(n => (DateOnly?)n.Date),
                 LastStoredNavDate = f.NavHistories.Max(n => (DateOnly?)n.Date),
@@ -105,6 +109,11 @@ public class AdminController(
             SchemeCategory = f.SchemeCategory,
             LatestNav = f.LatestNav,
             LatestNavDate = FormatDate(f.LatestNavDate),
+            NavStartDate = FormatDate(f.NavStartDate),
+            NavEndDate = FormatDate(f.NavEndDate),
+            LastSuccessfulNavCheckUtc = FormatUtc(f.LastApiCheckUtc),
+            NavStatus = GetNavStatus(f.LatestNavDate, f.LastApiCheckUtc),
+            IsLikelyDiscontinued = IsLikelyDiscontinued(f.LatestNavDate, f.LastApiCheckUtc),
             NavHistoryCount = f.NavHistoryCount,
             FirstStoredNavDate = FormatDate(f.FirstStoredNavDate),
             LastStoredNavDate = FormatDate(f.LastStoredNavDate),
@@ -146,6 +155,11 @@ public class AdminController(
 
         await db.NavHistories.Where(n => n.SchemeCode == schemeCode).ExecuteDeleteAsync(ct);
         await db.NavSyncTrackers.Where(t => t.SchemeCode == schemeCode).ExecuteDeleteAsync(ct);
+        await db.Funds
+            .Where(f => f.SchemeCode == schemeCode)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(f => f.NavStartDate, (DateOnly?)null)
+                .SetProperty(f => f.NavEndDate, (DateOnly?)null), ct);
         return NoContent();
     }
 
@@ -165,4 +179,41 @@ public class AdminController(
     {
         return date?.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture);
     }
+
+    private static string? FormatUtc(DateTime? dateTime)
+    {
+        return dateTime?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+    }
+
+    private static string GetNavStatus(DateOnly? latestNavDate, DateTime? lastSuccessfulCheckUtc)
+    {
+        if (!latestNavDate.HasValue)
+            return "Unknown";
+
+        var today = GetIndiaToday();
+        if (today.DayNumber - latestNavDate.Value.DayNumber <= LikelyDiscontinuedGraceDays)
+            return "Active";
+
+        if (!lastSuccessfulCheckUtc.HasValue)
+            return "NeedsCheck";
+
+        return IsLikelyDiscontinued(latestNavDate, lastSuccessfulCheckUtc)
+            ? "LikelyDiscontinued"
+            : "NeedsCheck";
+    }
+
+    private static bool IsLikelyDiscontinued(DateOnly? latestNavDate, DateTime? lastSuccessfulCheckUtc)
+    {
+        if (!latestNavDate.HasValue || !lastSuccessfulCheckUtc.HasValue)
+            return false;
+
+        var lastCheckDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
+            lastSuccessfulCheckUtc.Value.ToUniversalTime(),
+            TimeZoneInfo.FindSystemTimeZoneById("India Standard Time")));
+        return lastCheckDate.DayNumber - latestNavDate.Value.DayNumber > LikelyDiscontinuedGraceDays;
+    }
+
+    private static DateOnly GetIndiaToday()
+        => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
+            DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("India Standard Time")));
 }

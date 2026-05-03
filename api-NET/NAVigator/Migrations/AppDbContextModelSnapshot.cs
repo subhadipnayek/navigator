@@ -174,6 +174,14 @@ namespace NAVigator.Migrations
                         .HasColumnType("date")
                         .HasColumnName("latest_nav_date");
 
+                    b.Property<DateOnly?>("NavEndDate")
+                        .HasColumnType("date")
+                        .HasColumnName("nav_end_date");
+
+                    b.Property<DateOnly?>("NavStartDate")
+                        .HasColumnType("date")
+                        .HasColumnName("nav_start_date");
+
                     b.Property<string>("SchemeCategory")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)")

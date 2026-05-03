@@ -8,18 +8,25 @@ public class FundRepository(AppDbContext db) : IFundRepository
 {
     public async Task<List<Fund>> GetAllAsync()
     {
-        return await db.Funds.AsNoTracking().OrderBy(f => f.SchemeName).ToListAsync();
+        return await db.Funds
+            .AsNoTracking()
+            .Include(f => f.NavSyncTracker)
+            .OrderBy(f => f.SchemeName)
+            .ToListAsync();
     }
 
     public async Task<Fund?> GetBySchemeCodeAsync(int schemeCode)
     {
-        return await db.Funds.FindAsync(schemeCode);
+        return await db.Funds
+            .Include(f => f.NavSyncTracker)
+            .FirstOrDefaultAsync(f => f.SchemeCode == schemeCode);
     }
 
     public async Task<List<Fund>> SearchAsync(string query, int maxResults = 50)
     {
         return await db.Funds
             .AsNoTracking()
+            .Include(f => f.NavSyncTracker)
             .Where(f => EF.Functions.ILike(f.SchemeName, $"%{query}%")
                      || EF.Functions.ILike(f.FundHouse!, $"%{query}%")
                      || f.SchemeCode.ToString() == query)
@@ -74,6 +81,17 @@ public class FundRepository(AppDbContext db) : IFundRepository
 
         fund.LatestNav = nav;
         fund.LatestNavDate = date;
+        fund.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+    }
+
+    public async Task UpdateNavDateRangeAsync(int schemeCode, DateOnly? startDate, DateOnly? endDate)
+    {
+        var fund = await db.Funds.FindAsync(schemeCode);
+        if (fund is null) return;
+
+        fund.NavStartDate = startDate;
+        fund.NavEndDate = endDate;
         fund.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
     }

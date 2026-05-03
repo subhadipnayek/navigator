@@ -24,6 +24,10 @@ public class Fund
 
     public DateOnly? LatestNavDate { get; set; }
 
+    public DateOnly? NavStartDate { get; set; }
+
+    public DateOnly? NavEndDate { get; set; }
+
     [MaxLength(300)]
     public string? FundHouse { get; set; }
 

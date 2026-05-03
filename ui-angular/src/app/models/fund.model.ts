@@ -7,6 +7,11 @@ export interface Fund {
   schemeName: string;
   latestNav: number | null;
   latestNavDate: string | null; // "02-Apr-2026"
+  navStartDate: string | null; // "dd-MM-yyyy"
+  navEndDate: string | null; // "dd-MM-yyyy"
+  lastSuccessfulNavCheckUtc: string | null;
+  navStatus: 'Active' | 'NeedsCheck' | 'LikelyDiscontinued' | 'Unknown';
+  isLikelyDiscontinued: boolean;
   fundHouse: string | null;
   schemeType: string | null; // "Open Ended Schemes"
   schemeCategory: string | null; // "Debt Scheme - Banking and PSU Fund"
@@ -50,6 +55,11 @@ export interface AdminFundStorage {
   schemeCategory: string | null;
   latestNav: number | null;
   latestNavDate: string | null;
+  navStartDate: string | null;
+  navEndDate: string | null;
+  lastSuccessfulNavCheckUtc: string | null;
+  navStatus: 'Active' | 'NeedsCheck' | 'LikelyDiscontinued' | 'Unknown';
+  isLikelyDiscontinued: boolean;
   navHistoryCount: number;
   firstStoredNavDate: string | null;
   lastStoredNavDate: string | null;
@@ -69,6 +79,11 @@ export interface NavDataResponse {
   schemeName: string;
   fundHouse: string | null;
   latestNavDate: string | null; // "dd-MM-yyyy"
+  navStartDate: string | null; // "dd-MM-yyyy"
+  navEndDate: string | null; // "dd-MM-yyyy"
+  lastSuccessfulNavCheckUtc: string | null;
+  navStatus: 'Active' | 'NeedsCheck' | 'LikelyDiscontinued' | 'Unknown';
+  isLikelyDiscontinued: boolean;
   wasFetchedFromApi: boolean;
   isAdjusted: boolean;
   data: NavHistoryEntry[]; // sorted newest-first
@@ -130,6 +145,11 @@ export interface RollingReturnResponse {
   schemeCode: number;
   schemeName: string;
   fundHouse: string | null;
+  navStartDate: string | null; // "dd-MM-yyyy"
+  navEndDate: string | null; // "dd-MM-yyyy"
+  lastSuccessfulNavCheckUtc: string | null;
+  navStatus: 'Active' | 'NeedsCheck' | 'LikelyDiscontinued' | 'Unknown';
+  isLikelyDiscontinued: boolean;
   periodInYears: number;
   dataPoints: number;
   minReturn: number | null;
