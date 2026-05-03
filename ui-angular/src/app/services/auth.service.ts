@@ -1,6 +1,6 @@
 import { isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
+import { Injectable, PLATFORM_ID, computed, inject, signal, untracked } from '@angular/core';
 import { Observable, tap } from 'rxjs';
 import { ApiConfig } from '../core/api-config';
 import {
@@ -20,6 +20,7 @@ export class AuthService {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly state = signal<AuthResponse | null>(this.readStoredAuth());
 
+  // These computed signals are now safe because currentAuth() handles side-effects silently
   readonly user = computed<AuthUser | null>(() => this.currentAuth()?.user ?? null);
   readonly token = computed<string | null>(() => this.currentAuth()?.token ?? null);
   readonly isAuthenticated = computed(() => this.token() !== null);
@@ -59,12 +60,24 @@ export class AuthService {
     }
   }
 
+  /**
+   * REPAIRED: Logic wrapped in untracked()
+   */
   private currentAuth(): AuthResponse | null {
     const auth = this.state();
-    if (!auth || new Date(auth.expiresAtUtc).getTime() <= Date.now()) {
-      if (auth) this.logout();
+
+    // Check if auth exists and if it is expired
+    const isExpired = auth && new Date(auth.expiresAtUtc).getTime() <= Date.now();
+
+    if (!auth || isExpired) {
+      if (auth) {
+        // untracked allows us to call logout (which modifies state)
+        // without crashing the computed signal chain.
+        untracked(() => this.logout());
+      }
       return null;
     }
+
     return auth;
   }
 
