@@ -51,7 +51,7 @@ builder.Services.AddHttpClient("AmfiHistory", client =>
     AutomaticDecompression = System.Net.DecompressionMethods.All
 }).AddPolicyHandler(retryPolicy);
 
-builder.Services.AddHostedService<NavSyncWorker>();
+// builder.Services.AddHostedService<NavSyncWorker>();
 
 // ----- Controllers & OpenAPI -----
 builder.Services.AddControllers();
@@ -115,33 +115,27 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// ----- Auto-migrate database on startup (development only) -----
-if (app.Environment.IsDevelopment())
-{
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
+// ----- Auto-migrate database on startup (unconditional for Docker QA support) -----
+using var scope = app.Services.CreateScope();
+var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+await db.Database.MigrateAsync();
 
-    // Backfill cached counts if they haven't been populated yet
-    await db.Database.ExecuteSqlRawAsync(@"
-        UPDATE ""Funds"" f SET
-            nav_history_count = sub.cnt,
-            corporate_action_count = sub.ca_cnt
-        FROM (
-            SELECT f2.scheme_code,
-                   (SELECT COUNT(*) FROM ""NavHistories"" n WHERE n.scheme_code = f2.scheme_code) AS cnt,
-                   (SELECT COUNT(*) FROM ""CorporateActions"" ca WHERE ca.scheme_code = f2.scheme_code) AS ca_cnt
-            FROM ""Funds"" f2
-            WHERE f2.nav_history_count = 0
-        ) sub
-        WHERE f.scheme_code = sub.scheme_code
-          AND f.nav_history_count = 0");
-}
+// Backfill cached counts if they haven't been populated yet
+await db.Database.ExecuteSqlRawAsync(@"
+    UPDATE ""Funds"" f SET
+        nav_history_count = sub.cnt,
+        corporate_action_count = sub.ca_cnt
+    FROM (
+        SELECT f2.scheme_code,
+               (SELECT COUNT(*) FROM ""NavHistories"" n WHERE n.scheme_code = f2.scheme_code) AS cnt,
+               (SELECT COUNT(*) FROM ""CorporateActions"" ca WHERE ca.scheme_code = f2.scheme_code) AS ca_cnt
+        FROM ""Funds"" f2
+        WHERE f2.nav_history_count = 0
+    ) sub
+    WHERE f.scheme_code = sub.scheme_code
+      AND f.nav_history_count = 0");
 
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
+app.MapOpenApi();
 
 if (!app.Environment.IsDevelopment())
 {

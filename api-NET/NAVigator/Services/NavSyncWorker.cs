@@ -4,6 +4,7 @@ using NAVigator.Services;
 
 namespace NAVigator.Services;
 
+/*
 public class NavSyncWorker(
     IServiceProvider serviceProvider,
     ILogger<NavSyncWorker> logger) : BackgroundService
@@ -111,3 +112,4 @@ public class NavSyncWorker(
         await actionService.AutoRecordAnomaliesAsync(ct: stoppingToken);
     }
 }
+*/
