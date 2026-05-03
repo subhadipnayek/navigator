@@ -18,158 +18,291 @@ public partial class PortfolioSimulationService(
 
     public async Task<SimulationResponse> SimulateAsync(SimulationRequest request, CancellationToken ct = default)
     {
-        var startDate = ParseDate(request.StartDate);
-        var endDate = ParseDate(request.EndDate);
-        var basket = request.Basket;
+        var requestedStart = ParseDate(request.StartDate);
+        var requestedEnd   = ParseDate(request.EndDate);
 
-        var simResult = await RunSimulationCoreAsync(
-            basket, request.SipAmount, request.SipDay, request.LumpSumAmount,
-            startDate, endDate, ct);
+        // Clamp to the youngest fund's inception date so no fund is silently
+        // skipped and allocation percentages remain valid for the whole period.
+        var (effectiveStart, effectiveEnd, wasClamped, dateRangeNote) =
+            await ComputeGlobalEffectiveDateRangeAsync(
+                [request.Basket], requestedStart, requestedEnd, ct);
 
-        return simResult;
+        var result = await RunSimulationCoreAsync(
+            request.Basket, request.SipAmount, request.SipDay, request.LumpSumAmount,
+            effectiveStart, effectiveEnd, ct);
+
+        // Overwrite effective dates with the clamped values and surface the note.
+        result.StartDate           = requestedStart.ToString(DateFmt, Inv);
+        result.EndDate             = requestedEnd.ToString(DateFmt, Inv);
+        result.EffectiveStartDate  = effectiveStart.ToString(DateFmt, Inv);
+        result.EffectiveEndDate    = effectiveEnd.ToString(DateFmt, Inv);
+        result.WasDateRangeClamped = wasClamped;
+        result.DateRangeNote       = dateRangeNote;
+
+        return result;
     }
 
     internal async Task<SimulationResponse> RunSimulationCoreAsync(
         BasketDefinition basket, decimal sipAmount, int sipDay, decimal lumpSum,
         DateOnly startDate, DateOnly endDate, CancellationToken ct)
     {
-        // 1. Ensure NAV data is fresh and load histories
-        logger.LogInformation("Running simulation for basket '{Basket}' with {FundCount} funds, SIP ₹{Sip}, Lump ₹{Lump}, {Start} to {End}",
+        // ── 1. Load NAV histories and fund metadata ──────────────────────────────
+        logger.LogInformation(
+            "Running simulation for basket '{Basket}' with {FundCount} funds, SIP ₹{Sip}, Lump ₹{Lump}, {Start} to {End}",
             basket.Name, basket.Funds.Count, sipAmount, lumpSum, startDate, endDate);
+
         var fundData = new Dictionary<int, FundNavData>();
         foreach (var alloc in basket.Funds)
         {
             await navService.GetNavHistoryAsync(alloc.SchemeCode, ct: ct);
             var fund = await fundRepo.GetBySchemeCodeAsync(alloc.SchemeCode)
-                ?? throw new ArgumentException($"Fund {alloc.SchemeCode} not found.");
-            var navs = await navRepo.GetBySchemeCodeAsync(alloc.SchemeCode, startDate, endDate);
+                       ?? throw new ArgumentException($"Fund {alloc.SchemeCode} not found.");
+            var navs   = await navRepo.GetBySchemeCodeAsync(alloc.SchemeCode, startDate, endDate);
             var sorted = navs.OrderBy(n => n.Date).ToList();
             var actions = await corporateActionService.GetActionsAsync(alloc.SchemeCode);
             fundData[alloc.SchemeCode] = new FundNavData(fund, sorted, actions, alloc.AllocationPercent);
         }
 
-        // 2. Build per-fund state trackers
+        // ── 2. Initialise per-fund state ─────────────────────────────────────────
+        // LastCaAppliedUpTo = startDate - 1 prevents any CA that predates the
+        // simulation from being applied to units bought on the first event.
         var state = new Dictionary<int, FundState>();
         foreach (var kvp in fundData)
-            state[kvp.Key] = new FundState();
+            state[kvp.Key] = new FundState { LastCaAppliedUpTo = startDate.AddDays(-1) };
 
-        // 3. Process lump sum on start date
         decimal totalInvested = 0m;
-        var cashFlows = new List<(DateTime Date, double Amount)>();
+        int     sipInstallments = 0;
+        var     cashFlows  = new List<(DateTime Date, double Amount)>();
+        var     timeSeries = new List<PortfolioSnapshot>();
 
+        // ── 3. Build one unified, chronologically sorted event list ──────────────
+        // Same-date ordering: investments (0) → rebalances (1) → snapshots (2).
+        // This guarantees that a rebalance sees only money actually invested so
+        // far, and that snapshots reflect the state after all transactions that day.
+        var sipDates = sipAmount > 0
+            ? GenerateSipDates(startDate, endDate, sipDay)
+            : new List<DateOnly>();
+
+        var rebalDates = basket.RebalanceFrequency.Equals("None", StringComparison.OrdinalIgnoreCase)
+            ? new List<DateOnly>()
+            : GenerateRebalanceDates(basket.RebalanceFrequency, startDate, endDate);
+
+        var snapDates = BuildSnapDates(startDate, endDate);
+
+        var allEvents = new List<(DateOnly Date, int Priority, string Type)>();
         if (lumpSum > 0)
+            allEvents.Add((startDate, 0, "LUMP"));
+        foreach (var d in sipDates)
+            allEvents.Add((d, 0, "SIP"));
+        foreach (var d in rebalDates)
+            allEvents.Add((d, 1, "REBAL"));
+        foreach (var d in snapDates)
+            allEvents.Add((d, 2, "SNAP"));
+
+        allEvents.Sort((a, b) => a.Date != b.Date
+            ? a.Date.CompareTo(b.Date)
+            : a.Priority.CompareTo(b.Priority));
+
+        // ── 4. Walk events in order ──────────────────────────────────────────────
+        foreach (var (date, _, type) in allEvents)
         {
-            foreach (var kvp in fundData)
+            switch (type)
             {
-                var amount = lumpSum * kvp.Value.AllocationPct / 100m;
-                var nav = FindNavOnOrAfter(kvp.Value.Navs, startDate);
-                if (nav is null) continue;
-                state[kvp.Key].Units += amount / nav.Nav;
-                state[kvp.Key].Invested += amount;
+                // ── Investment (lump sum or SIP) ─────────────────────────────────
+                case "LUMP":
+                case "SIP":
+                {
+                    var amount      = type == "LUMP" ? lumpSum : sipAmount;
+                    bool processed  = false;
+
+                    foreach (var kvp in fundData)
+                    {
+                        // Use FindNavOnOrAfter so the purchase executes at the next
+                        // available NAV (mimics real-world T+1 cut-off behaviour).
+                        var nav = FindNavOnOrAfter(kvp.Value.Navs, date);
+                        if (nav is null) continue;
+
+                        // Apply any splits / bonuses since the last event BEFORE buying.
+                        // AMFI NAVs are raw and unadjusted, so this keeps unit counts
+                        // in sync with NAV drops caused by corporate actions.
+                        ApplyCorporateActions(state[kvp.Key], kvp.Value.Actions,
+                            state[kvp.Key].LastCaAppliedUpTo, nav.Date);
+                        state[kvp.Key].LastCaAppliedUpTo = nav.Date;
+
+                        var alloc = amount * kvp.Value.AllocationPct / 100m;
+                        state[kvp.Key].Units    += alloc / nav.Nav;
+                        state[kvp.Key].Invested += alloc;
+                        processed = true;
+                    }
+
+                    if (processed)
+                    {
+                        totalInvested += amount;
+                        cashFlows.Add((date.ToDateTime(TimeOnly.MinValue), -(double)amount));
+                        if (type == "SIP") sipInstallments++;
+                    }
+                    break;
+                }
+
+                // ── Rebalance ────────────────────────────────────────────────────
+                case "REBAL":
+                {
+                    // Step A: apply CAs and compute current value at the rebal date.
+                    decimal totalValue = 0;
+                    var navMap = new Dictionary<int, NavHistory>();
+
+                    foreach (var kvp in fundData)
+                    {
+                        var nav = FindNavOnOrAfter(kvp.Value.Navs, date);
+                        if (nav is null) continue;
+
+                        ApplyCorporateActions(state[kvp.Key], kvp.Value.Actions,
+                            state[kvp.Key].LastCaAppliedUpTo, nav.Date);
+                        state[kvp.Key].LastCaAppliedUpTo = nav.Date;
+
+                        navMap[kvp.Key] = nav;
+                        totalValue += state[kvp.Key].Units * nav.Nav;
+                    }
+
+                    // Step B: redistribute units to hit target allocation percentages.
+                    // Total portfolio value is preserved; only the per-fund split changes.
+                    if (totalValue > 0)
+                    {
+                        foreach (var kvp in fundData)
+                        {
+                            if (!navMap.TryGetValue(kvp.Key, out var nav) || nav.Nav <= 0) continue;
+                            var targetValue = totalValue * kvp.Value.AllocationPct / 100m;
+                            state[kvp.Key].Units    = targetValue / nav.Nav;
+                            state[kvp.Key].Invested = totalInvested * kvp.Value.AllocationPct / 100m;
+                        }
+                    }
+                    break;
+                }
+
+                // ── Snapshot (time-series data point) ───────────────────────────
+                case "SNAP":
+                {
+                    decimal portfolioValue = 0;
+                    var fundSnapshots = new List<FundSnapshot>();
+
+                    foreach (var kvp in fundData)
+                    {
+                        // FindNavOnOrBefore for valuation — we never look ahead.
+                        var nav = FindNavOnOrBefore(kvp.Value.Navs, date);
+                        if (nav is null) continue;
+
+                        // CAs must still be applied here. A split causes the raw NAV
+                        // to drop sharply; without updating units the portfolio would
+                        // show a fake loss. Advancing LastCaAppliedUpTo means the next
+                        // event's CA window starts here and the split is not re-applied.
+                        ApplyCorporateActions(state[kvp.Key], kvp.Value.Actions,
+                            state[kvp.Key].LastCaAppliedUpTo, nav.Date);
+                        state[kvp.Key].LastCaAppliedUpTo = nav.Date;
+
+                        var val = state[kvp.Key].Units * nav.Nav;
+                        portfolioValue += val;
+                        fundSnapshots.Add(new FundSnapshot
+                        {
+                            SchemeCode = kvp.Key,
+                            Value      = Math.Round(val, 2),
+                            Units      = Math.Round(state[kvp.Key].Units, 4)
+                        });
+                    }
+
+                    timeSeries.Add(new PortfolioSnapshot
+                    {
+                        Date           = date.ToString(DateFmt, Inv),
+                        PortfolioValue = Math.Round(portfolioValue, 2),
+                        TotalInvested  = Math.Round(totalInvested, 2),
+                        GainPercent    = totalInvested > 0
+                            ? Math.Round((portfolioValue - totalInvested) / totalInvested * 100m, 2)
+                            : 0,
+                        Funds = fundSnapshots
+                    });
+                    break;
+                }
             }
-            totalInvested += lumpSum;
-            cashFlows.Add((startDate.ToDateTime(TimeOnly.MinValue), -(double)lumpSum));
         }
 
-        // 4. Generate SIP dates and process installments
-        int sipInstallments = 0;
-        if (sipAmount > 0)
+        // ── 5. Final corpus & per-fund detail ────────────────────────────────────
+        // Flush any remaining CAs up to endDate before computing final values.
+        foreach (var kvp in fundData)
         {
-            var sipDates = GenerateSipDates(startDate, endDate, sipDay);
-            foreach (var sipDate in sipDates)
-            {
-                bool anyProcessed = false;
-                foreach (var kvp in fundData)
-                {
-                    var amount = sipAmount * kvp.Value.AllocationPct / 100m;
-                    var nav = FindNavOnOrAfter(kvp.Value.Navs, sipDate);
-                    if (nav is null) continue;
-
-                    // Apply corporate action adjustments for events between last SIP and this one
-                    ApplyCorporateActions(state[kvp.Key], kvp.Value.Actions, state[kvp.Key].LastProcessedDate, nav.Date);
-
-                    state[kvp.Key].Units += amount / nav.Nav;
-                    state[kvp.Key].Invested += amount;
-                    state[kvp.Key].LastProcessedDate = nav.Date;
-                    anyProcessed = true;
-                }
-                if (anyProcessed)
-                {
-                    totalInvested += sipAmount;
-                    sipInstallments++;
-                    cashFlows.Add((sipDate.ToDateTime(TimeOnly.MinValue), -(double)sipAmount));
-                }
-            }
+            var lastNav = FindNavOnOrBefore(kvp.Value.Navs, endDate);
+            if (lastNav is null) continue;
+            ApplyCorporateActions(state[kvp.Key], kvp.Value.Actions,
+                state[kvp.Key].LastCaAppliedUpTo, lastNav.Date);
+            state[kvp.Key].LastCaAppliedUpTo = lastNav.Date;
         }
 
-        // 5. Apply rebalancing
-        ApplyRebalancing(basket.RebalanceFrequency, fundData, state, startDate, endDate);
-
-        // 6. Compute final values
-        decimal finalCorpus = 0m;
+        decimal finalCorpus = 0;
         var fundDetails = new List<FundSimulationDetail>();
         foreach (var kvp in fundData)
         {
-            var lastNav = kvp.Value.Navs.LastOrDefault();
+            var lastNav = FindNavOnOrBefore(kvp.Value.Navs, endDate);
             if (lastNav is null) continue;
-            ApplyCorporateActions(state[kvp.Key], kvp.Value.Actions, state[kvp.Key].LastProcessedDate, lastNav.Date);
-            var value = state[kvp.Key].Units * lastNav.Nav;
-            finalCorpus += value;
+            var val      = state[kvp.Key].Units * lastNav.Nav;
             var invested = state[kvp.Key].Invested;
+            finalCorpus += val;
             fundDetails.Add(new FundSimulationDetail
             {
-                SchemeCode = kvp.Key,
-                SchemeName = kvp.Value.Fund.SchemeName,
-                AllocationPercent = kvp.Value.AllocationPct,
-                TotalUnits = Math.Round(state[kvp.Key].Units, 4),
-                TotalInvested = Math.Round(invested, 2),
-                FinalValue = Math.Round(value, 2),
-                AbsoluteReturnPercent = invested > 0 ? Math.Round((value - invested) / invested * 100m, 2) : 0
+                SchemeCode            = kvp.Key,
+                SchemeName            = kvp.Value.Fund.SchemeName,
+                AllocationPercent     = kvp.Value.AllocationPct,
+                TotalUnits            = Math.Round(state[kvp.Key].Units, 4),
+                TotalInvested         = Math.Round(invested, 2),
+                FinalValue            = Math.Round(val, 2),
+                AbsoluteReturnPercent = invested > 0
+                    ? Math.Round((val - invested) / invested * 100m, 2) : 0
             });
         }
 
-        // 7. Build time-series
-        var timeSeries = BuildTimeSeries(fundData, state, basket, sipAmount, sipDay, lumpSum, startDate, endDate);
+        // ── 6. Aggregate metrics ─────────────────────────────────────────────────
+        decimal absReturn = totalInvested > 0
+            ? (finalCorpus - totalInvested) / totalInvested * 100m : 0;
 
-        // 8. Compute aggregate metrics
-        decimal absReturn = totalInvested > 0 ? (finalCorpus - totalInvested) / totalInvested * 100m : 0;
         int days = endDate.DayNumber - startDate.DayNumber;
         decimal? cagr = days > 0 && totalInvested > 0
             ? (decimal)(Math.Pow((double)(finalCorpus / totalInvested), 365.25 / days) - 1) * 100m
             : null;
 
-        // XIRR
         cashFlows.Add((endDate.ToDateTime(TimeOnly.MinValue), (double)finalCorpus));
         var xirr = XirrCalculator.Calculate(cashFlows);
-
-        // Drawdown & volatility from time-series
         var (maxDrawdown, volatility) = ComputeRiskMetrics(timeSeries);
 
         return new SimulationResponse
         {
-            BasketName = basket.Name,
-            TotalInvested = Math.Round(totalInvested, 2),
-            FinalCorpusValue = Math.Round(finalCorpus, 2),
+            BasketName            = basket.Name,
+            TotalInvested         = Math.Round(totalInvested, 2),
+            FinalCorpusValue      = Math.Round(finalCorpus, 2),
             AbsoluteReturnPercent = Math.Round(absReturn, 2),
-            Cagr = cagr.HasValue ? Math.Round(cagr.Value, 2) : null,
-            Xirr = xirr,
-            MaxDrawdownPercent = maxDrawdown,
-            Volatility = volatility,
-            StartDate = startDate.ToString(DateFmt, Inv),
-            EndDate = endDate.ToString(DateFmt, Inv),
-            SipInstallments = sipInstallments,
-            SipAmount = sipAmount,
-            LumpSumAmount = lumpSum,
-            FundDetails = fundDetails,
-            TimeSeries = timeSeries
+            Cagr                  = cagr.HasValue ? Math.Round(cagr.Value, 2) : null,
+            Xirr                  = xirr,
+            MaxDrawdownPercent    = maxDrawdown,
+            Volatility            = volatility,
+            StartDate             = startDate.ToString(DateFmt, Inv),
+            EndDate               = endDate.ToString(DateFmt, Inv),
+            EffectiveStartDate    = startDate.ToString(DateFmt, Inv),
+            EffectiveEndDate      = endDate.ToString(DateFmt, Inv),
+            SipInstallments       = sipInstallments,
+            SipAmount             = sipAmount,
+            LumpSumAmount         = lumpSum,
+            FundDetails           = fundDetails,
+            TimeSeries            = timeSeries
         };
     }
 
-    // ─── Helpers ───
+    // ─── Helpers ─────────────────────────────────────────────────────────────────
 
     private static DateOnly ParseDate(string s) =>
         DateOnly.ParseExact(s, DateFmt, Inv);
 
+    /// <summary>
+    /// Finds the earliest NAV on or after <paramref name="target"/>.
+    /// Falls back to the last available NAV if it is within 7 days before target
+    /// (handles end-of-data edge case). Returns null if the nearest NAV is more
+    /// than 7 days away in either direction.
+    /// </summary>
     private static NavHistory? FindNavOnOrAfter(List<NavHistory> sorted, DateOnly target)
     {
         int lo = 0, hi = sorted.Count - 1;
@@ -180,191 +313,21 @@ public partial class PortfolioSimulationService(
             if (sorted[mid].Date >= target) { best = sorted[mid]; hi = mid - 1; }
             else lo = mid + 1;
         }
-        // Also accept up to 7 days before if nothing on/after target
+        // Last-resort: accept a NAV up to 7 days before target when there is no
+        // future data (e.g. fund is brand-new or end-of-range).
         if (best is null && sorted.Count > 0)
         {
             var last = sorted[^1];
             if (target.DayNumber - last.Date.DayNumber <= 7) return last;
         }
-        // Verify the found date isn't too far away (max 7 days forward)
+        // Reject if the found NAV is more than 7 trading days ahead (stale data).
         if (best is not null && best.Date.DayNumber - target.DayNumber > 7) return null;
         return best;
     }
 
-    private static List<DateOnly> GenerateSipDates(DateOnly start, DateOnly end, int sipDay)
-    {
-        sipDay = Math.Clamp(sipDay, 1, 28);
-        var dates = new List<DateOnly>();
-        var current = new DateOnly(start.Year, start.Month, Math.Min(sipDay, DateTime.DaysInMonth(start.Year, start.Month)));
-        if (current < start)
-            current = current.AddMonths(1);
-        while (current <= end)
-        {
-            dates.Add(current);
-            current = current.AddMonths(1);
-            current = new DateOnly(current.Year, current.Month, Math.Min(sipDay, DateTime.DaysInMonth(current.Year, current.Month)));
-        }
-        return dates;
-    }
-
-    private static void ApplyCorporateActions(FundState fundState, List<CorporateActionDto> actions, DateOnly? from, DateOnly to)
-    {
-        foreach (var action in actions)
-        {
-            if (action.ActionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase) ||
-                action.ActionType.Equals("MissingData", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            if (!DateOnly.TryParseExact(action.ActionDate, DateFmt, Inv, DateTimeStyles.None, out var aDate))
-                continue;
-
-            if (from.HasValue && aDate <= from.Value) continue;
-            if (aDate > to) continue;
-
-            // Split/bonus: units multiply by adjustment factor
-            fundState.Units *= action.AdjustmentFactor;
-        }
-    }
-
-    private void ApplyRebalancing(string frequency, Dictionary<int, FundNavData> fundData,
-        Dictionary<int, FundState> state, DateOnly start, DateOnly end)
-    {
-        if (frequency.Equals("None", StringComparison.OrdinalIgnoreCase)) return;
-
-        var dates = GenerateRebalanceDates(frequency, start, end);
-        foreach (var rebalDate in dates)
-        {
-            decimal totalValue = 0;
-            var currentValues = new Dictionary<int, decimal>();
-            foreach (var kvp in fundData)
-            {
-                var nav = FindNavOnOrAfter(kvp.Value.Navs, rebalDate);
-                if (nav is null) continue;
-                var val = state[kvp.Key].Units * nav.Nav;
-                currentValues[kvp.Key] = val;
-                totalValue += val;
-            }
-            if (totalValue <= 0) continue;
-
-            foreach (var kvp in fundData)
-            {
-                if (!currentValues.ContainsKey(kvp.Key)) continue;
-                var nav = FindNavOnOrAfter(kvp.Value.Navs, rebalDate);
-                if (nav is null || nav.Nav <= 0) continue;
-                var targetValue = totalValue * kvp.Value.AllocationPct / 100m;
-                state[kvp.Key].Units = targetValue / nav.Nav;
-            }
-        }
-    }
-
-    private static List<DateOnly> GenerateRebalanceDates(string frequency, DateOnly start, DateOnly end)
-    {
-        int monthsInterval = frequency.ToLowerInvariant() switch
-        {
-            "monthly" => 1, "quarterly" => 3, "yearly" => 12, _ => 0
-        };
-        if (monthsInterval == 0) return [];
-
-        var dates = new List<DateOnly>();
-        var current = start.AddMonths(monthsInterval);
-        while (current <= end)
-        {
-            dates.Add(current);
-            current = current.AddMonths(monthsInterval);
-        }
-        return dates;
-    }
-
-    private List<PortfolioSnapshot> BuildTimeSeries(
-        Dictionary<int, FundNavData> fundData, Dictionary<int, FundState> stateAtEnd,
-        BasketDefinition basket, decimal sipAmount, int sipDay, decimal lumpSum,
-        DateOnly start, DateOnly end)
-    {
-        // Re-simulate to capture state at each month-end
-        var snapshots = new List<PortfolioSnapshot>();
-        var simState = new Dictionary<int, FundState>();
-        foreach (var kvp in fundData)
-            simState[kvp.Key] = new FundState();
-
-        decimal invested = 0;
-        int sipIdx = 0;
-        var sipDates = sipAmount > 0 ? GenerateSipDates(start, end, sipDay) : [];
-
-        // Process lump sum
-        if (lumpSum > 0)
-        {
-            foreach (var kvp in fundData)
-            {
-                var amount = lumpSum * kvp.Value.AllocationPct / 100m;
-                var nav = FindNavOnOrAfter(kvp.Value.Navs, start);
-                if (nav is null) continue;
-                simState[kvp.Key].Units += amount / nav.Nav;
-                simState[kvp.Key].Invested += amount;
-            }
-            invested = lumpSum;
-        }
-
-        // Walk month by month
-        var month = new DateOnly(start.Year, start.Month, 1).AddMonths(1);
-        while (month <= end.AddMonths(1))
-        {
-            var snapDate = month <= end ? new DateOnly(month.Year, month.Month,
-                Math.Min(DateTime.DaysInMonth(month.Year, month.Month),
-                month == end.AddMonths(1) ? end.Day : DateTime.DaysInMonth(month.Year, month.Month)))
-                : end;
-            if (snapDate > end) snapDate = end;
-
-            // Process SIPs up to this snapshot
-            while (sipIdx < sipDates.Count && sipDates[sipIdx] <= snapDate)
-            {
-                foreach (var kvp in fundData)
-                {
-                    var amount = sipAmount * kvp.Value.AllocationPct / 100m;
-                    var nav = FindNavOnOrAfter(kvp.Value.Navs, sipDates[sipIdx]);
-                    if (nav is null) continue;
-                    ApplyCorporateActions(simState[kvp.Key], kvp.Value.Actions, simState[kvp.Key].LastProcessedDate, nav.Date);
-                    simState[kvp.Key].Units += amount / nav.Nav;
-                    simState[kvp.Key].Invested += amount;
-                    simState[kvp.Key].LastProcessedDate = nav.Date;
-                }
-                invested += sipAmount;
-                sipIdx++;
-            }
-
-            // Value the portfolio at snapDate
-            decimal portfolioValue = 0;
-            var fundSnapshots = new List<FundSnapshot>();
-            foreach (var kvp in fundData)
-            {
-                var nav = FindNavOnOrBefore(kvp.Value.Navs, snapDate);
-                if (nav is null) continue;
-                ApplyCorporateActions(simState[kvp.Key], kvp.Value.Actions, simState[kvp.Key].LastProcessedDate, nav.Date);
-                simState[kvp.Key].LastProcessedDate = nav.Date;
-                var val = simState[kvp.Key].Units * nav.Nav;
-                portfolioValue += val;
-                fundSnapshots.Add(new FundSnapshot
-                {
-                    SchemeCode = kvp.Key,
-                    Value = Math.Round(val, 2),
-                    Units = Math.Round(simState[kvp.Key].Units, 4)
-                });
-            }
-
-            snapshots.Add(new PortfolioSnapshot
-            {
-                Date = snapDate.ToString(DateFmt, Inv),
-                PortfolioValue = Math.Round(portfolioValue, 2),
-                TotalInvested = Math.Round(invested, 2),
-                GainPercent = invested > 0 ? Math.Round((portfolioValue - invested) / invested * 100m, 2) : 0,
-                Funds = fundSnapshots
-            });
-
-            if (snapDate >= end) break;
-            month = month.AddMonths(1);
-        }
-        return snapshots;
-    }
-
+    /// <summary>
+    /// Finds the latest NAV on or before <paramref name="target"/>.
+    /// </summary>
     private static NavHistory? FindNavOnOrBefore(List<NavHistory> sorted, DateOnly target)
     {
         int lo = 0, hi = sorted.Count - 1;
@@ -378,11 +341,107 @@ public partial class PortfolioSimulationService(
         return best;
     }
 
-    private static (decimal? MaxDrawdown, decimal? Volatility) ComputeRiskMetrics(List<PortfolioSnapshot> timeSeries)
+    /// <summary>
+    /// Applies split / bonus corporate actions in the half-open window
+    /// (from, to].  The <paramref name="from"/> value is non-nullable;
+    /// initialise FundState.LastCaAppliedUpTo to startDate - 1 so the first
+    /// event's window naturally covers the simulation start date.
+    /// </summary>
+    private static void ApplyCorporateActions(
+        FundState fundState, List<CorporateActionDto> actions,
+        DateOnly from, DateOnly to)
+    {
+        foreach (var action in actions)
+        {
+            if (action.ActionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase) ||
+                action.ActionType.Equals("MissingData",   StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!DateOnly.TryParseExact(action.ActionDate, DateFmt, Inv,
+                    DateTimeStyles.None, out var aDate))
+                continue;
+
+            // Strict half-open window: (from, to]
+            if (aDate <= from || aDate > to) continue;
+
+            fundState.Units *= action.AdjustmentFactor;
+        }
+    }
+
+    private static List<DateOnly> GenerateSipDates(DateOnly start, DateOnly end, int sipDay)
+    {
+        sipDay = Math.Clamp(sipDay, 1, 28);
+        var dates   = new List<DateOnly>();
+        var current = new DateOnly(start.Year, start.Month,
+            Math.Min(sipDay, DateTime.DaysInMonth(start.Year, start.Month)));
+        if (current < start)
+            current = current.AddMonths(1);
+        // Re-clamp day after advancing (e.g. February when sipDay = 30)
+        current = new DateOnly(current.Year, current.Month,
+            Math.Min(sipDay, DateTime.DaysInMonth(current.Year, current.Month)));
+
+        while (current <= end)
+        {
+            dates.Add(current);
+            current = current.AddMonths(1);
+            current = new DateOnly(current.Year, current.Month,
+                Math.Min(sipDay, DateTime.DaysInMonth(current.Year, current.Month)));
+        }
+        return dates;
+    }
+
+    /// <summary>
+    /// Generates month-end snapshot dates between <paramref name="start"/> and
+    /// <paramref name="end"/>, always including <paramref name="end"/> itself.
+    /// </summary>
+    private static List<DateOnly> BuildSnapDates(DateOnly start, DateOnly end)
+    {
+        var dates = new List<DateOnly>();
+        var month = new DateOnly(start.Year, start.Month, 1).AddMonths(1);
+
+        while (month <= end)
+        {
+            var lastDay = new DateOnly(month.Year, month.Month,
+                DateTime.DaysInMonth(month.Year, month.Month));
+            var snap = lastDay <= end ? lastDay : end;
+            dates.Add(snap);
+            if (snap >= end) break;
+            month = month.AddMonths(1);
+        }
+
+        // Guarantee the final date is always the end date.
+        if (dates.Count == 0 || dates[^1] != end)
+            dates.Add(end);
+
+        return dates;
+    }
+
+    private static List<DateOnly> GenerateRebalanceDates(string frequency, DateOnly start, DateOnly end)
+    {
+        int monthsInterval = frequency.ToLowerInvariant() switch
+        {
+            "monthly"   => 1,
+            "quarterly" => 3,
+            "yearly"    => 12,
+            _           => 0
+        };
+        if (monthsInterval == 0) return [];
+
+        var dates   = new List<DateOnly>();
+        var current = start.AddMonths(monthsInterval);
+        while (current <= end)
+        {
+            dates.Add(current);
+            current = current.AddMonths(monthsInterval);
+        }
+        return dates;
+    }
+
+    private static (decimal? MaxDrawdown, decimal? Volatility) ComputeRiskMetrics(
+        List<PortfolioSnapshot> timeSeries)
     {
         if (timeSeries.Count < 2) return (null, null);
 
-        // Max drawdown
         decimal peak = 0, maxDd = 0;
         foreach (var snap in timeSeries)
         {
@@ -394,7 +453,6 @@ public partial class PortfolioSimulationService(
             }
         }
 
-        // Volatility: annualized std dev of monthly returns
         var returns = new List<double>();
         for (int i = 1; i < timeSeries.Count; i++)
         {
@@ -405,7 +463,7 @@ public partial class PortfolioSimulationService(
         decimal? vol = null;
         if (returns.Count >= 2)
         {
-            double avg = returns.Average();
+            double avg      = returns.Average();
             double variance = returns.Sum(r => (r - avg) * (r - avg)) / (returns.Count - 1);
             vol = Math.Round((decimal)(Math.Sqrt(variance) * Math.Sqrt(12)) * 100m, 2);
         }
@@ -413,14 +471,25 @@ public partial class PortfolioSimulationService(
         return (maxDd > 0 ? Math.Round(maxDd, 2) : 0, vol);
     }
 
-    // ─── Internal data structures ───
+    // ─── Internal data structures ─────────────────────────────────────────────
 
-    internal record FundNavData(Fund Fund, List<NavHistory> Navs, List<CorporateActionDto> Actions, decimal AllocationPct);
+    internal record FundNavData(
+        Fund Fund,
+        List<NavHistory> Navs,
+        List<CorporateActionDto> Actions,
+        decimal AllocationPct);
 
     internal class FundState
     {
-        public decimal Units { get; set; }
+        public decimal Units   { get; set; }
         public decimal Invested { get; set; }
-        public DateOnly? LastProcessedDate { get; set; }
+
+        /// <summary>
+        /// The upper bound of the corporate-action window that has already been
+        /// applied to this fund's unit count.  Initialise to startDate - 1 day
+        /// so that the very first event's window is (startDate-1, navDate], which
+        /// covers CAs on startDate without including any pre-simulation history.
+        /// </summary>
+        public DateOnly LastCaAppliedUpTo { get; set; }
     }
 }

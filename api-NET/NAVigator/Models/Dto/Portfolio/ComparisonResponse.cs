@@ -4,6 +4,10 @@ public class ComparisonResponse
 {
     public required string StartDate { get; set; }
     public required string EndDate { get; set; }
+    public required string EffectiveStartDate { get; set; }
+    public required string EffectiveEndDate { get; set; }
+    public bool WasDateRangeClamped { get; set; }
+    public string? DateRangeNote { get; set; }
     public bool IsNormalized { get; set; }
     public List<ComparisonEntryResult> Results { get; set; } = [];
 

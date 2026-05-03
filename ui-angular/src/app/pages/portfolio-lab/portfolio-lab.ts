@@ -2,7 +2,6 @@ import {
   Component,
   inject,
   signal,
-  computed,
   OnDestroy,
 } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
@@ -96,6 +95,9 @@ export class PortfolioLab implements OnDestroy {
   readonly searchResults = signal<Fund[]>([]);
   readonly searchingBasketId = signal<number | null>(null);
 
+  // ── Simulate basket selector ──
+  readonly selectedSimBasketId = signal<number | null>(null);
+
   // ── Global date range ──
   startDate: Date;
   endDate: Date;
@@ -161,6 +163,9 @@ export class PortfolioLab implements OnDestroy {
 
   removeBasket(id: number): void {
     this.baskets.update((b) => b.filter((bk) => bk.id !== id));
+    if (this.selectedSimBasketId() === id) {
+      this.selectedSimBasketId.set(this.baskets()[0]?.id ?? null);
+    }
   }
 
   addFundToBasket(basketId: number, fund: Fund): void {
@@ -216,11 +221,13 @@ export class PortfolioLab implements OnDestroy {
   }
 
   // ──────────────────────────────────────
-  // Simulate (single basket, first one)
+  // Simulate (user-selected basket)
   // ──────────────────────────────────────
 
   simulate(): void {
-    const basket = this.baskets()[0];
+    const simId = this.selectedSimBasketId() ?? this.baskets()[0]?.id;
+    const basket = this.baskets().find((bk) => bk.id === simId) ?? this.baskets()[0];
+    if (!basket) { this.error.set('No basket available.'); return; }
     if (!this.validateBasket(basket)) return;
     this.loading.set(true);
     this.error.set(null);
@@ -429,7 +436,7 @@ export class PortfolioLab implements OnDestroy {
   // ──────────────────────────────────────
 
   private newBasket(name: string): BasketSlot {
-    return {
+    const bk: BasketSlot = {
       id: this.nextId++,
       name,
       funds: [],
@@ -438,6 +445,11 @@ export class PortfolioLab implements OnDestroy {
       lumpSumAmount: 0,
       rebalanceFrequency: 'None',
     };
+    // Auto-select first basket for simulate
+    if (this.selectedSimBasketId() === null) {
+      this.selectedSimBasketId.set(bk.id);
+    }
+    return bk;
   }
 
   private validateBasket(bk: BasketSlot): boolean {
@@ -455,6 +467,7 @@ export class PortfolioLab implements OnDestroy {
     }
     return true;
   }
+
 
   private toApiBasket(bk: BasketSlot): BasketDefinition {
     return {

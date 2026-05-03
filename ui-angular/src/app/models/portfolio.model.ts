@@ -55,6 +55,10 @@ export interface SimulationResponse {
   volatility: number | null;
   startDate: string;
   endDate: string;
+  effectiveStartDate: string;
+  effectiveEndDate: string;
+  wasDateRangeClamped: boolean;
+  dateRangeNote: string | null;
   sipInstallments: number;
   sipAmount: number;
   lumpSumAmount: number;
@@ -106,6 +110,10 @@ export interface ComparisonTimePoint {
 export interface ComparisonResponse {
   startDate: string;
   endDate: string;
+  effectiveStartDate: string;
+  effectiveEndDate: string;
+  wasDateRangeClamped: boolean;
+  dateRangeNote: string | null;
   isNormalized: boolean;
   results: ComparisonEntryResult[];
   timeSeries: ComparisonTimePoint[];
@@ -152,6 +160,10 @@ export interface WhatIfInsights {
 export interface WhatIfResponse {
   startDate: string;
   endDate: string;
+  effectiveStartDate: string;
+  effectiveEndDate: string;
+  wasDateRangeClamped: boolean;
+  dateRangeNote: string | null;
   scenarios: WhatIfScenarioResult[];
   insights: WhatIfInsights;
 }

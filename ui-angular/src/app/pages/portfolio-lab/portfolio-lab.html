@@ -90,7 +90,7 @@
               <div class="fund-row">
                 <div class="fund-info">
                   <span class="fund-name" [title]="item.fund.schemeName">{{ item.fund.schemeName }}</span>
-                  <span class="fund-meta">{{ item.fund.fundHouse }}</span>
+                  <span class="fund-meta">{{ item.fund.fundHouse }}@if (item.fund.navStartDate) { · since {{ item.fund.navStartDate }}}</span>
                 </div>
                 <div class="alloc-input-wrap">
                   <input class="alloc-input" type="number" min="0" max="100" step="1"
@@ -163,9 +163,19 @@
 
     @switch (activeTab()) {
       @case ('simulate') {
-        <button mat-flat-button (click)="simulate()" [disabled]="loading()">
-          <mat-icon>play_arrow</mat-icon> Run Simulation
-        </button>
+        <div class="simulate-actions">
+          <mat-form-field appearance="outline" class="basket-select-field">
+            <mat-label>Basket to simulate</mat-label>
+            <mat-select [(ngModel)]="selectedSimBasketId" [ngModelOptions]="{standalone: true}">
+              @for (bk of baskets(); track bk.id) {
+                <mat-option [value]="bk.id">{{ bk.name }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <button mat-flat-button (click)="simulate()" [disabled]="loading()">
+            <mat-icon>play_arrow</mat-icon> Run Simulation
+          </button>
+        </div>
       }
       @case ('compare') {
         <div class="compare-actions">
@@ -208,6 +218,15 @@
   <!-- ── SIMULATE result ── -->
   @if (activeTab() === 'simulate' && simResult(); as res) {
     <section class="results-section">
+
+      <!-- Date range clamping notice from backend -->
+      @if (res.wasDateRangeClamped && res.dateRangeNote) {
+        <div class="date-hint" role="status">
+          <mat-icon>info_outline</mat-icon>
+          {{ res.dateRangeNote }}
+          <span class="date-hint-range">Effective: {{ res.effectiveStartDate }} → {{ res.effectiveEndDate }}</span>
+        </div>
+      }
 
       <!-- Summary stat cards -->
       <div class="stat-grid">
@@ -299,6 +318,14 @@
   <!-- ── COMPARE result ── -->
   @if (activeTab() === 'compare' && compareResult(); as res) {
     <section class="results-section">
+
+      @if (res.wasDateRangeClamped && res.dateRangeNote) {
+        <div class="date-hint" role="status">
+          <mat-icon>info_outline</mat-icon>
+          {{ res.dateRangeNote }}
+          <span class="date-hint-range">Effective: {{ res.effectiveStartDate }} → {{ res.effectiveEndDate }}</span>
+        </div>
+      }
       @if (growthChartSeries().length > 0) {
         <mat-card class="chart-card">
           <mat-card-header>
@@ -369,6 +396,14 @@
   <!-- ── WHAT-IF result ── -->
   @if (activeTab() === 'whatif' && whatIfResult(); as res) {
     <section class="results-section">
+
+      @if (res.wasDateRangeClamped && res.dateRangeNote) {
+        <div class="date-hint" role="status">
+          <mat-icon>info_outline</mat-icon>
+          {{ res.dateRangeNote }}
+          <span class="date-hint-range">Effective: {{ res.effectiveStartDate }} → {{ res.effectiveEndDate }}</span>
+        </div>
+      }
 
       <!-- Insights callout -->
       @if (res.insights.allocationBeatCapital) {

@@ -4,6 +4,10 @@ public class WhatIfResponse
 {
     public required string StartDate { get; set; }
     public required string EndDate { get; set; }
+    public required string EffectiveStartDate { get; set; }
+    public required string EffectiveEndDate { get; set; }
+    public bool WasDateRangeClamped { get; set; }
+    public string? DateRangeNote { get; set; }
     public List<WhatIfScenarioResult> Scenarios { get; set; } = [];
 
     /// <summary>

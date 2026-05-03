@@ -8,8 +8,14 @@ public partial class PortfolioSimulationService
 {
     public async Task<ComparisonResponse> CompareAsync(ComparisonRequest request, CancellationToken ct = default)
     {
-        var startDate = ParseDate(request.StartDate);
-        var endDate = ParseDate(request.EndDate);
+        var requestedStart = ParseDate(request.StartDate);
+        var requestedEnd = ParseDate(request.EndDate);
+
+        // Pre-scan ALL funds across ALL entries to find the global effective date range
+        var allBaskets = request.Entries.Select(e => ResolveBasket(e)).ToList();
+        var (effectiveStart, effectiveEnd, wasClamped, dateRangeNote) =
+            await ComputeGlobalEffectiveDateRangeAsync(allBaskets, requestedStart, requestedEnd, ct);
+
         var results = new List<ComparisonEntryResult>();
         var allTimeSeries = new Dictionary<string, List<PortfolioSnapshot>>();
 
@@ -17,7 +23,7 @@ public partial class PortfolioSimulationService
         {
             var basket = ResolveBasket(entry);
             var sim = await RunSimulationCoreAsync(basket, entry.SipAmount, entry.SipDay,
-                entry.LumpSumAmount, startDate, endDate, ct);
+                entry.LumpSumAmount, effectiveStart, effectiveEnd, ct);
 
             results.Add(new ComparisonEntryResult
             {
@@ -48,8 +54,12 @@ public partial class PortfolioSimulationService
 
         return new ComparisonResponse
         {
-            StartDate = startDate.ToString(DateFmt, Inv),
-            EndDate = endDate.ToString(DateFmt, Inv),
+            StartDate = requestedStart.ToString(DateFmt, Inv),
+            EndDate = requestedEnd.ToString(DateFmt, Inv),
+            EffectiveStartDate = effectiveStart.ToString(DateFmt, Inv),
+            EffectiveEndDate = effectiveEnd.ToString(DateFmt, Inv),
+            WasDateRangeClamped = wasClamped,
+            DateRangeNote = dateRangeNote,
             IsNormalized = request.NormalizeSipAmounts,
             Results = results,
             TimeSeries = alignedTs
@@ -58,14 +68,20 @@ public partial class PortfolioSimulationService
 
     public async Task<WhatIfResponse> WhatIfAsync(WhatIfRequest request, CancellationToken ct = default)
     {
-        var startDate = ParseDate(request.StartDate);
-        var endDate = ParseDate(request.EndDate);
+        var requestedStart = ParseDate(request.StartDate);
+        var requestedEnd = ParseDate(request.EndDate);
+
+        // Pre-scan ALL funds across ALL scenarios to find the global effective date range
+        var allBaskets = request.Scenarios.Select(s => s.Basket).ToList();
+        var (effectiveStart, effectiveEnd, wasClamped, dateRangeNote) =
+            await ComputeGlobalEffectiveDateRangeAsync(allBaskets, requestedStart, requestedEnd, ct);
+
         var scenarios = new List<WhatIfScenarioResult>();
 
         foreach (var scenario in request.Scenarios)
         {
             var sim = await RunSimulationCoreAsync(scenario.Basket, scenario.SipAmount,
-                scenario.SipDay, scenario.LumpSumAmount, startDate, endDate, ct);
+                scenario.SipDay, scenario.LumpSumAmount, effectiveStart, effectiveEnd, ct);
 
             scenarios.Add(new WhatIfScenarioResult
             {
@@ -88,8 +104,12 @@ public partial class PortfolioSimulationService
 
         return new WhatIfResponse
         {
-            StartDate = startDate.ToString(DateFmt, Inv),
-            EndDate = endDate.ToString(DateFmt, Inv),
+            StartDate = requestedStart.ToString(DateFmt, Inv),
+            EndDate = requestedEnd.ToString(DateFmt, Inv),
+            EffectiveStartDate = effectiveStart.ToString(DateFmt, Inv),
+            EffectiveEndDate = effectiveEnd.ToString(DateFmt, Inv),
+            WasDateRangeClamped = wasClamped,
+            DateRangeNote = dateRangeNote,
             Scenarios = scenarios,
             Insights = insights
         };
@@ -163,6 +183,65 @@ public partial class PortfolioSimulationService
     }
 
     // ─── Comparison helpers ───
+
+    /// <summary>
+    /// Scans ALL funds across ALL baskets to determine the tightest overlapping date range.
+    /// The youngest fund (latest NavStartDate) dictates the effective start;
+    /// the fund with the least recent data (earliest NavEndDate) dictates the effective end.
+    /// </summary>
+    private async Task<(DateOnly EffectiveStart, DateOnly EffectiveEnd, bool WasClamped, string? Note)>
+        ComputeGlobalEffectiveDateRangeAsync(
+            List<BasketDefinition> baskets, DateOnly requestedStart, DateOnly requestedEnd, CancellationToken ct)
+    {
+        var effectiveStart = requestedStart;
+        var effectiveEnd = requestedEnd;
+        string? youngestFundName = null;
+        string? constrainingEndFundName = null;
+
+        // Collect all unique scheme codes across all baskets
+        var uniqueSchemeCodes = baskets
+            .SelectMany(b => b.Funds.Select(f => f.SchemeCode))
+            .Distinct()
+            .ToList();
+
+        foreach (var schemeCode in uniqueSchemeCodes)
+        {
+            await navService.GetNavHistoryAsync(schemeCode, ct: ct);
+            var fund = await fundRepo.GetBySchemeCodeAsync(schemeCode);
+            if (fund is null) continue;
+
+            if (fund.NavStartDate.HasValue && fund.NavStartDate.Value > effectiveStart)
+            {
+                effectiveStart = fund.NavStartDate.Value;
+                youngestFundName = fund.SchemeName;
+            }
+            if (fund.NavEndDate.HasValue && fund.NavEndDate.Value < effectiveEnd)
+            {
+                effectiveEnd = fund.NavEndDate.Value;
+                constrainingEndFundName = fund.SchemeName;
+            }
+        }
+
+        if (effectiveStart > effectiveEnd)
+            throw new ArgumentException(
+                $"No overlapping date range across all baskets: youngest fund '{youngestFundName}' " +
+                $"(starts {effectiveStart.ToString(DateFmt, Inv)}) has no overlap with available end date.");
+
+        bool wasClamped = effectiveStart != requestedStart || effectiveEnd != requestedEnd;
+        string? note = null;
+        if (wasClamped)
+        {
+            var parts = new List<string>();
+            if (effectiveStart != requestedStart)
+                parts.Add($"Start date adjusted to {effectiveStart.ToString(DateFmt, Inv)} — youngest fund is '{youngestFundName}'");
+            if (effectiveEnd != requestedEnd)
+                parts.Add($"End date adjusted to {effectiveEnd.ToString(DateFmt, Inv)} — '{constrainingEndFundName}' has data only up to this date");
+            note = string.Join(". ", parts) + ".";
+            logger.LogInformation("Global date range clamped: {Note}", note);
+        }
+
+        return (effectiveStart, effectiveEnd, wasClamped, note);
+    }
 
     private static BasketDefinition ResolveBasket(ComparisonEntry entry)
     {

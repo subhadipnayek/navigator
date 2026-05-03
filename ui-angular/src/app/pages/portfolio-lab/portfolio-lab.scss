@@ -55,6 +55,44 @@
   font-size: 14px;
 }
 
+/* ── Date hint (auto-clamp notification) ── */
+.date-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  background: #eff6ff;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  color: #1e40af;
+  font-size: 13px;
+}
+
+.date-hint mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.date-hint-range {
+  margin-left: auto;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── Simulate actions ── */
+.simulate-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.basket-select-field {
+  width: 200px;
+  margin-right: 0;
+}
+
 /* ── Basket grid ── */
 .baskets-grid {
   display: grid;

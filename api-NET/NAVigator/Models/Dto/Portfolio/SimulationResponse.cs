@@ -17,6 +17,31 @@ public class SimulationResponse
 
     public required string StartDate { get; set; }
     public required string EndDate { get; set; }
+
+    /// <summary>
+    /// The actual start date used after clamping to the youngest fund's inception.
+    /// May differ from the requested StartDate.
+    /// </summary>
+    public required string EffectiveStartDate { get; set; }
+
+    /// <summary>
+    /// The actual end date used after clamping to available data.
+    /// May differ from the requested EndDate.
+    /// </summary>
+    public required string EffectiveEndDate { get; set; }
+
+    /// <summary>
+    /// True if the requested date range was automatically adjusted to fit available fund data.
+    /// </summary>
+    public bool WasDateRangeClamped { get; set; }
+
+    /// <summary>
+    /// Human-readable note explaining why the date range was clamped, e.g.
+    /// "Start date adjusted to 15-01-2018 — youngest fund is 'HDFC Midcap Opportunities'."
+    /// Null if no clamping occurred.
+    /// </summary>
+    public string? DateRangeNote { get; set; }
+
     public int SipInstallments { get; set; }
     public decimal SipAmount { get; set; }
     public decimal LumpSumAmount { get; set; }
