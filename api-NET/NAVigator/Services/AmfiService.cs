@@ -8,7 +8,7 @@ namespace NAVigator.Services;
 
 public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiService> logger) : IAmfiService
 {
-    private const string AmfiMasterUrl = "https://portal.amfiindia.com/spages/NAVAll.txt";
+    private const string AmfiMasterUrl = "https://portal.amfiindia.com/DownloadSchemeData_Po.aspx?mf=0";
     private const string AmfiNavHistoryUrl = "https://www.amfiindia.com/api/nav-history";
     private const int NavHistoryChunkYears = 4;
     private const int NavHistoryParallelChunks = 2;
@@ -184,6 +184,14 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
 
     private List<Fund> ParseAmfiMasterData(string rawData)
     {
+        if (LooksLikeSchemeWorkbookExport(rawData))
+            return ParseSchemeWorkbookExport(rawData);
+
+        return ParseLegacyNavAll(rawData);
+    }
+
+    private List<Fund> ParseLegacyNavAll(string rawData)
+    {
         var funds = new List<Fund>();
         var lines = rawData.Split('\n', StringSplitOptions.None);
 
@@ -279,6 +287,76 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
 
         logger.LogInformation("Parsed {Count} funds from AMFI master data", funds.Count);
         return funds;
+    }
+
+    private List<Fund> ParseSchemeWorkbookExport(string rawData)
+    {
+        var funds = new List<Fund>();
+        var lines = rawData.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var line in lines)
+        {
+            if (line.StartsWith("AMC|", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var parts = line.Split('|');
+            if (parts.Length < 10)
+                continue;
+
+            if (!int.TryParse(parts[1].Trim(), out var schemeCode))
+                continue;
+
+            var launchDate = TryParseAmfiDate(parts[7].Trim());
+            // AMFI "Closure Date" here is NFO subscription close date;
+            // it does not mean an open-ended scheme stopped accepting investments or NAV updates.
+            var (isinGrowth, isinDivReinvestment) = ParseCombinedIsin(parts[9].Trim());
+
+            funds.Add(new Fund
+            {
+                SchemeCode = schemeCode,
+                SchemeName = parts[2].Trim(),
+                FundHouse = NullIfDash(parts[0].Trim()),
+                SchemeType = NullIfDash(parts[3].Trim()),
+                SchemeCategory = NullIfDash(parts[4].Trim()),
+                IsinGrowth = isinGrowth,
+                IsinDivReinvestment = isinDivReinvestment,
+                NavStartDate = launchDate
+            });
+        }
+
+        logger.LogInformation("Parsed {Count} funds from AMFI workbook export", funds.Count);
+        return funds;
+    }
+
+    private static bool LooksLikeSchemeWorkbookExport(string rawData)
+    {
+        var firstNonEmpty = rawData
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault();
+
+        return firstNonEmpty is not null
+               && firstNonEmpty.StartsWith("AMC|", StringComparison.OrdinalIgnoreCase)
+               && firstNonEmpty.Contains("Launch Date", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static DateOnly? TryParseAmfiDate(string value)
+        => DateOnly.TryParseExact(value, "dd-MMM-yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None,
+            out var parsed)
+            ? parsed
+            : null;
+
+    private static (string? IsinGrowth, string? IsinDivReinvestment) ParseCombinedIsin(string value)
+    {
+        var normalized = NullIfDash(value);
+        if (normalized is null)
+            return (null, null);
+
+        if (normalized.Length <= 12)
+            return (normalized, null);
+
+        var growth = normalized[..12];
+        var reinvestment = normalized.Length > 12 ? normalized[12..] : null;
+        return (NullIfDash(growth), NullIfDash(reinvestment));
     }
 
     private static string? NullIfDash(string value)
