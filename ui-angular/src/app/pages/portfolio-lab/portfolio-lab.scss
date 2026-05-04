@@ -163,9 +163,15 @@
 
 .fund-row {
   display: grid;
+<<<<<<< HEAD
   grid-template-columns: 1fr 72px 32px 32px;
   align-items: center;
   gap: 6px;
+=======
+  grid-template-columns: 1fr 72px 36px;
+  align-items: center;
+  gap: 8px;
+>>>>>>> a928b6397c6c1c3f963222747ebcc080e19171a8
   padding: 8px 10px;
   border-radius: 8px;
   background: #f8faf9;
@@ -223,17 +229,24 @@
   color: #64748b;
 }
 
+<<<<<<< HEAD
 .remove-fund-btn,
 .lock-fund-btn {
+=======
+.remove-fund-btn {
+>>>>>>> a928b6397c6c1c3f963222747ebcc080e19171a8
   color: #94a3b8 !important;
   width: 28px !important;
   height: 28px !important;
 }
 
+<<<<<<< HEAD
 .lock-fund-btn.locked {
   color: #0f766e !important;
 }
 
+=======
+>>>>>>> a928b6397c6c1c3f963222747ebcc080e19171a8
 .empty-hint {
   text-align: center;
   color: #94a3b8;

@@ -59,7 +59,7 @@ export class FundDetail implements OnInit {
   readonly error = signal<string | null>(null);
   readonly returnsLoading = signal(false);
   readonly returnsError = signal<string | null>(null);
-  readonly adjusted = signal(false);
+  readonly adjusted = signal(true);
   readonly selectedInterval = signal<'daily' | 'weekly' | 'monthly'>('daily');
 
   startDate: Date | null = null;
@@ -196,7 +196,8 @@ export class FundDetail implements OnInit {
 
     if (minDate && this.startDate && this.startDate < minDate) this.startDate = minDate;
     if (maxDate && this.endDate && this.endDate > maxDate) this.endDate = maxDate;
-    if (this.startDate && this.endDate && this.startDate > this.endDate) this.startDate = this.endDate;
+    if (this.startDate && this.endDate && this.startDate > this.endDate)
+      this.startDate = this.endDate;
   }
 
   private parseApiDisplayDate(value: string | null): Date | null {

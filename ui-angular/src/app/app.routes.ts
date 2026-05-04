@@ -33,6 +33,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/compare/compare').then((m) => m.Compare),
   },
   {
+    path: 'portfolio-lab',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/portfolio-lab/portfolio-lab').then((m) => m.PortfolioLab),
+  },
+  {
     path: 'login',
     loadComponent: () => import('./pages/login/login').then((m) => m.Login),
   },

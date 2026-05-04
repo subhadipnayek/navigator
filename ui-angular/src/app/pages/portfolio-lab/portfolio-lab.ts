@@ -48,7 +48,11 @@ import { MatDividerModule } from '@angular/material/divider';
 interface BasketSlot {
   id: number;
   name: string;
+<<<<<<< HEAD
   funds: { fund: Fund; allocationPercent: number; locked?: boolean }[];
+=======
+  funds: { fund: Fund; allocationPercent: number }[];
+>>>>>>> a928b6397c6c1c3f963222747ebcc080e19171a8
   sipAmount: number;
   sipDay: number;
   lumpSumAmount: number;
@@ -168,6 +172,7 @@ export class PortfolioLab implements OnDestroy {
     }
   }
 
+<<<<<<< HEAD
   private rebalanceBasket(basket: BasketSlot, triggerSchemeCode?: number): BasketSlot {
     const funds = basket.funds.map(f => ({ ...f }));
     if (funds.length === 0) return { ...basket, funds };
@@ -207,17 +212,27 @@ export class PortfolioLab implements OnDestroy {
     return { ...basket, funds };
   }
 
+=======
+>>>>>>> a928b6397c6c1c3f963222747ebcc080e19171a8
   addFundToBasket(basketId: number, fund: Fund): void {
     this.baskets.update((baskets) =>
       baskets.map((bk) => {
         if (bk.id !== basketId) return bk;
         if (bk.funds.some((f) => f.fund.schemeCode === fund.schemeCode)) return bk;
+<<<<<<< HEAD
         
         const newBk = {
           ...bk,
           funds: [...bk.funds, { fund, allocationPercent: 0, locked: false }],
         };
         return this.rebalanceBasket(newBk);
+=======
+        const remaining = 100 - bk.funds.reduce((s, f) => s + f.allocationPercent, 0);
+        return {
+          ...bk,
+          funds: [...bk.funds, { fund, allocationPercent: Math.max(0, remaining) }],
+        };
+>>>>>>> a928b6397c6c1c3f963222747ebcc080e19171a8
       }),
     );
     this.searchResults.set([]);
@@ -226,6 +241,7 @@ export class PortfolioLab implements OnDestroy {
 
   removeFundFromBasket(basketId: number, schemeCode: number): void {
     this.baskets.update((baskets) =>
+<<<<<<< HEAD
       baskets.map((bk) => {
         if (bk.id !== basketId) return bk;
         const newBk = {
@@ -234,6 +250,13 @@ export class PortfolioLab implements OnDestroy {
         };
         return this.rebalanceBasket(newBk);
       }),
+=======
+      baskets.map((bk) =>
+        bk.id === basketId
+          ? { ...bk, funds: bk.funds.filter((f) => f.fund.schemeCode !== schemeCode) }
+          : bk,
+      ),
+>>>>>>> a928b6397c6c1c3f963222747ebcc080e19171a8
     );
   }
 
@@ -241,17 +264,25 @@ export class PortfolioLab implements OnDestroy {
     this.baskets.update((baskets) =>
       baskets.map((bk) => {
         if (bk.id !== basketId) return bk;
+<<<<<<< HEAD
         const newBk = {
+=======
+        return {
+>>>>>>> a928b6397c6c1c3f963222747ebcc080e19171a8
           ...bk,
           funds: bk.funds.map((f) =>
             f.fund.schemeCode === schemeCode ? { ...f, allocationPercent: value } : f,
           ),
         };
+<<<<<<< HEAD
         return this.rebalanceBasket(newBk, schemeCode);
+=======
+>>>>>>> a928b6397c6c1c3f963222747ebcc080e19171a8
       }),
     );
   }
 
+<<<<<<< HEAD
   toggleFundLock(basketId: number, schemeCode: number): void {
     this.baskets.update((baskets) =>
       baskets.map((bk) => {
@@ -266,6 +297,8 @@ export class PortfolioLab implements OnDestroy {
     );
   }
 
+=======
+>>>>>>> a928b6397c6c1c3f963222747ebcc080e19171a8
   allocationSum(basket: BasketSlot): number {
     return basket.funds.reduce((s, f) => s + (f.allocationPercent || 0), 0);
   }
