@@ -185,109 +185,121 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
     private List<Fund> ParseAmfiMasterData(string rawData)
     {
         if (LooksLikeSchemeWorkbookExport(rawData))
-            return ParseSchemeWorkbookExport(rawData);
-
-        return ParseLegacyNavAll(rawData);
-    }
-
-    private List<Fund> ParseLegacyNavAll(string rawData)
-    {
-        var funds = new List<Fund>();
-        var lines = rawData.Split('\n', StringSplitOptions.None);
-
-        string? currentSchemeType = null;
-        string? currentSchemeCategory = null;
-        string? currentFundHouse = null;
-        bool expectFundHouse = false;
-
-        foreach (var rawLine in lines)
         {
-            var line = rawLine.Trim();
+            return ParseSchemeWorkbookExport(rawData);
+        }
+        else
+        {
+            logger.LogWarning(
+                "AMFI master data format is unrecognized. Expected a scheme workbook export format but it did not match. " +
+                "Falling back to legacy parsing logic, which may fail if the format has significantly changed. " +
+                "Raw data starts with: {RawDataStart}",
+                rawData.Length > 100 ? rawData[..100] : rawData);
 
-            // Blank line — next non-blank, non-header line is a Fund House name
-            if (string.IsNullOrEmpty(line))
-            {
-                expectFundHouse = true;
-                continue;
-            }
-
-            // Section header: "Open Ended Schemes(Debt Scheme - Banking and PSU Fund)"
-            if (line.StartsWith("Open Ended Schemes", StringComparison.OrdinalIgnoreCase)
-                || line.StartsWith("Close Ended Schemes", StringComparison.OrdinalIgnoreCase)
-                || line.StartsWith("Interval Fund Schemes", StringComparison.OrdinalIgnoreCase))
-            {
-                var parenStart = line.IndexOf('(');
-                var parenEnd = line.LastIndexOf(')');
-
-                if (parenStart >= 0 && parenEnd > parenStart)
-                {
-                    currentSchemeType = line[..parenStart].Trim();
-                    currentSchemeCategory = line[(parenStart + 1)..parenEnd].Trim();
-                }
-                else
-                {
-                    currentSchemeType = line;
-                    currentSchemeCategory = null;
-                }
-
-                expectFundHouse = false;
-                continue;
-            }
-
-            // Skip the column header line
-            if (line.StartsWith("Scheme Code", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            // Data row — contains semicolons
-            if (line.Contains(';'))
-            {
-                var parts = line.Split(';');
-                if (parts.Length < 6) continue;
-
-                if (!int.TryParse(parts[0].Trim(), out var schemeCode)) continue;
-
-                var isinGrowth = NullIfDash(parts[1].Trim());
-                var isinDivReinvestment = NullIfDash(parts[2].Trim());
-                var schemeName = parts[3].Trim();
-                var navStr = NullIfDash(parts[4].Trim());
-                var dateStr = NullIfDash(parts[5].Trim());
-
-                decimal? nav = null;
-                if (navStr is not null && decimal.TryParse(navStr, CultureInfo.InvariantCulture, out var parsedNav))
-                    nav = parsedNav;
-
-                DateOnly? navDate = null;
-                if (dateStr is not null && DateOnly.TryParseExact(dateStr, "dd-MMM-yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
-                    navDate = parsedDate;
-
-                funds.Add(new Fund
-                {
-                    SchemeCode = schemeCode,
-                    IsinGrowth = isinGrowth,
-                    IsinDivReinvestment = isinDivReinvestment,
-                    SchemeName = schemeName,
-                    LatestNav = nav,
-                    LatestNavDate = navDate,
-                    FundHouse = currentFundHouse,
-                    SchemeType = currentSchemeType,
-                    SchemeCategory = currentSchemeCategory
-                });
-
-                expectFundHouse = false;
-                continue;
-            }
-
-            // Standalone text line after a blank line = Fund House name
-            if (expectFundHouse)
-            {
-                currentFundHouse = line;
-                expectFundHouse = false;
-            }
+            return new List<Fund>();
         }
 
-        logger.LogInformation("Parsed {Count} funds from AMFI master data", funds.Count);
-        return funds;
+        // return ParseLegacyNavAll(rawData);
     }
+
+    // private List<Fund> ParseLegacyNavAll(string rawData)
+    // {
+    //     var funds = new List<Fund>();
+    //     var lines = rawData.Split('\n', StringSplitOptions.None);
+
+    //     string? currentSchemeType = null;
+    //     string? currentSchemeCategory = null;
+    //     string? currentFundHouse = null;
+    //     bool expectFundHouse = false;
+
+    //     foreach (var rawLine in lines)
+    //     {
+    //         var line = rawLine.Trim();
+
+    //         // Blank line — next non-blank, non-header line is a Fund House name
+    //         if (string.IsNullOrEmpty(line))
+    //         {
+    //             expectFundHouse = true;
+    //             continue;
+    //         }
+
+    //         // Section header: "Open Ended Schemes(Debt Scheme - Banking and PSU Fund)"
+    //         if (line.StartsWith("Open Ended Schemes", StringComparison.OrdinalIgnoreCase)
+    //             || line.StartsWith("Close Ended Schemes", StringComparison.OrdinalIgnoreCase)
+    //             || line.StartsWith("Interval Fund Schemes", StringComparison.OrdinalIgnoreCase))
+    //         {
+    //             var parenStart = line.IndexOf('(');
+    //             var parenEnd = line.LastIndexOf(')');
+
+    //             if (parenStart >= 0 && parenEnd > parenStart)
+    //             {
+    //                 currentSchemeType = line[..parenStart].Trim();
+    //                 currentSchemeCategory = line[(parenStart + 1)..parenEnd].Trim();
+    //             }
+    //             else
+    //             {
+    //                 currentSchemeType = line;
+    //                 currentSchemeCategory = null;
+    //             }
+
+    //             expectFundHouse = false;
+    //             continue;
+    //         }
+
+    //         // Skip the column header line
+    //         if (line.StartsWith("Scheme Code", StringComparison.OrdinalIgnoreCase))
+    //             continue;
+
+    //         // Data row — contains semicolons
+    //         if (line.Contains(';'))
+    //         {
+    //             var parts = line.Split(';');
+    //             if (parts.Length < 6) continue;
+
+    //             if (!int.TryParse(parts[0].Trim(), out var schemeCode)) continue;
+
+    //             var isinGrowth = NullIfDash(parts[1].Trim());
+    //             var isinDivReinvestment = NullIfDash(parts[2].Trim());
+    //             var schemeName = parts[3].Trim();
+    //             var navStr = NullIfDash(parts[4].Trim());
+    //             var dateStr = NullIfDash(parts[5].Trim());
+
+    //             decimal? nav = null;
+    //             if (navStr is not null && decimal.TryParse(navStr, CultureInfo.InvariantCulture, out var parsedNav))
+    //                 nav = parsedNav;
+
+    //             DateOnly? navDate = null;
+    //             if (dateStr is not null && DateOnly.TryParseExact(dateStr, "dd-MMM-yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
+    //                 navDate = parsedDate;
+
+    //             funds.Add(new Fund
+    //             {
+    //                 SchemeCode = schemeCode,
+    //                 IsinGrowth = isinGrowth,
+    //                 IsinDivReinvestment = isinDivReinvestment,
+    //                 SchemeName = schemeName,
+    //                 LatestNav = nav,
+    //                 LatestNavDate = navDate,
+    //                 FundHouse = currentFundHouse,
+    //                 SchemeType = currentSchemeType,
+    //                 SchemeCategory = currentSchemeCategory
+    //             });
+
+    //             expectFundHouse = false;
+    //             continue;
+    //         }
+
+    //         // Standalone text line after a blank line = Fund House name
+    //         if (expectFundHouse)
+    //         {
+    //             currentFundHouse = line;
+    //             expectFundHouse = false;
+    //         }
+    //     }
+
+    //     logger.LogInformation("Parsed {Count} funds from AMFI master data", funds.Count);
+    //     return funds;
+    // }
 
     private List<Fund> ParseSchemeWorkbookExport(string rawData)
     {
@@ -296,17 +308,18 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
 
         foreach (var line in lines)
         {
-            if (line.StartsWith("AMC|", StringComparison.OrdinalIgnoreCase))
+            if (line.StartsWith("AMC|", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("AMC,", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var parts = line.Split('|');
+            var parts = ParseDelimitedLine(line);
             if (parts.Length < 10)
                 continue;
 
             if (!int.TryParse(parts[1].Trim(), out var schemeCode))
                 continue;
 
-            var launchDate = TryParseAmfiDate(parts[7].Trim());
+            var launchDate = TryParseAmfiDate(parts[7].Trim()) ?? TryParseAmfiDate(parts[8].Trim());
             // AMFI "Closure Date" here is NFO subscription close date;
             // it does not mean an open-ended scheme stopped accepting investments or NAV updates.
             var (isinGrowth, isinDivReinvestment) = ParseCombinedIsin(parts[9].Trim());
@@ -314,7 +327,7 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
             funds.Add(new Fund
             {
                 SchemeCode = schemeCode,
-                SchemeName = parts[2].Trim(),
+                SchemeName = parts[5].Trim(),
                 FundHouse = NullIfDash(parts[0].Trim()),
                 SchemeType = NullIfDash(parts[3].Trim()),
                 SchemeCategory = NullIfDash(parts[4].Trim()),
@@ -327,19 +340,46 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
         logger.LogInformation("Parsed {Count} funds from AMFI workbook export", funds.Count);
         return funds;
     }
-
-    private static bool LooksLikeSchemeWorkbookExport(string rawData)
+     private static bool LooksLikeSchemeWorkbookExport(string rawData)
     {
         var firstNonEmpty = rawData
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .FirstOrDefault();
 
         return firstNonEmpty is not null
-               && firstNonEmpty.StartsWith("AMC|", StringComparison.OrdinalIgnoreCase)
+               && (firstNonEmpty.StartsWith("AMC|", StringComparison.OrdinalIgnoreCase)
+                   || firstNonEmpty.StartsWith("AMC,", StringComparison.OrdinalIgnoreCase))
                && firstNonEmpty.Contains("Launch Date", StringComparison.OrdinalIgnoreCase);
     }
+     private static string[] ParseDelimitedLine(string line)
+    {
+        var delimiter = line.Contains('|') ? '|' : ',';
+        var values = new List<string>();
+        var current = new System.Text.StringBuilder();
+        var inQuotes = false;
 
-    private static DateOnly? TryParseAmfiDate(string value)
+        foreach (var ch in line)
+        {
+            if (ch == '"')
+            {
+                inQuotes = !inQuotes;
+                continue;
+            }
+
+            if (ch == delimiter && !inQuotes)
+            {
+                values.Add(current.ToString().Trim());
+                current.Clear();
+                continue;
+            }
+
+            current.Append(ch);
+        }
+
+        values.Add(current.ToString().Trim());
+        return values.ToArray();
+    }
+   private static DateOnly? TryParseAmfiDate(string value)
         => DateOnly.TryParseExact(value, "dd-MMM-yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None,
             out var parsed)
             ? parsed
@@ -358,7 +398,6 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
         var reinvestment = normalized.Length > 12 ? normalized[12..] : null;
         return (NullIfDash(growth), NullIfDash(reinvestment));
     }
-
     private static string? NullIfDash(string value)
         => value is "-" or "" ? null : value;
 }
