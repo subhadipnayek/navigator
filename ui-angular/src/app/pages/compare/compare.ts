@@ -79,11 +79,25 @@ export class Compare implements OnDestroy {
   readonly percentFormat = { type: 'price' as const, precision: 2, minMove: 0.01 };
 
   // Computed signals — cached, only recomputed when selectedFunds changes
+
+  /** True only when every selected fund exposes a navStartDate. */
+  readonly allNavStartDatesAvailable = computed<boolean>(
+    () => this.selectedFunds().length > 0 && this.selectedFunds().every((f) => !!f.navStartDate),
+  );
+
+  /**
+   * The earliest allowed start date for the date-range picker.
+   * Resolves to the navStartDate of the youngest fund (latest navStartDate),
+   * but ONLY when all selected funds have a navStartDate.
+   * Returns null (= no lower bound) if any fund is missing navStartDate.
+   */
   readonly minSelectableDate = computed<Date | null>(() => {
+    if (!this.allNavStartDatesAvailable()) return null;
+
     const dates = this.selectedFunds()
       .map((fund) => this.parseApiDisplayDate(fund.navStartDate))
       .filter((date): date is Date => date !== null)
-      .sort((a, b) => b.getTime() - a.getTime());
+      .sort((a, b) => b.getTime() - a.getTime()); // descending → [0] = latest = youngest fund
 
     return dates[0] ?? null;
   });
@@ -163,7 +177,9 @@ export class Compare implements OnDestroy {
     // Single forkJoin orchestrates all three parallel request batches
     // and owns the comparing state until everything finishes or fails.
     forkJoin({
-      returns: forkJoin(funds.map((f) => this.navService.getReturns(f.schemeCode, startDate, endDate))),
+      returns: forkJoin(
+        funds.map((f) => this.navService.getReturns(f.schemeCode, startDate, endDate)),
+      ),
       growth: forkJoin(
         funds.map((f) =>
           this.navService.getNavHistory(f.schemeCode, {
@@ -299,7 +315,8 @@ export class Compare implements OnDestroy {
 
     if (minDate && this.startDate && this.startDate < minDate) this.startDate = minDate;
     if (maxDate && this.endDate && this.endDate > maxDate) this.endDate = maxDate;
-    if (this.startDate && this.endDate && this.startDate > this.endDate) this.startDate = this.endDate;
+    if (this.startDate && this.endDate && this.startDate > this.endDate)
+      this.startDate = this.endDate;
   }
 
   private parseApiDisplayDate(value: string | null): Date | null {
