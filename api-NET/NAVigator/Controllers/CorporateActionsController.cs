@@ -36,7 +36,7 @@ public class CorporateActionsController(
         if (minDaysSincePrevious is < 1 or > 3650)
             return BadRequest(new { message = "minDaysSincePrevious must be between 1 and 3650." });
 
-        var result = await actionService.DetectAnomaliesAsync(threshold, minDaysSincePrevious, ct);
+        var result = await actionService.DetectAnomaliesAsync(threshold, minDaysSincePrevious, ct: ct);
         return Ok(result);
     }
 
@@ -88,7 +88,7 @@ public class CorporateActionsController(
         var includeGaps = normalizedFilter is "all" or "gaps" or "missing-data" or "needs-review";
 
         var anomalies = includeMovements
-            ? await actionService.DetectAnomaliesAsync(threshold, minGapDays, ct)
+            ? await actionService.DetectAnomaliesAsync(threshold, minGapDays, ct: ct)
             : new List<NavAnomalyDto>();
         var gaps = includeGaps
             ? await navService.DetectAllNavGapsAsync(Math.Max(minGapDays, 7), ct)
@@ -154,7 +154,7 @@ public class CorporateActionsController(
         if (minConfidence is < 0.5m or > 1m)
             return BadRequest(new { message = "minConfidence must be between 0.5 and 1." });
 
-        var result = await actionService.AutoRecordAnomaliesAsync(threshold, minConfidence, ct);
+        var result = await actionService.AutoRecordAnomaliesAsync(threshold, minConfidence, ct: ct);
         return Ok(result);
     }
 

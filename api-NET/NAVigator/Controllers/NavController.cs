@@ -21,7 +21,7 @@ public class NavController(INavService navService) : ControllerBase
         [FromQuery] DateOnly? from = null,
         [FromQuery] DateOnly? to = null,
         [FromQuery] string? interval = null,
-        [FromQuery] bool adjusted = false,
+        [FromQuery] bool adjusted = true,
         CancellationToken ct = default)
     {
         if (from.HasValue && to.HasValue && from.Value >= to.Value)

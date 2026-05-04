@@ -17,7 +17,7 @@ public class CorporateActionService(
     private static readonly decimal[] CommonAdjustmentFactors = [2m, 3m, 4m, 5m, 10m, 100m];
     private const string AutoRecordedPrefix = "[Auto-recorded]";
 
-    public async Task<List<NavAnomalyDto>> DetectAnomaliesAsync(decimal thresholdPercent = 30m, int minDaysSincePrevious = 1, CancellationToken ct = default)
+    public async Task<List<NavAnomalyDto>> DetectAnomaliesAsync(decimal thresholdPercent = 30m, int minDaysSincePrevious = 1, int? specificSchemeCode = null, CancellationToken ct = default)
     {
         logger.LogInformation(
             "Detecting NAV anomalies with threshold {Threshold}% and minimum NAV point spacing {MinDays} day(s)",
@@ -26,11 +26,13 @@ public class CorporateActionService(
 
         // Use SQL LAG() window function to compute day-over-day changes in the database,
         // avoiding loading the entire NavHistories table into memory.
-        var sql = @"
+        var whereClause = specificSchemeCode.HasValue ? $"WHERE scheme_code = {specificSchemeCode.Value}" : "";
+        var sql = $@"
             SELECT scheme_code AS scheme_code, date AS current_date2, nav AS current_nav,
                    LAG(date) OVER (PARTITION BY scheme_code ORDER BY date) AS previous_date,
                    LAG(nav)  OVER (PARTITION BY scheme_code ORDER BY date) AS previous_nav
             FROM ""NavHistories""
+            {whereClause}
             ORDER BY scheme_code, date";
 
         var rawRows = await db.Database.SqlQueryRaw<AnomalyRawRow>(sql).ToListAsync(ct);
@@ -109,9 +111,10 @@ public class CorporateActionService(
     public async Task<AnomalyAutoRecordResultDto> AutoRecordAnomaliesAsync(
         decimal thresholdPercent = 30m,
         decimal minConfidence = 0.9m,
+        int? specificSchemeCode = null,
         CancellationToken ct = default)
     {
-        var anomalies = await DetectAnomaliesAsync(thresholdPercent, ct: ct);
+        var anomalies = await DetectAnomaliesAsync(thresholdPercent, specificSchemeCode: specificSchemeCode, ct: ct);
         var eligible = anomalies
             .Where(a => !a.HasCorporateAction
                         && a.IsAutoRecordable
@@ -132,7 +135,7 @@ public class CorporateActionService(
                 ActionDate = actionDate,
                 ActionType = anomaly.SuggestedActionType!,
                 AdjustmentFactor = anomaly.SuggestedAdjustmentFactor!.Value,
-                Notes = $"{AutoRecordedPrefix} {anomaly.SuggestedNotes}"
+                Notes = $"{AutoRecordedPrefix} {anomaly.SuggestedNotes} Auto-recorded actions still need post-record review."
             });
 
             if (created is not null)
@@ -308,7 +311,7 @@ public class CorporateActionService(
                 "Split",
                 adjustmentFactor,
                 isNearExact
-                    ? $"NAV ratio matches a {nearestFactor.Value:0.####}x action over {daysSincePrevious} day(s). Auto-recorded actions still need post-record review."
+                    ? $"NAV ratio matches a {nearestFactor.Value:0.####}x action over {daysSincePrevious} day(s). Action can be auto-recorded."
                     : $"NAV ratio is close to {nearestFactor.Value:0.####}x over {daysSincePrevious} day(s). Review before recording.",
                 isNearExact && !isSuspiciousGap ? 0.98m : 0.84m,
                 "High",

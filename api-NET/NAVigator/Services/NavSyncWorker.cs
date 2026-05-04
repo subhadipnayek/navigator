@@ -4,6 +4,7 @@ using NAVigator.Services;
 
 namespace NAVigator.Services;
 
+/*
 public class NavSyncWorker(
     IServiceProvider serviceProvider,
     ILogger<NavSyncWorker> logger) : BackgroundService
@@ -16,8 +17,16 @@ public class NavSyncWorker(
     {
         logger.LogInformation("NavSyncWorker starting...");
 
-        // Wait a bit before first run to let the API start up completely
-        await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
+        try
+        {
+            // Wait a bit before first run to let the API start up completely
+            await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected during shutdown
+            return;
+        }
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -30,8 +39,16 @@ public class NavSyncWorker(
                 logger.LogError(ex, "An error occurred while syncing stale funds.");
             }
 
-            // Sleep until next polling cycle
-            await Task.Delay(PollingInterval, stoppingToken);
+            try
+            {
+                // Sleep until next polling cycle
+                await Task.Delay(PollingInterval, stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected during shutdown
+                break;
+            }
         }
 
         logger.LogInformation("NavSyncWorker stopping...");
@@ -88,5 +105,11 @@ public class NavSyncWorker(
         }
 
         logger.LogInformation("Completed background sync batch of {Count} funds.", staleFunds.Count);
+
+        // Also run a global auto-record sweep in case there are eligible anomalies
+        // that weren't caught during the sync phase.
+        var actionService = scope.ServiceProvider.GetRequiredService<ICorporateActionService>();
+        await actionService.AutoRecordAnomaliesAsync(ct: stoppingToken);
     }
 }
+*/

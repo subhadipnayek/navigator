@@ -1,0 +1,432 @@
+/* ── Layout ── */
+:host {
+  display: grid;
+  gap: 20px;
+  width: min(1180px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 32px 0 72px;
+}
+
+.lab-shell {
+  display: grid;
+  gap: 24px;
+}
+
+/* ── Header ── */
+.lab-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.lab-header-text h1 {
+  margin: 0 0 4px;
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.lab-header-text p {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.lab-dates {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.lab-dates .date-field {
+  width: 170px;
+  margin-right: 0;
+}
+
+/* ── Error bar ── */
+.error-bar {
+  padding: 11px 16px;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid rgba(185, 28, 28, 0.25);
+  color: #991b1b;
+  font-size: 14px;
+}
+
+/* ── Date hint (auto-clamp notification) ── */
+.date-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  background: #eff6ff;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  color: #1e40af;
+  font-size: 13px;
+}
+
+.date-hint mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.date-hint-range {
+  margin-left: auto;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── Simulate actions ── */
+.simulate-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.basket-select-field {
+  width: 200px;
+  margin-right: 0;
+}
+
+/* ── Basket grid ── */
+.baskets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.basket-card {
+  position: relative;
+}
+
+.basket-name-input {
+  border: none;
+  outline: none;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  background: transparent;
+  width: 100%;
+  font-family: inherit;
+}
+
+.basket-name-input:focus {
+  border-bottom: 2px solid #0f766e;
+}
+
+.remove-basket-btn {
+  position: absolute !important;
+  top: 8px;
+  right: 8px;
+  color: #94a3b8 !important;
+}
+
+.alloc-warn {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+/* ── Fund search dropdown ── */
+.fund-search-field {
+  width: 100%;
+  margin-right: 0;
+}
+
+.search-dropdown {
+  margin-bottom: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12) !important;
+  z-index: 10;
+}
+
+.search-result-item {
+  cursor: pointer;
+}
+
+.search-result-item:hover {
+  background: #f0fdf4;
+}
+
+/* ── Fund allocation rows ── */
+.fund-rows {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.fund-row {
+  display: grid;
+  grid-template-columns: 1fr 72px 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f8faf9;
+  border: 1px solid rgba(15, 23, 42, 0.07);
+}
+
+.fund-info {
+  min-width: 0;
+}
+
+.fund-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fund-meta {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alloc-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.alloc-input {
+  width: 48px;
+  padding: 4px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  text-align: right;
+  color: #0f172a;
+  background: #ffffff;
+  outline: none;
+}
+
+.alloc-input:focus {
+  border-color: #0f766e;
+}
+
+.alloc-pct {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.remove-fund-btn {
+  color: #94a3b8 !important;
+  width: 28px !important;
+  height: 28px !important;
+}
+
+.empty-hint {
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+/* ── Basket config ── */
+.basket-config {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.basket-config .config-field {
+  width: 100%;
+  margin-right: 0;
+}
+
+/* ── Add basket btn ── */
+.add-basket-btn {
+  height: 56px;
+  border: 2px dashed #cbd5e1 !important;
+  border-radius: 12px !important;
+  color: #64748b !important;
+  font-size: 14px;
+  align-self: center;
+}
+
+.add-basket-btn:hover:not(:disabled) {
+  border-color: #0f766e !important;
+  color: #0f766e !important;
+  background: #f0fdf4 !important;
+}
+
+/* ── Action bar ── */
+.action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 64px;
+  z-index: 4;
+}
+
+.compare-actions,
+.rolling-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.normalize-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+}
+
+.period-field {
+  width: 110px;
+  margin-right: 0;
+}
+
+/* ── Results section ── */
+.results-section {
+  display: grid;
+  gap: 20px;
+}
+
+/* ── Stat tiles ── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.stat-tile {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.stat-tile.primary {
+  background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
+  border-color: transparent;
+}
+
+.stat-tile.primary .stat-label,
+.stat-tile.primary strong {
+  color: #ffffff;
+}
+
+.stat-label {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.stat-tile strong {
+  display: block;
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+/* ── Pos/neg colours ── */
+.pos { color: #0f766e !important; }
+.neg { color: #b91c1c !important; }
+
+/* ── Chart card ── */
+.chart-card app-line-chart {
+  display: block;
+  margin-top: 4px;
+}
+
+/* ── What-if callout ── */
+.insight-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  background: #ecfdf5;
+  border: 1px solid rgba(15, 118, 110, 0.25);
+  color: #0f513f;
+}
+
+.insight-callout p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #1e4035;
+}
+
+.insight-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #0f766e;
+}
+
+.insight-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chip-gold { background: #fefce8; color: #713f12; border: 1px solid #fde68a; }
+.chip-blue { background: #eff6ff; color: #1e3a8a; border: 1px solid #bfdbfe; }
+.chip-green { background: #f0fdf4; color: #14532d; border: 1px solid #bbf7d0; }
+
+/* ── Responsive ── */
+@media (max-width: 680px) {
+  :host {
+    width: calc(100% - 24px);
+    padding: 20px 0 56px;
+  }
+
+  .baskets-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .basket-config {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .lab-header {
+    flex-direction: column;
+  }
+
+  .action-bar {
+    top: 0;
+  }
+}

@@ -28,7 +28,7 @@ export class NavService {
     if (options?.from) params = params.set('from', options.from);
     if (options?.to) params = params.set('to', options.to);
     if (options?.interval) params = params.set('interval', options.interval);
-    if (options?.adjusted) params = params.set('adjusted', 'true');
+    if (options?.adjusted !== undefined) params = params.set('adjusted', options.adjusted.toString());
     return this.http.get<NavDataResponse>(`${this.api.baseUrl}/api/nav/${schemeCode}`, { params });
   }
 
