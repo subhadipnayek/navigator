@@ -8,7 +8,8 @@ namespace NAVigator.Services;
 
 public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiService> logger) : IAmfiService
 {
-    private const string AmfiMasterUrl = "https://portal.amfiindia.com/DownloadSchemeData_Po.aspx?mf=0";
+    // private const string AmfiMasterUrl = "https://portal.amfiindia.com/DownloadSchemeData_Po.aspx?mf=0";
+    private const string AmfiMasterUrl = "https://portal.amfiindia.com/spages/NAVAll.txt";
     private const string AmfiNavHistoryUrl = "https://www.amfiindia.com/api/nav-history";
     private const int NavHistoryChunkYears = 4;
     private const int NavHistoryParallelChunks = 2;
@@ -184,122 +185,148 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
 
     private List<Fund> ParseAmfiMasterData(string rawData)
     {
-        if (LooksLikeSchemeWorkbookExport(rawData))
+        try
         {
-            return ParseSchemeWorkbookExport(rawData);
+            if (LooksLikeSchemeWorkbookExport(rawData))
+            {
+                return ParseSchemeWorkbookExport(rawData);
+            }
+            else
+            {
+                return ParseLegacyNavAll(rawData);
+
+            }
+
         }
-        else
+        catch (Exception ex)
         {
             logger.LogWarning(
-                "AMFI master data format is unrecognized. Expected a scheme workbook export format but it did not match. " +
-                "Falling back to legacy parsing logic, which may fail if the format has significantly changed. " +
-                "Raw data starts with: {RawDataStart}",
-                rawData.Length > 100 ? rawData[..100] : rawData);
+                ex,
+                "Failed to parse AMFI master data. This may be due to an unexpected format change in the source data. " +
+                "Please verify the format of the data at {Url} and update the parsing logic if necessary.",
+                AmfiMasterUrl);
 
             return new List<Fund>();
         }
-
-        // return ParseLegacyNavAll(rawData);
     }
 
-    // private List<Fund> ParseLegacyNavAll(string rawData)
-    // {
-    //     var funds = new List<Fund>();
-    //     var lines = rawData.Split('\n', StringSplitOptions.None);
+    private List<Fund> ParseLegacyNavAll(string rawData)
+    {
+        var funds = new List<Fund>();
 
-    //     string? currentSchemeType = null;
-    //     string? currentSchemeCategory = null;
-    //     string? currentFundHouse = null;
-    //     bool expectFundHouse = false;
+        string? currentSchemeType = null;
+        string? currentSchemeCategory = null;
+        string? currentFundHouse = null;
+        bool expectFundHouse = false;
 
-    //     foreach (var rawLine in lines)
-    //     {
-    //         var line = rawLine.Trim();
+        using var reader = new StringReader(rawData);
+        string? rawLine;
 
-    //         // Blank line — next non-blank, non-header line is a Fund House name
-    //         if (string.IsNullOrEmpty(line))
-    //         {
-    //             expectFundHouse = true;
-    //             continue;
-    //         }
+        while ((rawLine = reader.ReadLine()) != null)
+        {
+            var line = rawLine.Trim();
 
-    //         // Section header: "Open Ended Schemes(Debt Scheme - Banking and PSU Fund)"
-    //         if (line.StartsWith("Open Ended Schemes", StringComparison.OrdinalIgnoreCase)
-    //             || line.StartsWith("Close Ended Schemes", StringComparison.OrdinalIgnoreCase)
-    //             || line.StartsWith("Interval Fund Schemes", StringComparison.OrdinalIgnoreCase))
-    //         {
-    //             var parenStart = line.IndexOf('(');
-    //             var parenEnd = line.LastIndexOf(')');
+            // Blank line — next non-blank, non-header line may be a Fund House name
+            if (string.IsNullOrEmpty(line))
+            {
+                expectFundHouse = true;
+                continue;
+            }
 
-    //             if (parenStart >= 0 && parenEnd > parenStart)
-    //             {
-    //                 currentSchemeType = line[..parenStart].Trim();
-    //                 currentSchemeCategory = line[(parenStart + 1)..parenEnd].Trim();
-    //             }
-    //             else
-    //             {
-    //                 currentSchemeType = line;
-    //                 currentSchemeCategory = null;
-    //             }
+            // Section header: "Open Ended Schemes(Debt Scheme - Banking and PSU Fund)"
+            if (line.StartsWith("Open Ended Schemes", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("Close Ended Schemes", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("Interval Fund Schemes", StringComparison.OrdinalIgnoreCase))
+            {
+                var parenStart = line.IndexOf('(');
+                var parenEnd = line.LastIndexOf(')');
 
-    //             expectFundHouse = false;
-    //             continue;
-    //         }
+                currentSchemeType = parenStart >= 0
+                    ? line[..parenStart].Trim()
+                    : line;
 
-    //         // Skip the column header line
-    //         if (line.StartsWith("Scheme Code", StringComparison.OrdinalIgnoreCase))
-    //             continue;
+                currentSchemeCategory = (parenStart >= 0 && parenEnd > parenStart)
+                    ? line[(parenStart + 1)..parenEnd].Trim()
+                    : null;
 
-    //         // Data row — contains semicolons
-    //         if (line.Contains(';'))
-    //         {
-    //             var parts = line.Split(';');
-    //             if (parts.Length < 6) continue;
+                // FIX #1: Reset fund house on every new section to avoid stale carryover
+                currentFundHouse = null;
+                expectFundHouse = false;
+                continue;
+            }
 
-    //             if (!int.TryParse(parts[0].Trim(), out var schemeCode)) continue;
+            // Skip the column header line
+            if (line.StartsWith("Scheme Code", StringComparison.OrdinalIgnoreCase))
+                continue;
 
-    //             var isinGrowth = NullIfDash(parts[1].Trim());
-    //             var isinDivReinvestment = NullIfDash(parts[2].Trim());
-    //             var schemeName = parts[3].Trim();
-    //             var navStr = NullIfDash(parts[4].Trim());
-    //             var dateStr = NullIfDash(parts[5].Trim());
+            // Data row — semicolon-delimited
+            if (line.Contains(';'))
+            {
+                var parts = line.Split(';');
 
-    //             decimal? nav = null;
-    //             if (navStr is not null && decimal.TryParse(navStr, CultureInfo.InvariantCulture, out var parsedNav))
-    //                 nav = parsedNav;
+                // FIX #3: Warn on malformed rows instead of silently dropping
+                if (parts.Length < 6)
+                {
+                    logger.LogWarning("Skipping malformed data line (expected 6 columns, got {Count}): {Line}",
+                        parts.Length, line);
+                    continue;
+                }
 
-    //             DateOnly? navDate = null;
-    //             if (dateStr is not null && DateOnly.TryParseExact(dateStr, "dd-MMM-yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
-    //                 navDate = parsedDate;
+                if (!int.TryParse(parts[0].Trim(), out var schemeCode))
+                {
+                    logger.LogWarning("Skipping line with non-numeric scheme code: {Line}", line);
+                    continue;
+                }
 
-    //             funds.Add(new Fund
-    //             {
-    //                 SchemeCode = schemeCode,
-    //                 IsinGrowth = isinGrowth,
-    //                 IsinDivReinvestment = isinDivReinvestment,
-    //                 SchemeName = schemeName,
-    //                 LatestNav = nav,
-    //                 LatestNavDate = navDate,
-    //                 FundHouse = currentFundHouse,
-    //                 SchemeType = currentSchemeType,
-    //                 SchemeCategory = currentSchemeCategory
-    //             });
+                // FIX #4: Renamed isinGrowth → isinDivPayout to match the actual column header
+                // "ISIN Div Payout/ ISIN Growth" — dual-purpose column (payout ISIN for IDCW schemes,
+                // growth ISIN for growth schemes). IsinDivPayout matches the DB column name better.
+                var isinGrowth = NullIfDash(parts[1].Trim());
+                var isinDivReinvestment = NullIfDash(parts[2].Trim());
+                var schemeName = NullIfDash(parts[3].Trim()) ?? string.Empty;
+                var navStr = NullIfDash(parts[4].Trim());
+                var dateStr = NullIfDash(parts[5].Trim());
 
-    //             expectFundHouse = false;
-    //             continue;
-    //         }
+                decimal? nav = navStr is not null
+                    && decimal.TryParse(navStr, CultureInfo.InvariantCulture, out var parsedNav)
+                    ? parsedNav
+                    : null;
 
-    //         // Standalone text line after a blank line = Fund House name
-    //         if (expectFundHouse)
-    //         {
-    //             currentFundHouse = line;
-    //             expectFundHouse = false;
-    //         }
-    //     }
+                DateOnly? navDate = dateStr is not null
+                    && DateOnly.TryParseExact(dateStr, "dd-MMM-yyyy", CultureInfo.InvariantCulture,
+                        DateTimeStyles.None, out var parsedDate)
+                    ? parsedDate
+                    : null;
 
-    //     logger.LogInformation("Parsed {Count} funds from AMFI master data", funds.Count);
-    //     return funds;
-    // }
+                funds.Add(new Fund
+                {
+                    SchemeCode = schemeCode,
+                    IsinGrowth = isinGrowth,       // renamed from IsinGrowth
+                    IsinDivReinvestment = isinDivReinvestment,
+                    SchemeName = schemeName,
+                    LatestNav = nav,
+                    LatestNavDate = navDate,
+                    FundHouse = currentFundHouse,
+                    SchemeType = currentSchemeType,
+                    SchemeCategory = currentSchemeCategory
+                });
+
+                expectFundHouse = false;
+                continue;
+            }
+
+            // FIX #2: Only treat as Fund House if we're inside a valid section,
+            // preventing stray lines outside any section from poisoning state
+            if (expectFundHouse && currentSchemeType is not null)
+            {
+                currentFundHouse = line;
+                expectFundHouse = false;
+            }
+        }
+
+        logger.LogInformation("Parsed {Count} funds from AMFI master data", funds.Count);
+        return funds;
+    }
 
     private List<Fund> ParseSchemeWorkbookExport(string rawData)
     {
@@ -340,7 +367,7 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
         logger.LogInformation("Parsed {Count} funds from AMFI workbook export", funds.Count);
         return funds;
     }
-     private static bool LooksLikeSchemeWorkbookExport(string rawData)
+    private static bool LooksLikeSchemeWorkbookExport(string rawData)
     {
         var firstNonEmpty = rawData
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -351,7 +378,7 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
                    || firstNonEmpty.StartsWith("AMC,", StringComparison.OrdinalIgnoreCase))
                && firstNonEmpty.Contains("Launch Date", StringComparison.OrdinalIgnoreCase);
     }
-     private static string[] ParseDelimitedLine(string line)
+    private static string[] ParseDelimitedLine(string line)
     {
         var delimiter = line.Contains('|') ? '|' : ',';
         var values = new List<string>();
@@ -379,11 +406,11 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
         values.Add(current.ToString().Trim());
         return values.ToArray();
     }
-   private static DateOnly? TryParseAmfiDate(string value)
-        => DateOnly.TryParseExact(value, "dd-MMM-yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None,
-            out var parsed)
-            ? parsed
-            : null;
+    private static DateOnly? TryParseAmfiDate(string value)
+         => DateOnly.TryParseExact(value, "dd-MMM-yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None,
+             out var parsed)
+             ? parsed
+             : null;
 
     private static (string? IsinGrowth, string? IsinDivReinvestment) ParseCombinedIsin(string value)
     {

@@ -9,3 +9,4 @@ Desktop.ini
 # Secrets / local overrides
 *.env
 .env.local
+api-NET/NAVigator/Migrations/
