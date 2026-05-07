@@ -22,7 +22,7 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
     {
         var client = httpClientFactory.CreateClient("Amfi");
         var response = await client.GetStringAsync(AmfiMasterUrl, ct);
-        return ParseAmfiMasterData(response);
+        return await ParseAmfiMasterData(response);
     }
 
     public async Task<MfApiResponse?> FetchNavHistoryAsync(
@@ -183,7 +183,7 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
         return $"{AmfiNavHistoryUrl}?query_type=historical_period&from_date={fromDate}&to_date={toDate}&sd_id={schemeCode}";
     }
 
-    private List<Fund> ParseAmfiMasterData(string rawData)
+    private async Task<List<Fund>> ParseAmfiMasterData(string rawData)
     {
         try
         {
@@ -193,7 +193,7 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
             }
             else
             {
-                return ParseLegacyNavAll(rawData);
+                return await ParseLegacyNavAllAsync(new StringReader(rawData));
 
             }
 
@@ -210,30 +210,28 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
         }
     }
 
-    private List<Fund> ParseLegacyNavAll(string rawData)
+    private async Task<List<Fund>> ParseLegacyNavAllAsync(TextReader reader)
     {
         var funds = new List<Fund>();
+        var seenSchemeCodes = new HashSet<int>();
 
         string? currentSchemeType = null;
         string? currentSchemeCategory = null;
         string? currentFundHouse = null;
         bool expectFundHouse = false;
 
-        using var reader = new StringReader(rawData);
         string? rawLine;
 
-        while ((rawLine = reader.ReadLine()) != null)
+        while ((rawLine = await reader.ReadLineAsync()) != null)
         {
             var line = rawLine.Trim();
 
-            // Blank line — next non-blank, non-header line may be a Fund House name
             if (string.IsNullOrEmpty(line))
             {
                 expectFundHouse = true;
                 continue;
             }
 
-            // Section header: "Open Ended Schemes(Debt Scheme - Banking and PSU Fund)"
             if (line.StartsWith("Open Ended Schemes", StringComparison.OrdinalIgnoreCase)
                 || line.StartsWith("Close Ended Schemes", StringComparison.OrdinalIgnoreCase)
                 || line.StartsWith("Interval Fund Schemes", StringComparison.OrdinalIgnoreCase))
@@ -249,25 +247,24 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
                     ? line[(parenStart + 1)..parenEnd].Trim()
                     : null;
 
-                // FIX #1: Reset fund house on every new section to avoid stale carryover
                 currentFundHouse = null;
                 expectFundHouse = false;
                 continue;
             }
 
-            // Skip the column header line
             if (line.StartsWith("Scheme Code", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            // Data row — semicolon-delimited
             if (line.Contains(';'))
             {
-                var parts = line.Split(';');
+                // Fix #5: cap split to 7 — exposes scheme names with semicolons
+                // via the malformed row check instead of silently shifting columns
+                var parts = line.Split(';', 7);
 
-                // FIX #3: Warn on malformed rows instead of silently dropping
                 if (parts.Length < 6)
                 {
-                    logger.LogWarning("Skipping malformed data line (expected 6 columns, got {Count}): {Line}",
+                    logger.LogWarning(
+                        "Skipping malformed data line (expected 6 columns, got {Count}): {Line}",
                         parts.Length, line);
                     continue;
                 }
@@ -278,30 +275,43 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
                     continue;
                 }
 
-                // FIX #4: Renamed isinGrowth → isinDivPayout to match the actual column header
-                // "ISIN Div Payout/ ISIN Growth" — dual-purpose column (payout ISIN for IDCW schemes,
-                // growth ISIN for growth schemes). IsinDivPayout matches the DB column name better.
+                // Fix #2: duplicate scheme code guard
+                if (!seenSchemeCodes.Add(schemeCode))
+                {
+                    logger.LogWarning("Duplicate scheme code {Code} encountered, skipping", schemeCode);
+                    continue;
+                }
+
                 var isinGrowth = NullIfDash(parts[1].Trim());
                 var isinDivReinvestment = NullIfDash(parts[2].Trim());
-                var schemeName = NullIfDash(parts[3].Trim()) ?? string.Empty;
+                var rawSchemeName = NullIfDash(parts[3].Trim());
                 var navStr = NullIfDash(parts[4].Trim());
                 var dateStr = NullIfDash(parts[5].Trim());
 
+                // Fix #7: warn on empty/dash scheme name
+                if (rawSchemeName is null)
+                {
+                    logger.LogWarning("Scheme code {Code} has empty scheme name", schemeCode);
+                }
+                var schemeName = rawSchemeName ?? string.Empty;
+
+                // Fix #3: treat 0.0000 as null — no valid fund has a zero NAV
                 decimal? nav = navStr is not null
                     && decimal.TryParse(navStr, CultureInfo.InvariantCulture, out var parsedNav)
-                    ? parsedNav
-                    : null;
+                    && parsedNav > 0
+                        ? parsedNav
+                        : null;
 
                 DateOnly? navDate = dateStr is not null
                     && DateOnly.TryParseExact(dateStr, "dd-MMM-yyyy", CultureInfo.InvariantCulture,
                         DateTimeStyles.None, out var parsedDate)
-                    ? parsedDate
-                    : null;
+                        ? parsedDate
+                        : null;
 
                 funds.Add(new Fund
                 {
                     SchemeCode = schemeCode,
-                    IsinGrowth = isinGrowth,       // renamed from IsinGrowth
+                    IsinGrowth = isinGrowth,
                     IsinDivReinvestment = isinDivReinvestment,
                     SchemeName = schemeName,
                     LatestNav = nav,
@@ -315,9 +325,11 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
                 continue;
             }
 
-            // FIX #2: Only treat as Fund House if we're inside a valid section,
-            // preventing stray lines outside any section from poisoning state
-            if (expectFundHouse && currentSchemeType is not null)
+            // Fix #4: tighter fund house heuristic — must be inside a valid section
+            // and the line must look like a fund house name (contains "Fund" or "Asset")
+            if (expectFundHouse
+                && currentSchemeType is not null
+                && LooksLikeFundHouse(line))
             {
                 currentFundHouse = line;
                 expectFundHouse = false;
@@ -327,6 +339,12 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
         logger.LogInformation("Parsed {Count} funds from AMFI master data", funds.Count);
         return funds;
     }
+
+    // Fix #4: heuristic guard — real fund house names always contain one of these
+    private static bool LooksLikeFundHouse(string line) =>
+        line.Contains("Mutual Fund", StringComparison.OrdinalIgnoreCase)
+        || line.Contains("Asset Management", StringComparison.OrdinalIgnoreCase)
+        || line.Contains("AMC", StringComparison.OrdinalIgnoreCase);
 
     private List<Fund> ParseSchemeWorkbookExport(string rawData)
     {

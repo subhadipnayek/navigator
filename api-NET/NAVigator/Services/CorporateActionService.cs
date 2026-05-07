@@ -302,7 +302,8 @@ public class CorporateActionService(
         if (nearestFactor.HasValue)
         {
             var relativeDifference = Math.Abs(ratio - nearestFactor.Value) / nearestFactor.Value;
-            var isNearExact = relativeDifference <= 0.01m;
+            var exactThreshold = nearestFactor.Value >= 10m ? 0.02m : 0.01m;
+            var isNearExact = relativeDifference <= exactThreshold;
             var adjustmentFactor = changePercent < 0
                 ? nearestFactor.Value
                 : Math.Round(1m / nearestFactor.Value, 8);
@@ -346,10 +347,9 @@ public class CorporateActionService(
         foreach (var factor in CommonAdjustmentFactors)
         {
             var relativeDifference = Math.Abs(ratio - factor) / factor;
-            if (relativeDifference <= 0.08m)
+            if (relativeDifference <= 0.1m)
                 return factor;
         }
-
         return null;
     }
 
