@@ -134,7 +134,9 @@ export class AdminSync implements OnInit {
     this.fundService.syncFundNavHistory(fund.schemeCode).subscribe({
       next: (res) => {
         this.actionBusy.set(null);
-        this.toast.success(`NAV synced - ${res.data.length.toLocaleString()} stored rows available`);
+        this.toast.success(
+          `NAV synced - ${res.data.length.toLocaleString()} stored rows available`,
+        );
         this.refreshAdminData();
       },
       error: (err) => {
@@ -167,7 +169,9 @@ export class AdminSync implements OnInit {
   }
 
   deleteFund(fund: AdminFundStorage): void {
-    if (!window.confirm(`Delete ${fund.schemeName} and all related NAV/actions from the database?`)) {
+    if (
+      !window.confirm(`Delete ${fund.schemeName} and all related NAV/actions from the database?`)
+    ) {
       return;
     }
 
@@ -185,6 +189,33 @@ export class AdminSync implements OnInit {
         this.actionBusy.set(null);
         this.error.set(err.error?.message ?? 'Failed to delete fund');
         this.toast.error('Failed to delete fund');
+      },
+    });
+  }
+
+  deleteAllFunds(): void {
+    if (
+      !window.confirm(
+        `Delete ALL funds and related NAV/actions from the database? This cannot be undone!`,
+      )
+    ) {
+      return;
+    }
+
+    const key = this.busyKey('delete-fund', -1);
+    this.actionBusy.set(key);
+    this.error.set(null);
+
+    this.fundService.deleteAllFunds().subscribe({
+      next: () => {
+        this.actionBusy.set(null);
+        this.toast.success('All funds deleted from database');
+        this.refreshAdminData();
+      },
+      error: (err) => {
+        this.actionBusy.set(null);
+        this.error.set(err.error?.message ?? 'Failed to delete all funds');
+        this.toast.error('Failed to delete all funds');
       },
     });
   }

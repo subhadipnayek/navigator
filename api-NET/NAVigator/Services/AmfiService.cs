@@ -374,7 +374,21 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
             // AMFI "Closure Date" here is NFO subscription close date;
             // it does not mean an open-ended scheme stopped accepting investments or NAV updates.
             var (isinGrowth, isinDivReinvestment) = ParseCombinedIsin(parts[9].Trim());
+            var isOpenEnded = parts[3].Trim().Equals("Open Ended", StringComparison.OrdinalIgnoreCase);
 
+            var isEtf = parts[5].Trim().IndexOf("etf", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            var isDirectGrowth = MatchesFilter(
+                parts[5].Trim(),
+                mustContain: new[] { "direct", "growth" },
+                mustNotContain: new[] { "idcw", "dividend", "regular" },
+                matchAll: true
+            );
+
+            if (!isOpenEnded) continue;
+
+            // ETFs skip the direct/growth filter — they're always growth by nature
+            if (!isEtf && !isDirectGrowth) continue;
             funds.Add(new Fund
             {
                 SchemeCode = schemeCode,
@@ -391,7 +405,18 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
         logger.LogInformation("Parsed {Count} funds from AMFI workbook export", funds.Count);
         return funds;
     }
+    bool MatchesFilter(string line, string[] mustContain, string[] mustNotContain, bool matchAll = false)
+    {
+        var normalized = line.Replace("-", " ");
 
+        bool hasMatch = matchAll
+            ? mustContain.All(word => normalized.IndexOf(word, StringComparison.OrdinalIgnoreCase) >= 0)  // AND
+            : mustContain.Any(word => normalized.IndexOf(word, StringComparison.OrdinalIgnoreCase) >= 0); // OR
+
+        bool hasNone = mustNotContain.All(word => normalized.IndexOf(word, StringComparison.OrdinalIgnoreCase) < 0);
+
+        return hasMatch && hasNone;
+    }
     private async Task<List<AmfiLatestNavSnapshot>> ParseLatestNavAllAsync(TextReader reader)
     {
         var snapshots = new List<AmfiLatestNavSnapshot>();

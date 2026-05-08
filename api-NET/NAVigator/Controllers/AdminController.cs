@@ -185,6 +185,15 @@ public class AdminController(
         await db.SaveChangesAsync(ct);
         return NoContent();
     }
+    [HttpDelete("funds/all")]
+    public async Task<IActionResult> DeleteFunds(CancellationToken ct)
+    {
+        await db.NavHistories.ExecuteDeleteAsync(ct);
+        await db.CorporateActions.ExecuteDeleteAsync(ct);
+        await db.NavSyncTrackers.ExecuteDeleteAsync(ct);
+        await db.Funds.ExecuteDeleteAsync(ct);
+        return NoContent();
+    }
 
     private static string? FormatDate(DateOnly? date)
     {
