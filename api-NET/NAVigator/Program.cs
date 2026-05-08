@@ -123,18 +123,18 @@ await db.Database.MigrateAsync();
 
 // Backfill cached counts if they haven't been populated yet
 await db.Database.ExecuteSqlRawAsync(@"
-    UPDATE ""Funds"" f SET
+    UPDATE ""NavSyncTrackers"" t SET
         nav_history_count = sub.cnt,
         corporate_action_count = sub.ca_cnt
     FROM (
-        SELECT f2.scheme_code,
-               (SELECT COUNT(*) FROM ""NavHistories"" n WHERE n.scheme_code = f2.scheme_code) AS cnt,
-               (SELECT COUNT(*) FROM ""CorporateActions"" ca WHERE ca.scheme_code = f2.scheme_code) AS ca_cnt
-        FROM ""Funds"" f2
-        WHERE f2.nav_history_count = 0
+        SELECT t2.scheme_code,
+               (SELECT COUNT(*) FROM ""NavHistories"" n WHERE n.scheme_code = t2.scheme_code) AS cnt,
+               (SELECT COUNT(*) FROM ""CorporateActions"" ca WHERE ca.scheme_code = t2.scheme_code) AS ca_cnt
+        FROM ""NavSyncTrackers"" t2
+        WHERE t2.nav_history_count = 0
     ) sub
-    WHERE f.scheme_code = sub.scheme_code
-      AND f.nav_history_count = 0");
+    WHERE t.scheme_code = sub.scheme_code
+      AND t.nav_history_count = 0");
 
 app.MapOpenApi();
 

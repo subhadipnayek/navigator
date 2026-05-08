@@ -9,6 +9,7 @@ export interface Fund {
   latestNavDate: string | null; // "02-Apr-2026"
   navStartDate: string | null; // "dd-MM-yyyy"
   navEndDate: string | null; // "dd-MM-yyyy"
+  launchDate: string | null; // "dd-MM-yyyy"
   lastSuccessfulNavCheckUtc: string | null;
   navStatus: 'Active' | 'NeedsCheck' | 'LikelyDiscontinued' | 'Unknown';
   isLikelyDiscontinued: boolean;

@@ -8,8 +8,8 @@ namespace NAVigator.Services;
 
 public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiService> logger) : IAmfiService
 {
-    // private const string AmfiMasterUrl = "https://portal.amfiindia.com/DownloadSchemeData_Po.aspx?mf=0";
-    private const string AmfiMasterUrl = "https://portal.amfiindia.com/spages/NAVAll.txt";
+    private const string AmfiMasterUrl = "https://portal.amfiindia.com/DownloadSchemeData_Po.aspx?mf=0";
+    private const string AmfiLatestNavUrl = "https://portal.amfiindia.com/spages/NAVAll.txt";
     private const string AmfiNavHistoryUrl = "https://www.amfiindia.com/api/nav-history";
     private const int NavHistoryChunkYears = 4;
     private const int NavHistoryParallelChunks = 2;
@@ -23,6 +23,13 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
         var client = httpClientFactory.CreateClient("Amfi");
         var response = await client.GetStringAsync(AmfiMasterUrl, ct);
         return await ParseAmfiMasterData(response);
+    }
+
+    public async Task<List<AmfiLatestNavSnapshot>> FetchLatestNavSnapshotsAsync(CancellationToken ct = default)
+    {
+        var client = httpClientFactory.CreateClient("Amfi");
+        var response = await client.GetStringAsync(AmfiLatestNavUrl, ct);
+        return await ParseLatestNavAllAsync(new StringReader(response));
     }
 
     public async Task<MfApiResponse?> FetchNavHistoryAsync(
@@ -314,8 +321,6 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
                     IsinGrowth = isinGrowth,
                     IsinDivReinvestment = isinDivReinvestment,
                     SchemeName = schemeName,
-                    LatestNav = nav,
-                    LatestNavDate = navDate,
                     FundHouse = currentFundHouse,
                     SchemeType = currentSchemeType,
                     SchemeCategory = currentSchemeCategory
@@ -354,7 +359,8 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
         foreach (var line in lines)
         {
             if (line.StartsWith("AMC|", StringComparison.OrdinalIgnoreCase)
-                || line.StartsWith("AMC,", StringComparison.OrdinalIgnoreCase))
+                || line.StartsWith("AMC,", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("AMC\t", StringComparison.OrdinalIgnoreCase))
                 continue;
 
             var parts = ParseDelimitedLine(line);
@@ -364,7 +370,7 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
             if (!int.TryParse(parts[1].Trim(), out var schemeCode))
                 continue;
 
-            var launchDate = TryParseAmfiDate(parts[7].Trim()) ?? TryParseAmfiDate(parts[8].Trim());
+            var launchDate = TryParseAmfiDate(parts[7].Trim());
             // AMFI "Closure Date" here is NFO subscription close date;
             // it does not mean an open-ended scheme stopped accepting investments or NAV updates.
             var (isinGrowth, isinDivReinvestment) = ParseCombinedIsin(parts[9].Trim());
@@ -378,12 +384,61 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
                 SchemeCategory = NullIfDash(parts[4].Trim()),
                 IsinGrowth = isinGrowth,
                 IsinDivReinvestment = isinDivReinvestment,
-                NavStartDate = launchDate
+                LaunchDate = launchDate
             });
         }
 
         logger.LogInformation("Parsed {Count} funds from AMFI workbook export", funds.Count);
         return funds;
+    }
+
+    private async Task<List<AmfiLatestNavSnapshot>> ParseLatestNavAllAsync(TextReader reader)
+    {
+        var snapshots = new List<AmfiLatestNavSnapshot>();
+        var seenSchemeCodes = new HashSet<int>();
+        string? rawLine;
+
+        while ((rawLine = await reader.ReadLineAsync()) != null)
+        {
+            var line = rawLine.Trim();
+            if (string.IsNullOrEmpty(line) || !line.Contains(';'))
+                continue;
+
+            if (line.StartsWith("Scheme Code", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var parts = line.Split(';', 7);
+            if (parts.Length < 6)
+                continue;
+
+            if (!int.TryParse(parts[0].Trim(), out var schemeCode))
+                continue;
+
+            if (!seenSchemeCodes.Add(schemeCode))
+                continue;
+
+            var navStr = NullIfDash(parts[4].Trim());
+            var dateStr = NullIfDash(parts[5].Trim());
+            if (navStr is null || dateStr is null)
+                continue;
+
+            if (!decimal.TryParse(navStr, CultureInfo.InvariantCulture, out var nav) || nav <= 0)
+                continue;
+
+            if (!DateOnly.TryParseExact(dateStr, "dd-MMM-yyyy", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var navDate))
+                continue;
+
+            snapshots.Add(new AmfiLatestNavSnapshot
+            {
+                SchemeCode = schemeCode,
+                LatestNav = nav,
+                LatestNavDate = navDate
+            });
+        }
+
+        logger.LogInformation("Parsed {Count} latest NAV snapshots from AMFI NAVAll", snapshots.Count);
+        return snapshots;
     }
     private static bool LooksLikeSchemeWorkbookExport(string rawData)
     {
@@ -393,12 +448,17 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
 
         return firstNonEmpty is not null
                && (firstNonEmpty.StartsWith("AMC|", StringComparison.OrdinalIgnoreCase)
-                   || firstNonEmpty.StartsWith("AMC,", StringComparison.OrdinalIgnoreCase))
+                   || firstNonEmpty.StartsWith("AMC,", StringComparison.OrdinalIgnoreCase)
+                   || firstNonEmpty.StartsWith("AMC\t", StringComparison.OrdinalIgnoreCase))
                && firstNonEmpty.Contains("Launch Date", StringComparison.OrdinalIgnoreCase);
     }
     private static string[] ParseDelimitedLine(string line)
     {
-        var delimiter = line.Contains('|') ? '|' : ',';
+        var delimiter = line.Contains('|')
+            ? '|'
+            : line.Contains('\t')
+                ? '\t'
+                : ',';
         var values = new List<string>();
         var current = new System.Text.StringBuilder();
         var inQuotes = false;
@@ -441,7 +501,7 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
 
         var growth = normalized[..12];
         var reinvestment = normalized.Length > 12 ? normalized[12..] : null;
-        return (NullIfDash(growth), NullIfDash(reinvestment));
+        return (NullIfDash(growth), reinvestment is null ? null : NullIfDash(reinvestment));
     }
     private static string? NullIfDash(string value)
         => value is "-" or "" ? null : value;

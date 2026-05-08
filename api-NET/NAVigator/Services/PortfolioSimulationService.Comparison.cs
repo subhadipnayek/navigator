@@ -210,14 +210,17 @@ public partial class PortfolioSimulationService
             var fund = await fundRepo.GetBySchemeCodeAsync(schemeCode);
             if (fund is null) continue;
 
-            if (fund.NavStartDate.HasValue && fund.NavStartDate.Value > effectiveStart)
+            var navStartDate = fund.NavSyncTracker?.NavStartDate;
+            var navEndDate = fund.NavSyncTracker?.NavEndDate;
+
+            if (navStartDate.HasValue && navStartDate.Value > effectiveStart)
             {
-                effectiveStart = fund.NavStartDate.Value;
+                effectiveStart = navStartDate.Value;
                 youngestFundName = fund.SchemeName;
             }
-            if (fund.NavEndDate.HasValue && fund.NavEndDate.Value < effectiveEnd)
+            if (navEndDate.HasValue && navEndDate.Value < effectiveEnd)
             {
-                effectiveEnd = fund.NavEndDate.Value;
+                effectiveEnd = navEndDate.Value;
                 constrainingEndFundName = fund.SchemeName;
             }
         }

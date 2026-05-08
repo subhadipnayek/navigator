@@ -123,36 +123,13 @@ public class FundRepository(AppDbContext db) : IFundRepository
             existing.SchemeName = fund.SchemeName;
             existing.IsinGrowth = fund.IsinGrowth;
             existing.IsinDivReinvestment = fund.IsinDivReinvestment;
-            existing.LatestNav = fund.LatestNav;
-            existing.LatestNavDate = fund.LatestNavDate;
+            existing.LaunchDate = fund.LaunchDate;
             existing.FundHouse = fund.FundHouse;
             existing.SchemeType = fund.SchemeType;
             existing.SchemeCategory = fund.SchemeCategory;
             existing.UpdatedAt = DateTime.UtcNow;
         }
 
-        await db.SaveChangesAsync();
-    }
-
-    public async Task UpdateLatestNavAsync(int schemeCode, decimal nav, DateOnly date)
-    {
-        var fund = await db.Funds.FindAsync(schemeCode);
-        if (fund is null) return;
-
-        fund.LatestNav = nav;
-        fund.LatestNavDate = date;
-        fund.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
-    }
-
-    public async Task UpdateNavDateRangeAsync(int schemeCode, DateOnly? startDate, DateOnly? endDate)
-    {
-        var fund = await db.Funds.FindAsync(schemeCode);
-        if (fund is null) return;
-
-        fund.NavStartDate = startDate;
-        fund.NavEndDate = endDate;
-        fund.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
     }
 

@@ -10,6 +10,7 @@ namespace NAVigator.Services;
 public class CorporateActionService(
     AppDbContext db,
     ICorporateActionRepository actionRepo,
+    INavHistoryRepository navRepo,
     IFundRepository fundRepo,
     ILogger<CorporateActionService> logger) : ICorporateActionService
 {
@@ -194,10 +195,8 @@ public class CorporateActionService(
 
         await actionRepo.AddAsync(action);
 
-        // Update cached corporate action count
-        fund.CorporateActionCount = await db.CorporateActions.CountAsync(ca => ca.SchemeCode == schemeCode);
-        fund.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
+        var actionCount = await db.CorporateActions.CountAsync(ca => ca.SchemeCode == schemeCode);
+        await navRepo.UpdateTrackerCorporateActionCountAsync(schemeCode, actionCount, GetIndiaNow());
 
         logger.LogInformation(
             "Added corporate action for {SchemeCode}: {ActionType} on {Date} with factor {Factor}",
@@ -242,14 +241,8 @@ public class CorporateActionService(
 
         await actionRepo.DeleteAsync(action);
 
-        // Update cached corporate action count
-        var fund = await fundRepo.GetBySchemeCodeAsync(schemeCode);
-        if (fund is not null)
-        {
-            fund.CorporateActionCount = await db.CorporateActions.CountAsync(ca => ca.SchemeCode == schemeCode);
-            fund.UpdatedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
-        }
+        var actionCount = await db.CorporateActions.CountAsync(ca => ca.SchemeCode == schemeCode);
+        await navRepo.UpdateTrackerCorporateActionCountAsync(schemeCode, actionCount, GetIndiaNow());
 
         logger.LogInformation("Deleted corporate action {Id} for scheme {SchemeCode}", actionId, schemeCode);
         return true;
@@ -379,6 +372,9 @@ public class CorporateActionService(
             Notes = action.Notes
         };
     }
+
+    private static DateTime GetIndiaNow()
+        => TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("India Standard Time"));
 
     private sealed record AnomalyClassification(
         string ActionType,

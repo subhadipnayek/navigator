@@ -19,14 +19,7 @@ public class Fund
     [MaxLength(500)]
     public required string SchemeName { get; set; }
 
-    [Column(TypeName = "decimal(18,6)")]
-    public decimal? LatestNav { get; set; }
-
-    public DateOnly? LatestNavDate { get; set; }
-
-    public DateOnly? NavStartDate { get; set; }
-
-    public DateOnly? NavEndDate { get; set; }
+    public DateOnly? LaunchDate { get; set; }
 
     [MaxLength(300)]
     public string? FundHouse { get; set; }
@@ -36,17 +29,6 @@ public class Fund
 
     [MaxLength(300)]
     public string? SchemeCategory { get; set; }
-
-    /// <summary>
-    /// Cached aggregate count updated when NAV history is synced.
-    /// Avoids expensive COUNT subqueries in the admin funds list.
-    /// </summary>
-    public int NavHistoryCount { get; set; }
-
-    /// <summary>
-    /// Cached aggregate count updated when corporate actions are added/removed.
-    /// </summary>
-    public int CorporateActionCount { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

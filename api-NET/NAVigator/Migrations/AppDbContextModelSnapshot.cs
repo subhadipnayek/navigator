@@ -148,10 +148,6 @@ namespace NAVigator.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("scheme_code");
 
-                    b.Property<int>("CorporateActionCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("corporate_action_count");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -171,25 +167,9 @@ namespace NAVigator.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("isin_growth");
 
-                    b.Property<decimal?>("LatestNav")
-                        .HasColumnType("decimal(18,6)")
-                        .HasColumnName("latest_nav");
-
-                    b.Property<DateOnly?>("LatestNavDate")
+                    b.Property<DateOnly?>("LaunchDate")
                         .HasColumnType("date")
-                        .HasColumnName("latest_nav_date");
-
-                    b.Property<DateOnly?>("NavEndDate")
-                        .HasColumnType("date")
-                        .HasColumnName("nav_end_date");
-
-                    b.Property<int>("NavHistoryCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("nav_history_count");
-
-                    b.Property<DateOnly?>("NavStartDate")
-                        .HasColumnType("date")
-                        .HasColumnName("nav_start_date");
+                        .HasColumnName("launch_date");
 
                     b.Property<string>("SchemeCategory")
                         .HasMaxLength(300)
@@ -269,17 +249,49 @@ namespace NAVigator.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("scheme_code");
 
-                    b.Property<DateTime>("LastApiCheckUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("last_api_check_utc");
+                    b.Property<int>("CorporateActionCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("corporate_action_count");
 
                     b.Property<bool>("LastCheckHadNewData")
                         .HasColumnType("boolean")
                         .HasColumnName("last_check_had_new_data");
 
-                    b.Property<DateOnly?>("LatestNavDateFromApi")
+                    b.Property<DateTime?>("LastHistoryCheckAtIst")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("last_history_check_at_ist");
+
+                    b.Property<DateTime?>("LastLatestNavCheckAtIst")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("last_latest_nav_check_at_ist");
+
+                    b.Property<decimal?>("LatestNav")
+                        .HasColumnType("decimal(18,6)")
+                        .HasColumnName("latest_nav");
+
+                    b.Property<DateOnly?>("LatestNavDate")
                         .HasColumnType("date")
-                        .HasColumnName("latest_nav_date_from_api");
+                        .HasColumnName("latest_nav_date");
+
+                    b.Property<DateOnly?>("NavEndDate")
+                        .HasColumnType("date")
+                        .HasColumnName("nav_end_date");
+
+                    b.Property<int>("NavHistoryCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("nav_history_count");
+
+                    b.Property<DateTime?>("NavHistoryUpdatedAtIst")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("nav_history_updated_at_ist");
+
+                    b.Property<DateOnly?>("NavStartDate")
+                        .HasColumnType("date")
+                        .HasColumnName("nav_start_date");
+
+                    b.Property<DateTime>("UpdatedAtIst")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("updated_at_ist");
 
                     b.HasKey("SchemeCode")
                         .HasName("pk_nav_sync_trackers");

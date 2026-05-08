@@ -67,9 +67,9 @@ public class NavSyncWorker(
 
         var staleFunds = await db.Funds
             .Include(f => f.NavSyncTracker)
-            .Where(f => f.NavSyncTracker == null || f.NavSyncTracker.LastApiCheckUtc < staleThreshold)
+            .Where(f => f.NavSyncTracker == null || f.NavSyncTracker.LastHistoryCheckAtIst < staleThreshold)
             .OrderBy(f => f.NavSyncTracker != null) // nulls first (never synced)
-            .ThenBy(f => f.NavSyncTracker!.LastApiCheckUtc) // then oldest synced
+            .ThenBy(f => f.NavSyncTracker!.LastHistoryCheckAtIst) // then oldest synced
             .Take(BatchSize)
             .Select(f => f.SchemeCode)
             .ToListAsync(stoppingToken);

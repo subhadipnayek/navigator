@@ -101,13 +101,15 @@ public class AdminController(
                 f.FundHouse,
                 f.SchemeType,
                 f.SchemeCategory,
-                f.LatestNav,
-                f.LatestNavDate,
-                f.NavStartDate,
-                f.NavEndDate,
-                LastApiCheckUtc = f.NavSyncTracker == null ? (DateTime?)null : f.NavSyncTracker.LastApiCheckUtc,
-                f.NavHistoryCount,
-                f.CorporateActionCount
+                LatestNav = f.NavSyncTracker == null ? null : f.NavSyncTracker.LatestNav,
+                LatestNavDate = f.NavSyncTracker == null ? null : f.NavSyncTracker.LatestNavDate,
+                NavStartDate = f.NavSyncTracker == null ? null : f.NavSyncTracker.NavStartDate,
+                NavEndDate = f.NavSyncTracker == null ? null : f.NavSyncTracker.NavEndDate,
+                LastCheckAtIst = f.NavSyncTracker == null
+                    ? null
+                    : f.NavSyncTracker.LastHistoryCheckAtIst ?? f.NavSyncTracker.LastLatestNavCheckAtIst,
+                NavHistoryCount = f.NavSyncTracker == null ? 0 : f.NavSyncTracker.NavHistoryCount,
+                CorporateActionCount = f.NavSyncTracker == null ? 0 : f.NavSyncTracker.CorporateActionCount
             })
             .OrderByDescending(f => f.NavHistoryCount)
             .ThenBy(f => f.SchemeName)
@@ -125,9 +127,9 @@ public class AdminController(
             LatestNavDate = FormatDate(f.LatestNavDate),
             NavStartDate = FormatDate(f.NavStartDate),
             NavEndDate = FormatDate(f.NavEndDate),
-            LastSuccessfulNavCheckUtc = FormatUtc(f.LastApiCheckUtc),
-            NavStatus = GetNavStatus(f.LatestNavDate, f.LastApiCheckUtc),
-            IsLikelyDiscontinued = IsLikelyDiscontinued(f.LatestNavDate, f.LastApiCheckUtc),
+            LastSuccessfulNavCheckUtc = FormatIst(f.LastCheckAtIst),
+            NavStatus = GetNavStatus(f.LatestNavDate, f.LastCheckAtIst),
+            IsLikelyDiscontinued = IsLikelyDiscontinued(f.LatestNavDate, f.LastCheckAtIst),
             NavHistoryCount = f.NavHistoryCount,
             FirstStoredNavDate = FormatDate(f.NavStartDate),
             LastStoredNavDate = FormatDate(f.NavEndDate),
@@ -169,11 +171,6 @@ public class AdminController(
 
         await db.NavHistories.Where(n => n.SchemeCode == schemeCode).ExecuteDeleteAsync(ct);
         await db.NavSyncTrackers.Where(t => t.SchemeCode == schemeCode).ExecuteDeleteAsync(ct);
-        await db.Funds
-            .Where(f => f.SchemeCode == schemeCode)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(f => f.NavStartDate, (DateOnly?)null)
-                .SetProperty(f => f.NavEndDate, (DateOnly?)null), ct);
         return NoContent();
     }
 
@@ -194,12 +191,10 @@ public class AdminController(
         return date?.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture);
     }
 
-    private static string? FormatUtc(DateTime? dateTime)
-    {
-        return dateTime?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
-    }
+    private static string? FormatIst(DateTime? dateTime)
+        => dateTime?.ToString("O", CultureInfo.InvariantCulture);
 
-    private static string GetNavStatus(DateOnly? latestNavDate, DateTime? lastSuccessfulCheckUtc)
+    private static string GetNavStatus(DateOnly? latestNavDate, DateTime? lastSuccessfulCheckAtIst)
     {
         if (!latestNavDate.HasValue)
             return "Unknown";
@@ -208,22 +203,20 @@ public class AdminController(
         if (today.DayNumber - latestNavDate.Value.DayNumber <= LikelyDiscontinuedGraceDays)
             return "Active";
 
-        if (!lastSuccessfulCheckUtc.HasValue)
+        if (!lastSuccessfulCheckAtIst.HasValue)
             return "NeedsCheck";
 
-        return IsLikelyDiscontinued(latestNavDate, lastSuccessfulCheckUtc)
+        return IsLikelyDiscontinued(latestNavDate, lastSuccessfulCheckAtIst)
             ? "LikelyDiscontinued"
             : "NeedsCheck";
     }
 
-    private static bool IsLikelyDiscontinued(DateOnly? latestNavDate, DateTime? lastSuccessfulCheckUtc)
+    private static bool IsLikelyDiscontinued(DateOnly? latestNavDate, DateTime? lastSuccessfulCheckAtIst)
     {
-        if (!latestNavDate.HasValue || !lastSuccessfulCheckUtc.HasValue)
+        if (!latestNavDate.HasValue || !lastSuccessfulCheckAtIst.HasValue)
             return false;
 
-        var lastCheckDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
-            lastSuccessfulCheckUtc.Value.ToUniversalTime(),
-            TimeZoneInfo.FindSystemTimeZoneById("India Standard Time")));
+        var lastCheckDate = DateOnly.FromDateTime(lastSuccessfulCheckAtIst.Value);
         return lastCheckDate.DayNumber - latestNavDate.Value.DayNumber > LikelyDiscontinuedGraceDays;
     }
 
