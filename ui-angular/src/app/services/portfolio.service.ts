@@ -16,6 +16,7 @@ import {
   SavePortfolioTransactionsResponse,
   PortfolioBenchmarkRequest,
   PortfolioBenchmarkResponse,
+  UserGridPreference,
 } from '../models/portfolio.model';
 import { ApiConfig } from '../core/api-config';
 
@@ -94,5 +95,15 @@ export class PortfolioService {
       this.userPortfolioUrl(`${portfolioId}/benchmark`),
       request,
     );
+  }
+
+  getGridPreference(gridKey: string): Observable<UserGridPreference> {
+    return this.http.get<UserGridPreference>(this.userPortfolioUrl(`grid-preferences/${gridKey}`));
+  }
+
+  saveGridPreference(gridKey: string, stateJson: string): Observable<UserGridPreference> {
+    return this.http.put<UserGridPreference>(this.userPortfolioUrl(`grid-preferences/${gridKey}`), {
+      stateJson,
+    });
   }
 }

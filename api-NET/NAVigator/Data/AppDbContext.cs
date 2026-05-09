@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<CorporateAction> CorporateActions => Set<CorporateAction>();
     public DbSet<UserPortfolio> UserPortfolios => Set<UserPortfolio>();
     public DbSet<PortfolioTransaction> PortfolioTransactions => Set<PortfolioTransaction>();
+    public DbSet<UserGridPreference> UserGridPreferences => Set<UserGridPreference>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -67,6 +68,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .WithOne(p => p.User)
              .HasForeignKey(p => p.UserId)
              .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasMany<UserGridPreference>()
+             .WithOne(p => p.User)
+             .HasForeignKey(p => p.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<UserPortfolio>(e =>
@@ -88,6 +94,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .WithMany()
              .HasForeignKey(t => t.SchemeCode)
              .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<UserGridPreference>(e =>
+        {
+            e.HasIndex(p => new { p.UserId, p.GridKey }).IsUnique();
         });
     }
 }

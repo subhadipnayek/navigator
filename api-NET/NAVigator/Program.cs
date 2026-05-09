@@ -120,6 +120,20 @@ var app = builder.Build();
 // ----- Auto-migrate database on startup (unconditional for Docker QA support) -----
 using var scope = app.Services.CreateScope();
 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+var pendingMigrations = (await db.Database.GetPendingMigrationsAsync()).ToList();
+if (pendingMigrations.Count > 0)
+{
+    logger.LogInformation(
+        "Applying {Count} pending EF migration(s): {Migrations}",
+        pendingMigrations.Count,
+        string.Join(", ", pendingMigrations));
+}
+else
+{
+    logger.LogInformation("Database is up to date. No pending EF migrations found.");
+}
+
 await db.Database.MigrateAsync();
 
 // Backfill cached counts if they haven't been populated yet

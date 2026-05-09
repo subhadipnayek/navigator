@@ -181,6 +181,11 @@
         [stopEditingWhenCellsLoseFocus]="true"
         (gridReady)="onGridReady($event)"
         (cellValueChanged)="onCellValueChanged($event)"
+        (columnMoved)="onGridStateChanged()"
+        (columnResized)="onGridStateChanged()"
+        (columnVisible)="onGridStateChanged()"
+        (sortChanged)="onGridStateChanged()"
+        (filterChanged)="onGridStateChanged()"
       />
     </div>
 

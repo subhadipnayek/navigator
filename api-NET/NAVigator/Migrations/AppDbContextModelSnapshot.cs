@@ -366,6 +366,48 @@ namespace NAVigator.Migrations
                     b.ToTable("PortfolioTransactions");
                 });
 
+            modelBuilder.Entity("NAVigator.Models.Database.UserGridPreference", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("GridKey")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("grid_key");
+
+                    b.Property<string>("StateJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("state_json");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_grid_preferences");
+
+                    b.HasIndex("UserId", "GridKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_user_grid_preferences_user_id_grid_key");
+
+                    b.ToTable("UserGridPreferences");
+                });
+
             modelBuilder.Entity("NAVigator.Models.Database.UserPortfolio", b =>
                 {
                     b.Property<long>("Id")
@@ -458,6 +500,18 @@ namespace NAVigator.Migrations
                     b.Navigation("Fund");
 
                     b.Navigation("Portfolio");
+                });
+
+            modelBuilder.Entity("NAVigator.Models.Database.UserGridPreference", b =>
+                {
+                    b.HasOne("NAVigator.Models.Database.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_grid_preferences_app_users_user_id");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("NAVigator.Models.Database.UserPortfolio", b =>

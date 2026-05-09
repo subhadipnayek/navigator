@@ -6,6 +6,8 @@ import {
   AllCommunityModule,
   CellValueChangedEvent,
   ColDef,
+  Column,
+  ColumnState,
   GridApi,
   GridReadyEvent,
   ModuleRegistry,
@@ -37,6 +39,13 @@ import { ToastService } from '../../shared/toast/toast.service';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
+type TransactionGridField = 'transactionDate' | 'transactionType' | 'units' | 'nav' | 'amount' | 'notes';
+
+interface PersistedGridState {
+  columnState: ColumnState[];
+  filterModel: unknown;
+}
+
 @Component({
   selector: 'app-user-portfolio',
   imports: [
@@ -63,8 +72,11 @@ export class UserPortfolio implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly destroy$ = new Subject<void>();
   private readonly fundSearch$ = new Subject<string>();
+  private readonly gridStateChanged$ = new Subject<void>();
+  private readonly transactionGridKey = 'portfolio-transactions';
 
   private gridApi: GridApi<PortfolioTransaction> | null = null;
+  private applyingGridState = false;
 
   readonly portfolios = signal<UserPortfolioSummary[]>([]);
   readonly selectedPortfolioId = signal<number | null>(null);
@@ -98,6 +110,9 @@ export class UserPortfolio implements OnInit, OnDestroy {
 
   readonly transactionColumnDefs: ColDef<PortfolioTransaction>[] = [
     { field: 'transactionDate', headerName: 'Date', editable: true, width: 130 },
+    { field: 'nav', headerName: 'NAV', editable: true, width: 120, valueParser: numberParser },
+    { field: 'units', headerName: 'Units', editable: true, width: 120, valueParser: numberParser },
+    { field: 'amount', headerName: 'Amount', editable: true, width: 130, valueParser: numberParser },
     {
       field: 'transactionType',
       headerName: 'Type',
@@ -106,9 +121,6 @@ export class UserPortfolio implements OnInit, OnDestroy {
       cellEditor: 'agSelectCellEditor',
       cellEditorParams: { values: ['Buy', 'Sell'] },
     },
-    { field: 'units', headerName: 'Units', editable: true, width: 120, valueParser: numberParser },
-    { field: 'nav', headerName: 'NAV', editable: true, width: 120, valueParser: numberParser },
-    { field: 'amount', headerName: 'Amount', editable: true, width: 130, valueParser: numberParser },
     { field: 'notes', headerName: 'Notes', editable: true, flex: 1, minWidth: 180 },
     {
       field: 'error',
@@ -124,6 +136,15 @@ export class UserPortfolio implements OnInit, OnDestroy {
     filter: true,
   };
 
+  private readonly pasteFields: TransactionGridField[] = [
+    'transactionDate',
+    'nav',
+    'units',
+    'amount',
+    'transactionType',
+    'notes',
+  ];
+
   ngOnInit(): void {
     this.loadPortfolios();
     this.fundSearch$
@@ -137,6 +158,10 @@ export class UserPortfolio implements OnInit, OnDestroy {
         this.fundResults.set(funds);
         this.benchmarkResults.set(funds);
       });
+
+    this.gridStateChanged$
+      .pipe(debounceTime(700), takeUntil(this.destroy$))
+      .subscribe(() => this.saveGridState());
   }
 
   ngOnDestroy(): void {
@@ -146,6 +171,7 @@ export class UserPortfolio implements OnInit, OnDestroy {
 
   onGridReady(event: GridReadyEvent<PortfolioTransaction>): void {
     this.gridApi = event.api;
+    this.restoreGridState();
   }
 
   loadPortfolios(): void {
@@ -246,19 +272,7 @@ export class UserPortfolio implements OnInit, OnDestroy {
       this.toast.info('Select a fund from the database before adding a row.');
       return;
     }
-    const row = ensureClientRowId({
-      id: null,
-      clientRowId: null,
-      schemeCode: fund.schemeCode,
-      schemeName: fund.schemeName,
-      transactionDate: this.yearStartDate(),
-      transactionType: 'Buy',
-      units: 0,
-      nav: 0,
-      amount: 0,
-      notes: null,
-      error: null,
-    });
+    const row = this.createBlankTransaction(fund);
     this.transactions.set([...this.collectGridRows(), row]);
     this.recomputeSummary();
   }
@@ -284,14 +298,13 @@ export class UserPortfolio implements OnInit, OnDestroy {
     const text = event.clipboardData?.getData('text/plain');
     if (!text?.trim()) return;
     event.preventDefault();
-    const pastedRows = this.parseClipboard(text);
-    if (pastedRows.length === 0) {
-      this.toast.info('Paste did not contain recognizable transaction rows.');
-      return;
+    this.applyClipboardToGrid(text);
+  }
+
+  onGridStateChanged(): void {
+    if (!this.applyingGridState) {
+      this.gridStateChanged$.next();
     }
-    this.transactions.set([...this.collectGridRows(), ...pastedRows]);
-    this.recomputeSummary();
-    this.toast.success(`${pastedRows.length} pasted rows added.`);
   }
 
   saveTransactions(): void {
@@ -376,38 +389,83 @@ export class UserPortfolio implements OnInit, OnDestroy {
     });
   }
 
-  private parseClipboard(text: string): PortfolioTransaction[] {
-    const fund = this.selectedFund();
-    if (!fund) {
-      this.toast.info('Select the fund these pasted transactions belong to first.');
-      return [];
+  private applyClipboardToGrid(text: string): void {
+    const focusedCell = this.gridApi?.getFocusedCell();
+    const startRowIndex = focusedCell?.rowIndex ?? 0;
+    const startField = this.toPasteField(focusedCell?.column) ?? 'transactionDate';
+    const visiblePasteFields = this.getVisiblePasteFields();
+    const startFieldIndex = Math.max(0, visiblePasteFields.indexOf(startField));
+    const matrix = text
+      .replace(/\r$/, '')
+      .split(/\r?\n/)
+      .filter((line) => line.length > 0)
+      .map((line) => line.split('\t'));
+
+    if (matrix.length === 0) {
+      this.toast.info('Paste did not contain any cells.');
+      return;
     }
 
-    const lines = text.trim().split(/\r?\n/).filter(Boolean);
-    const cells = lines.map((line) => line.split('\t').map((cell) => cell.trim()));
-    if (cells.length === 0) return [];
-    const headerMap = detectHeader(cells[0]);
-    const startIndex = headerMap ? 1 : 0;
-    const map = headerMap ?? defaultColumnMap();
+    const rows = this.collectGridRows();
+    const templateRow = rows[startRowIndex] ?? rows.at(-1) ?? null;
+    const selectedFund = this.selectedFund();
+    if (!templateRow && !selectedFund) {
+      this.toast.info('Select a fund before pasting into an empty grid.');
+      return;
+    }
 
-    return cells.slice(startIndex).map((row) => {
-      const units = Number(row[map['units']] ?? 0);
-      const nav = Number(row[map['nav']] ?? 0);
-      const amount = Number(row[map['amount']] ?? units * nav);
-      return ensureClientRowId({
-        id: null,
-        clientRowId: null,
-        schemeCode: fund.schemeCode,
-        schemeName: fund.schemeName,
-        transactionDate: normalizeDate(row[map['transactionDate']] ?? this.yearStartDate()),
-        transactionType: normalizeType(row[map['transactionType']] ?? 'Buy'),
-        units,
-        nav,
-        amount: round2(amount),
-        notes: row[map['notes']] ?? null,
-        error: null,
+    const requiredRows = startRowIndex + matrix.length;
+    while (rows.length < requiredRows) {
+      rows.push(this.createBlankTransaction(selectedFund, templateRow));
+    }
+
+    let rejectedCells = 0;
+    const touchedRows = new Set<number>();
+    matrix.forEach((pastedRow, pasteRowIndex) => {
+      const rowIndex = startRowIndex + pasteRowIndex;
+      const targetRow = rows[rowIndex];
+      const changedFields = new Set<TransactionGridField>();
+      let rowHadError = false;
+
+      pastedRow.forEach((rawValue, pasteColumnIndex) => {
+        const field = visiblePasteFields[startFieldIndex + pasteColumnIndex];
+        if (!field) return;
+
+        const parsed = parsePastedCell(field, rawValue);
+        if (!parsed.ok) {
+          targetRow.error = parsed.error;
+          rejectedCells++;
+          rowHadError = true;
+          return;
+        }
+
+        applyParsedCell(targetRow, field, parsed.value);
+        changedFields.add(field);
       });
+
+      if (
+        (changedFields.has('units') || changedFields.has('nav')) &&
+        !changedFields.has('amount') &&
+        targetRow.units > 0 &&
+        targetRow.nav > 0
+      ) {
+        targetRow.amount = round2(targetRow.units * targetRow.nav);
+      }
+
+      if (!rowHadError) targetRow.error = null;
+      touchedRows.add(rowIndex);
     });
+
+    this.transactions.set(rows);
+    this.recomputeSummary();
+    this.gridApi?.refreshCells({ force: true });
+
+    const pastedCells = matrix.reduce((sum, row) => sum + row.length, 0);
+    if (rejectedCells > 0) {
+      this.toast.error(`${rejectedCells} of ${pastedCells} pasted cells did not match the target column type.`);
+    } else {
+      this.toast.success(`${touchedRows.size} row${touchedRows.size === 1 ? '' : 's'} updated from paste.`);
+    }
   }
 
   private currentFinancialYear(): string {
@@ -418,6 +476,73 @@ export class UserPortfolio implements OnInit, OnDestroy {
 
   private yearStartDate(): string {
     return `${this.selectedFinancialYear().slice(0, 4)}-04-01`;
+  }
+
+  private createBlankTransaction(fund: Fund | null, templateRow: PortfolioTransaction | null = null): PortfolioTransaction {
+    return ensureClientRowId({
+      id: null,
+      clientRowId: null,
+      schemeCode: fund?.schemeCode ?? templateRow?.schemeCode ?? 0,
+      schemeName: fund?.schemeName ?? templateRow?.schemeName ?? '',
+      transactionDate: this.yearStartDate(),
+      transactionType: 'Buy',
+      units: 0,
+      nav: 0,
+      amount: 0,
+      notes: null,
+      error: null,
+    });
+  }
+
+  private toPasteField(column: Column | null | undefined): TransactionGridField | null {
+    const colId = column?.getColId();
+    return this.pasteFields.includes(colId as TransactionGridField)
+      ? (colId as TransactionGridField)
+      : null;
+  }
+
+  private getVisiblePasteFields(): TransactionGridField[] {
+    const columns = this.gridApi?.getAllDisplayedColumns?.() ?? [];
+    const visibleFields = columns
+      .map((column) => this.toPasteField(column))
+      .filter((field): field is TransactionGridField => field !== null);
+    return visibleFields.length > 0 ? visibleFields : this.pasteFields;
+  }
+
+  private restoreGridState(): void {
+    if (!this.gridApi) return;
+
+    this.portfolioService.getGridPreference(this.transactionGridKey).subscribe({
+      next: (preference) => {
+        if (!preference.stateJson || !this.gridApi) return;
+        const state = parseGridState(preference.stateJson);
+        if (!state) return;
+
+        this.applyingGridState = true;
+        this.gridApi.applyColumnState({
+          state: state.columnState,
+          applyOrder: true,
+        });
+        this.gridApi.setFilterModel(state.filterModel ?? null);
+        this.applyingGridState = false;
+      },
+      error: () => {
+        this.applyingGridState = false;
+      },
+    });
+  }
+
+  private saveGridState(): void {
+    if (!this.gridApi) return;
+
+    const state: PersistedGridState = {
+      columnState: this.gridApi.getColumnState(),
+      filterModel: this.gridApi.getFilterModel(),
+    };
+
+    this.portfolioService
+      .saveGridPreference(this.transactionGridKey, JSON.stringify(state))
+      .subscribe({ error: () => this.toast.error('Unable to save grid layout.') });
   }
 }
 
@@ -449,31 +574,81 @@ function normalizeDate(value: string): string {
   return value;
 }
 
-function detectHeader(row: string[]): Record<string, number> | null {
-  const aliases: Record<string, string[]> = {
-    transactionDate: ['date', 'transaction date', 'txn date'],
-    transactionType: ['type', 'transaction type', 'txn type'],
-    units: ['units', 'unit'],
-    nav: ['nav', 'price'],
-    amount: ['amount', 'value'],
-    notes: ['notes', 'remarks'],
-  };
-  const normalized = row.map((cell) => cell.toLowerCase());
-  const map: Record<string, number> = {};
-  for (const [field, names] of Object.entries(aliases)) {
-    const index = normalized.findIndex((cell) => names.includes(cell));
-      if (index >= 0) map[field] = index;
+function parsePastedCell(
+  field: TransactionGridField,
+  rawValue: string,
+): { ok: true; value: string | number | null } | { ok: false; error: string } {
+  const value = rawValue.trim();
+  switch (field) {
+    case 'transactionDate': {
+      const date = parseDateCell(value);
+      return date
+        ? { ok: true, value: date }
+        : { ok: false, error: `"${rawValue}" is not a valid date.` };
+    }
+    case 'transactionType': {
+      const type = parseTransactionType(value);
+      return type
+        ? { ok: true, value: type }
+        : { ok: false, error: `"${rawValue}" is not a valid transaction type.` };
+    }
+    case 'units':
+    case 'nav':
+    case 'amount': {
+      const amount = parseNumberCell(value);
+      return amount !== null
+        ? { ok: true, value: amount }
+        : { ok: false, error: `"${rawValue}" is not a valid number.` };
+    }
+    case 'notes':
+      return { ok: true, value: value.length ? value : null };
   }
-  return map['transactionDate'] !== undefined ? map : null;
 }
 
-function defaultColumnMap(): Record<string, number> {
-  return {
-    transactionDate: 0,
-    transactionType: 1,
-    units: 2,
-    nav: 3,
-    amount: 4,
-    notes: 5,
-  };
+function applyParsedCell(
+  row: PortfolioTransaction,
+  field: TransactionGridField,
+  value: string | number | null,
+): void {
+  if (field === 'notes') {
+    row.notes = value === null ? null : String(value);
+    return;
+  }
+  if (field === 'transactionDate' || field === 'transactionType') {
+    row[field] = String(value);
+    return;
+  }
+  row[field] = Number(value);
+}
+
+function parseDateCell(value: string): string | null {
+  const normalized = normalizeDate(value);
+  const date = new Date(`${normalized}T00:00:00`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized) || Number.isNaN(date.getTime())) return null;
+  return normalized;
+}
+
+function parseTransactionType(value: string): string | null {
+  const normalized = value.toLowerCase().replace(/\s/g, '');
+  if (['buy', 'purchase', 'sip', 'switchin'].includes(normalized)) return 'Buy';
+  if (['sell', 'redeem', 'redemption', 'switchout'].includes(normalized)) return 'Sell';
+  return null;
+}
+
+function parseNumberCell(value: string): number | null {
+  if (!value) return null;
+  const normalized = value.replace(/,/g, '');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseGridState(value: string): PersistedGridState | null {
+  try {
+    const parsed = JSON.parse(value) as Partial<PersistedGridState>;
+    return Array.isArray(parsed.columnState)
+      ? { columnState: parsed.columnState, filterModel: parsed.filterModel ?? null }
+      : null;
+  } catch {
+    return null;
+  }
 }

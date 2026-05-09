@@ -1,5 +1,8 @@
 using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+using NAVigator.Data;
+using NAVigator.Models.Database;
 using NAVigator.Models.Dto.Portfolio;
 using NAVigator.Services;
 
@@ -7,7 +10,7 @@ namespace NAVigator.Controllers;
 
 [ApiController]
 [Route("api/user-portfolios")]
-public class UserPortfoliosController(IUserPortfolioService portfolioService) : ControllerBase
+public class UserPortfoliosController(IUserPortfolioService portfolioService, AppDbContext db) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetPortfolios(CancellationToken ct)
@@ -56,6 +59,47 @@ public class UserPortfoliosController(IUserPortfolioService portfolioService) : 
     {
         var result = await portfolioService.CompareBenchmarkAsync(GetUserId(), portfolioId, request, ct);
         return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpGet("grid-preferences/{gridKey}")]
+    public async Task<IActionResult> GetGridPreference(string gridKey, CancellationToken ct)
+    {
+        var userId = GetUserId();
+        var preference = await db.UserGridPreferences
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.UserId == userId && p.GridKey == gridKey, ct);
+
+        return Ok(new UserGridPreferenceDto(gridKey, preference?.StateJson));
+    }
+
+    [HttpPut("grid-preferences/{gridKey}")]
+    public async Task<IActionResult> SaveGridPreference(string gridKey, [FromBody] SaveUserGridPreferenceRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.StateJson))
+            return BadRequest(new { message = "Grid state cannot be empty." });
+
+        var userId = GetUserId();
+        var preference = await db.UserGridPreferences
+            .FirstOrDefaultAsync(p => p.UserId == userId && p.GridKey == gridKey, ct);
+
+        if (preference is null)
+        {
+            preference = new UserGridPreference
+            {
+                UserId = userId,
+                GridKey = gridKey,
+                StateJson = request.StateJson
+            };
+            db.UserGridPreferences.Add(preference);
+        }
+        else
+        {
+            preference.StateJson = request.StateJson;
+            preference.UpdatedAtUtc = DateTime.UtcNow;
+        }
+
+        await db.SaveChangesAsync(ct);
+        return Ok(new UserGridPreferenceDto(gridKey, preference.StateJson));
     }
 
     private int GetUserId()

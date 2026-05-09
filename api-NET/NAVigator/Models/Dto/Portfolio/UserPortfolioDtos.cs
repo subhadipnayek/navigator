@@ -103,3 +103,7 @@ public record PortfolioBenchmarkMetricDto(
     decimal CurrentValue,
     decimal AbsoluteReturnPercent,
     decimal? XirrPercent);
+
+public record UserGridPreferenceDto(string GridKey, string? StateJson);
+
+public record SaveUserGridPreferenceRequest(string StateJson);

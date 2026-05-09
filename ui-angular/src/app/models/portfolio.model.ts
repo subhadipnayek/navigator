@@ -329,3 +329,8 @@ export interface PortfolioBenchmarkResponse {
   alphaPercent: number | null;
   verdict: string;
 }
+
+export interface UserGridPreference {
+  gridKey: string;
+  stateJson: string | null;
+}
