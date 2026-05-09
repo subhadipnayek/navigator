@@ -10,6 +10,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<NavHistory> NavHistories => Set<NavHistory>();
     public DbSet<NavSyncTracker> NavSyncTrackers => Set<NavSyncTracker>();
     public DbSet<CorporateAction> CorporateActions => Set<CorporateAction>();
+    public DbSet<UserPortfolio> UserPortfolios => Set<UserPortfolio>();
+    public DbSet<PortfolioTransaction> PortfolioTransactions => Set<PortfolioTransaction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -60,6 +62,32 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasIndex(u => u.NormalizedUsername).IsUnique();
             e.HasIndex(u => u.NormalizedEmail).IsUnique();
+
+            e.HasMany<UserPortfolio>()
+             .WithOne(p => p.User)
+             .HasForeignKey(p => p.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserPortfolio>(e =>
+        {
+            e.HasIndex(p => new { p.UserId, p.Name }).IsUnique();
+
+            e.HasMany(p => p.Transactions)
+             .WithOne(t => t.Portfolio)
+             .HasForeignKey(t => t.PortfolioId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PortfolioTransaction>(e =>
+        {
+            e.HasIndex(t => new { t.PortfolioId, t.TransactionDate });
+            e.HasIndex(t => new { t.PortfolioId, t.SchemeCode, t.TransactionDate });
+
+            e.HasOne(t => t.Fund)
+             .WithMany()
+             .HasForeignKey(t => t.SchemeCode)
+             .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

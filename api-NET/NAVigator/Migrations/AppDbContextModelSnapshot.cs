@@ -299,6 +299,110 @@ namespace NAVigator.Migrations
                     b.ToTable("NavSyncTrackers");
                 });
 
+            modelBuilder.Entity("NAVigator.Models.Database.PortfolioTransaction", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<decimal>("Nav")
+                        .HasColumnType("decimal(18,4)")
+                        .HasColumnName("nav");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)")
+                        .HasColumnName("notes");
+
+                    b.Property<long>("PortfolioId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("portfolio_id");
+
+                    b.Property<int>("SchemeCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("scheme_code");
+
+                    b.Property<DateOnly>("TransactionDate")
+                        .HasColumnType("date")
+                        .HasColumnName("transaction_date");
+
+                    b.Property<string>("TransactionType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("transaction_type");
+
+                    b.Property<decimal>("Units")
+                        .HasColumnType("decimal(18,6)")
+                        .HasColumnName("units");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("Id")
+                        .HasName("pk_portfolio_transactions");
+
+                    b.HasIndex("SchemeCode")
+                        .HasDatabaseName("ix_portfolio_transactions_scheme_code");
+
+                    b.HasIndex("PortfolioId", "TransactionDate")
+                        .HasDatabaseName("ix_portfolio_transactions_portfolio_id_transaction_date");
+
+                    b.HasIndex("PortfolioId", "SchemeCode", "TransactionDate")
+                        .HasDatabaseName("ix_portfolio_transactions_portfolio_id_scheme_code_transaction_");
+
+                    b.ToTable("PortfolioTransactions");
+                });
+
+            modelBuilder.Entity("NAVigator.Models.Database.UserPortfolio", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_portfolios");
+
+                    b.HasIndex("UserId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_user_portfolios_user_id_name");
+
+                    b.ToTable("UserPortfolios");
+                });
+
             modelBuilder.Entity("NAVigator.Models.Database.CorporateAction", b =>
                 {
                     b.HasOne("NAVigator.Models.Database.Fund", "Fund")
@@ -335,6 +439,39 @@ namespace NAVigator.Migrations
                     b.Navigation("Fund");
                 });
 
+            modelBuilder.Entity("NAVigator.Models.Database.PortfolioTransaction", b =>
+                {
+                    b.HasOne("NAVigator.Models.Database.UserPortfolio", "Portfolio")
+                        .WithMany("Transactions")
+                        .HasForeignKey("PortfolioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_portfolio_transactions_user_portfolios_portfolio_id");
+
+                    b.HasOne("NAVigator.Models.Database.Fund", "Fund")
+                        .WithMany()
+                        .HasForeignKey("SchemeCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_portfolio_transactions_funds_scheme_code");
+
+                    b.Navigation("Fund");
+
+                    b.Navigation("Portfolio");
+                });
+
+            modelBuilder.Entity("NAVigator.Models.Database.UserPortfolio", b =>
+                {
+                    b.HasOne("NAVigator.Models.Database.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_portfolios_app_users_user_id");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("NAVigator.Models.Database.Fund", b =>
                 {
                     b.Navigation("CorporateActions");
@@ -342,6 +479,11 @@ namespace NAVigator.Migrations
                     b.Navigation("NavHistories");
 
                     b.Navigation("NavSyncTracker");
+                });
+
+            modelBuilder.Entity("NAVigator.Models.Database.UserPortfolio", b =>
+                {
+                    b.Navigation("Transactions");
                 });
 #pragma warning restore 612, 618
         }

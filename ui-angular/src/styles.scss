@@ -1,4 +1,6 @@
 @use '@angular/material' as mat;
+@import 'ag-grid-community/styles/ag-grid.css';
+@import 'ag-grid-community/styles/ag-theme-quartz.css';
 
 html {
   color-scheme: light;
@@ -28,6 +30,7 @@ app-fund-list,
 app-fund-detail,
 app-compare,
 app-portfolio-lab,
+app-user-portfolio,
 app-rolling-returns,
 app-admin-sync,
 app-corporate-actions {
@@ -439,6 +442,7 @@ td small,
   app-fund-detail,
   app-compare,
   app-portfolio-lab,
+  app-user-portfolio,
   app-rolling-returns,
   app-admin-sync,
   app-corporate-actions {

@@ -9,4 +9,8 @@ Desktop.ini
 # Secrets / local overrides
 *.env
 .env.local
-api-NET/NAVigator/Migrations/
+api-NET/NAVigator/Migrations/*
+!api-NET/NAVigator/Migrations/
+!api-NET/NAVigator/Migrations/AppDbContextModelSnapshot.cs
+!api-NET/NAVigator/Migrations/20260509103427_UserPortfoliosAndTransactions.cs
+!api-NET/NAVigator/Migrations/20260509103427_UserPortfoliosAndTransactions.Designer.cs
