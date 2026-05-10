@@ -17,6 +17,8 @@ import {
   PortfolioBenchmarkRequest,
   PortfolioBenchmarkResponse,
   UserGridPreference,
+  MatchPortfolioFundRow,
+  MatchPortfolioFundResponse,
 } from '../models/portfolio.model';
 import { ApiConfig } from '../core/api-config';
 
@@ -105,5 +107,9 @@ export class PortfolioService {
     return this.http.put<UserGridPreference>(this.userPortfolioUrl(`grid-preferences/${gridKey}`), {
       stateJson,
     });
+  }
+
+  matchPortfolioFunds(rows: MatchPortfolioFundRow[]): Observable<MatchPortfolioFundResponse> {
+    return this.http.post<MatchPortfolioFundResponse>(this.userPortfolioUrl('fund-matches'), { rows });
   }
 }

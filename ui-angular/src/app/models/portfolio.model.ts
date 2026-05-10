@@ -334,3 +334,21 @@ export interface UserGridPreference {
   gridKey: string;
   stateJson: string | null;
 }
+
+export interface MatchPortfolioFundRow {
+  rowNumber: number;
+  isin: string | null;
+  schemeCode: string | null;
+  schemeName: string | null;
+}
+
+export interface MatchedPortfolioFund {
+  rowNumber: number;
+  schemeCode: number | null;
+  schemeName: string | null;
+  error: string | null;
+}
+
+export interface MatchPortfolioFundResponse {
+  rows: MatchedPortfolioFund[];
+}

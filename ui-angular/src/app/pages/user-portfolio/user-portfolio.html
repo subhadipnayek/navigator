@@ -169,6 +169,14 @@
         }
       </mat-autocomplete>
       <button mat-flat-button type="button" (click)="addRow()">Add Row</button>
+      <input
+        #excelUpload
+        class="file-input"
+        type="file"
+        accept=".xlsx,.xls"
+        (change)="onExcelFileSelected($event)"
+      />
+      <button mat-button type="button" (click)="excelUpload.click()">Upload Excel</button>
       <button mat-button type="button" (click)="deleteSelectedRows()">Delete Selected</button>
     </div>
 
@@ -199,6 +207,15 @@
             <span>{{ error.fund }}</span>
             <p>{{ error.message }}</p>
           </div>
+        }
+      </div>
+    }
+
+    @if (excelImportMessages().length > 0) {
+      <div class="status-callout">
+        <strong>The following rows were not imported:</strong>
+        @for (message of excelImportMessages(); track message) {
+          <div>{{ message }}</div>
         }
       </div>
     }

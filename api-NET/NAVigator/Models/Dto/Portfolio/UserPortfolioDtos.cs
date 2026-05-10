@@ -108,3 +108,19 @@ public record PortfolioBenchmarkMetricDto(
 public record UserGridPreferenceDto(string GridKey, string? StateJson);
 
 public record SaveUserGridPreferenceRequest(string StateJson);
+
+public record MatchPortfolioFundRequest(List<MatchPortfolioFundRowDto> Rows);
+
+public record MatchPortfolioFundRowDto(
+    int RowNumber,
+    string? Isin,
+    string? SchemeCode,
+    string? SchemeName);
+
+public record MatchPortfolioFundResponse(List<MatchedPortfolioFundDto> Rows);
+
+public record MatchedPortfolioFundDto(
+    int RowNumber,
+    int? SchemeCode,
+    string? SchemeName,
+    string? Error);

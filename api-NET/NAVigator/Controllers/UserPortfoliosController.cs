@@ -102,6 +102,65 @@ public class UserPortfoliosController(IUserPortfolioService portfolioService, Ap
         return Ok(new UserGridPreferenceDto(gridKey, preference.StateJson));
     }
 
+    [HttpPost("fund-matches")]
+    public async Task<IActionResult> MatchFunds([FromBody] MatchPortfolioFundRequest request, CancellationToken ct)
+    {
+        if (request.Rows.Count == 0)
+            return Ok(new MatchPortfolioFundResponse([]));
+
+        var results = new List<MatchedPortfolioFundDto>();
+        foreach (var row in request.Rows)
+        {
+            var isin = NormalizeOptional(row.Isin);
+            var schemeCodeText = NormalizeOptional(row.SchemeCode);
+            var schemeName = NormalizeOptional(row.SchemeName);
+            var hasSchemeCode = int.TryParse(schemeCodeText, out var schemeCode);
+
+            if (string.IsNullOrWhiteSpace(isin) && !hasSchemeCode)
+            {
+                results.Add(new MatchedPortfolioFundDto(row.RowNumber, null, null, "SchemeCode and ISIN both missing."));
+                continue;
+            }
+
+            var candidates = db.Funds.AsNoTracking().AsQueryable();
+            if (hasSchemeCode && !string.IsNullOrWhiteSpace(isin))
+            {
+                candidates = candidates.Where(f =>
+                    f.SchemeCode == schemeCode &&
+                    (f.IsinGrowth == isin || f.IsinDivReinvestment == isin));
+            }
+            else if (hasSchemeCode)
+            {
+                candidates = candidates.Where(f => f.SchemeCode == schemeCode);
+            }
+            else
+            {
+                candidates = candidates.Where(f => f.IsinGrowth == isin || f.IsinDivReinvestment == isin);
+            }
+
+            var matches = await candidates.Take(5).ToListAsync(ct);
+            if (matches.Count == 0)
+            {
+                results.Add(new MatchedPortfolioFundDto(row.RowNumber, null, null, "SchemeCode and ISIN not found in database."));
+                continue;
+            }
+
+            var match = matches.Count == 1
+                ? matches[0]
+                : matches.FirstOrDefault(f => string.Equals(f.SchemeName, schemeName, StringComparison.OrdinalIgnoreCase));
+
+            if (match is null)
+            {
+                results.Add(new MatchedPortfolioFundDto(row.RowNumber, null, null, "Multiple fund matches found; SchemeName did not disambiguate."));
+                continue;
+            }
+
+            results.Add(new MatchedPortfolioFundDto(row.RowNumber, match.SchemeCode, match.SchemeName, null));
+        }
+
+        return Ok(new MatchPortfolioFundResponse(results));
+    }
+
     private int GetUserId()
     {
         var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -115,4 +174,7 @@ public class UserPortfoliosController(IUserPortfolioService portfolioService, Ap
         int.TryParse(value[..4], out _) &&
         value[4] == '-' &&
         int.TryParse(value[5..], out _);
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

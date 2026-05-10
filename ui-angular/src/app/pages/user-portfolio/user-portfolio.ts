@@ -2,6 +2,7 @@ import { DecimalPipe } from '@angular/common';
 import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AgGridAngular } from 'ag-grid-angular';
+import * as XLSX from 'xlsx';
 import {
   AllCommunityModule,
   CellValueChangedEvent,
@@ -27,6 +28,7 @@ import { Fund } from '../../models/fund.model';
 import {
   AllocationSlice,
   ContributionPeriod,
+  MatchPortfolioFundResponse,
   PortfolioBenchmarkResponse,
   PortfolioTransaction,
   UserPortfolioDashboard,
@@ -44,6 +46,18 @@ type TransactionGridField = 'transactionDate' | 'transactionType' | 'units' | 'n
 interface PersistedGridState {
   columnState: ColumnState[];
   filterModel: unknown;
+}
+
+interface ExcelTransactionDraft {
+  rowNumber: number;
+  transactionDate: string;
+  transactionType: string;
+  units: number;
+  nav: number;
+  notes: string | null;
+  isin: string | null;
+  schemeCode: string | null;
+  schemeName: string | null;
 }
 
 @Component({
@@ -99,6 +113,7 @@ export class UserPortfolio implements OnInit, OnDestroy {
   readonly benchmarkResults = signal<Fund[]>([]);
   readonly selectedBenchmarkFund = signal<Fund | null>(null);
   readonly benchmark = signal<PortfolioBenchmarkResponse | null>(null);
+  readonly excelImportMessages = signal<string[]>([]);
 
   readonly contributionRows = computed<ContributionPeriod[]>(() => {
     const dashboard = this.dashboard();
@@ -308,6 +323,30 @@ export class UserPortfolio implements OnInit, OnDestroy {
     this.recomputeSummary();
   }
 
+  onExcelFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const bytes = new Uint8Array(reader.result as ArrayBuffer);
+        const workbook = XLSX.read(bytes, { type: 'array', cellDates: true });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+          defval: null,
+          raw: false,
+        });
+        this.importExcelRows(rows);
+      } catch {
+        this.toast.error('Unable to read the Excel file.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
   onCellValueChanged(event: CellValueChangedEvent<PortfolioTransaction>): void {
     const row = event.data;
     if ((event.colDef.field === 'units' || event.colDef.field === 'nav') && row.units > 0 && row.nav > 0) {
@@ -491,6 +530,81 @@ export class UserPortfolio implements OnInit, OnDestroy {
     }
   }
 
+  private importExcelRows(rows: Record<string, unknown>[]): void {
+    if (rows.length === 0) {
+      this.toast.info('The Excel file did not contain any transaction rows.');
+      return;
+    }
+
+    const drafts: ExcelTransactionDraft[] = [];
+    const skipped: string[] = [];
+    rows.forEach((row, index) => {
+      const rowNumber = index + 2;
+      const draft = parseExcelTransactionRow(row, rowNumber);
+      if ('error' in draft) {
+        skipped.push(`Row ${rowNumber} (${draft.error})`);
+      } else {
+        drafts.push(draft);
+      }
+    });
+
+    if (drafts.length === 0) {
+      this.excelImportMessages.set(skipped);
+      this.toast.info('No rows were imported from the Excel file.');
+      return;
+    }
+
+    this.portfolioService
+      .matchPortfolioFunds(
+        drafts.map((draft) => ({
+          rowNumber: draft.rowNumber,
+          isin: draft.isin,
+          schemeCode: draft.schemeCode,
+          schemeName: draft.schemeName,
+        })),
+      )
+      .subscribe({
+        next: (response: MatchPortfolioFundResponse) => {
+          const matchesByRow = new Map(response.rows.map((row) => [row.rowNumber, row]));
+          const importedRows: PortfolioTransaction[] = [];
+
+          for (const draft of drafts) {
+            const match = matchesByRow.get(draft.rowNumber);
+            if (!match || match.error || !match.schemeCode || !match.schemeName) {
+              skipped.push(`Row ${draft.rowNumber} (${match?.error ?? 'fund match failed'})`);
+              continue;
+            }
+
+            importedRows.push(
+              ensureClientRowId({
+                id: null,
+                clientRowId: null,
+                schemeCode: match.schemeCode,
+                schemeName: match.schemeName,
+                transactionDate: draft.transactionDate,
+                transactionType: draft.transactionType,
+                units: draft.units,
+                nav: draft.nav,
+                amount: round2(draft.units * draft.nav),
+                notes: draft.notes,
+                error: null,
+              }),
+            );
+          }
+
+          if (importedRows.length > 0) {
+            this.transactions.set([...this.collectGridRows(), ...importedRows]);
+            this.recomputeSummary();
+            this.gridApi?.refreshCells({ force: true });
+          }
+
+          this.excelImportMessages.set(skipped);
+          this.toast.success(`${importedRows.length} Excel row${importedRows.length === 1 ? '' : 's'} imported.`);
+        },
+        error: () => this.toast.error('Unable to match Excel rows against funds in the database.'),
+      });
+  }
+
   private currentFinancialYear(): string {
     const today = new Date();
     const startYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
@@ -662,6 +776,70 @@ function parseNumberCell(value: string): number | null {
   const normalized = value.replace(/,/g, '');
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseExcelTransactionRow(
+  row: Record<string, unknown>,
+  rowNumber: number,
+): ExcelTransactionDraft | { error: string } {
+  const getter = excelValueGetter(row);
+  const rawDate = getter(['TradeDate', 'Trade Date']);
+  const rawNav = getter(['Price']);
+  const rawUnits = getter(['Quantity']);
+  const rawType = getter(['TradeType', 'Trade Type']);
+  const schemeName = normalizeOptionalText(getter(['SchemeName', 'Scheme Name']));
+  const isin = normalizeOptionalText(getter(['ISIN']));
+  const schemeCode = normalizeOptionalText(getter(['SchemeCode', 'Scheme Code']));
+  const notes = normalizeOptionalText(getter(['Notes']));
+
+  if (!isin && !schemeCode) return { error: 'SchemeCode and ISIN both missing' };
+
+  const transactionDate = parseDateCell(String(rawDate ?? '').trim());
+  if (!transactionDate) return { error: 'Trade Date is required or invalid' };
+
+  const nav = parseNumberCell(String(rawNav ?? '').trim());
+  if (nav === null || nav <= 0) return { error: 'Price is required or invalid' };
+
+  const units = parseNumberCell(String(rawUnits ?? '').trim());
+  if (units === null || units <= 0) return { error: 'Quantity is required or invalid' };
+
+  const transactionType = parseTransactionType(String(rawType ?? '').trim());
+  if (!transactionType) return { error: 'Trade Type is required or invalid' };
+
+  return {
+    rowNumber,
+    transactionDate,
+    transactionType,
+    units,
+    nav,
+    notes,
+    isin,
+    schemeCode,
+    schemeName,
+  };
+}
+
+function excelValueGetter(row: Record<string, unknown>): (names: string[]) => unknown {
+  const valuesByHeader = new Map(
+    Object.entries(row).map(([key, value]) => [normalizeHeader(key), value] as const),
+  );
+  return (names: string[]) => {
+    for (const name of names) {
+      const value = valuesByHeader.get(normalizeHeader(name));
+      if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+    }
+    return null;
+  };
+}
+
+function normalizeHeader(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function normalizeOptionalText(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text.length > 0 ? text : null;
 }
 
 function parseGridState(value: string): PersistedGridState | null {
