@@ -14,14 +14,14 @@
     <div class="lab-dates">
       <mat-form-field appearance="outline" class="date-field">
         <mat-label>Start date</mat-label>
-        <input matInput [matDatepicker]="dpStart" [(ngModel)]="startDate" />
+        <input matInput [matDatepicker]="dpStart" [(ngModel)]="startDate" [max]="maxSelectableDate" />
         <mat-datepicker-toggle matIconSuffix [for]="dpStart" />
         <mat-datepicker #dpStart />
       </mat-form-field>
 
       <mat-form-field appearance="outline" class="date-field">
         <mat-label>End date</mat-label>
-        <input matInput [matDatepicker]="dpEnd" [(ngModel)]="endDate" />
+        <input matInput [matDatepicker]="dpEnd" [(ngModel)]="endDate" [max]="maxSelectableDate" />
         <mat-datepicker-toggle matIconSuffix [for]="dpEnd" />
         <mat-datepicker #dpEnd />
       </mat-form-field>

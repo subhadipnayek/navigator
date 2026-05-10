@@ -39,7 +39,7 @@ import { ToastService } from '../../shared/toast/toast.service';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-type TransactionGridField = 'transactionDate' | 'transactionType' | 'units' | 'nav' | 'amount' | 'notes';
+type TransactionGridField = 'transactionDate' | 'transactionType' | 'units' | 'nav' | 'notes';
 
 interface PersistedGridState {
   columnState: ColumnState[];
@@ -110,9 +110,23 @@ export class UserPortfolio implements OnInit, OnDestroy {
 
   readonly transactionColumnDefs: ColDef<PortfolioTransaction>[] = [
     { field: 'transactionDate', headerName: 'Date', editable: true, width: 130 },
+    {
+      field: 'schemeName',
+      headerName: 'Fund',
+      editable: false,
+      minWidth: 260,
+      flex: 1,
+      tooltipField: 'schemeName',
+    },
     { field: 'nav', headerName: 'NAV', editable: true, width: 120, valueParser: numberParser },
     { field: 'units', headerName: 'Units', editable: true, width: 120, valueParser: numberParser },
-    { field: 'amount', headerName: 'Amount', editable: true, width: 130, valueParser: numberParser },
+    {
+      field: 'amount',
+      headerName: 'Amount',
+      editable: false,
+      width: 130,
+      valueFormatter: (params) => Number(params.value ?? 0).toFixed(2),
+    },
     {
       field: 'transactionType',
       headerName: 'Type',
@@ -126,6 +140,7 @@ export class UserPortfolio implements OnInit, OnDestroy {
       field: 'error',
       headerName: 'Error',
       minWidth: 240,
+      tooltipField: 'error',
       cellClass: (params) => (params.value ? 'grid-error-cell' : ''),
     },
   ];
@@ -134,16 +149,25 @@ export class UserPortfolio implements OnInit, OnDestroy {
     sortable: true,
     resizable: true,
     filter: true,
+    tooltipValueGetter: (params) => {
+      if (params.value === null || params.value === undefined || params.value === '') return null;
+      return String(params.value);
+    },
   };
 
   private readonly pasteFields: TransactionGridField[] = [
     'transactionDate',
     'nav',
     'units',
-    'amount',
     'transactionType',
     'notes',
   ];
+
+  readonly gridErrors = computed(() =>
+    this.transactions()
+      .map((row, index) => ({ rowNumber: index + 1, fund: row.schemeName, message: row.error }))
+      .filter((row): row is { rowNumber: number; fund: string; message: string } => !!row.message),
+  );
 
   ngOnInit(): void {
     this.loadPortfolios();
@@ -445,7 +469,6 @@ export class UserPortfolio implements OnInit, OnDestroy {
 
       if (
         (changedFields.has('units') || changedFields.has('nav')) &&
-        !changedFields.has('amount') &&
         targetRow.units > 0 &&
         targetRow.nav > 0
       ) {
@@ -593,8 +616,7 @@ function parsePastedCell(
         : { ok: false, error: `"${rawValue}" is not a valid transaction type.` };
     }
     case 'units':
-    case 'nav':
-    case 'amount': {
+    case 'nav': {
       const amount = parseNumberCell(value);
       return amount !== null
         ? { ok: true, value: amount }

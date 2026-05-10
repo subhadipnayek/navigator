@@ -102,14 +102,7 @@ export class Compare implements OnDestroy {
     return dates[0] ?? null;
   });
 
-  readonly maxSelectableDate = computed<Date | null>(() => {
-    const dates = this.selectedFunds()
-      .map((fund) => this.parseApiDisplayDate(fund.navEndDate))
-      .filter((date): date is Date => date !== null)
-      .sort((a, b) => a.getTime() - b.getTime());
-
-    return dates[0] ?? null;
-  });
+  readonly maxSelectableDate = computed<Date>(() => new Date());
 
   constructor() {
     const today = new Date();

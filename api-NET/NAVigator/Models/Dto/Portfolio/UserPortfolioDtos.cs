@@ -23,6 +23,7 @@ public record PortfolioTransactionUpsertDto(
     long? Id,
     string? ClientRowId,
     int SchemeCode,
+    string SchemeName,
     string TransactionDate,
     string TransactionType,
     decimal Units,

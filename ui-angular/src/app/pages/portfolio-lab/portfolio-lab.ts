@@ -104,6 +104,7 @@ export class PortfolioLab implements OnDestroy {
   // ── Global date range ──
   startDate: Date;
   endDate: Date;
+  readonly maxSelectableDate = new Date();
 
   // ── Baskets ──
   nextId = 1;

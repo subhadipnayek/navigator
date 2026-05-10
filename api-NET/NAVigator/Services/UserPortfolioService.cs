@@ -113,9 +113,14 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
         foreach (var row in request.Transactions)
         {
             var rowKey = RowKey(row);
-            if (!funds.TryGetValue(row.SchemeCode, out _))
+            if (!funds.TryGetValue(row.SchemeCode, out var fund))
             {
                 rowErrors[rowKey] = "Fund is not available in the database.";
+                continue;
+            }
+            if (!string.Equals(row.SchemeName, fund.SchemeName, StringComparison.Ordinal))
+            {
+                rowErrors[rowKey] = $"Scheme code {row.SchemeCode} must match exactly to '{fund.SchemeName}'.";
                 continue;
             }
             if (!TryParseDate(row.TransactionDate, out var txDate) || txDate < start || txDate > end)
@@ -133,6 +138,12 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
                 rowErrors[rowKey] = "Units and NAV must be positive; amount cannot be negative.";
                 continue;
             }
+            var expectedAmount = Math.Round(row.Units * row.Nav, 2);
+            if (Math.Abs(row.Amount - expectedAmount) > 0.01m)
+            {
+                rowErrors[rowKey] = $"Amount must equal units x NAV ({expectedAmount:0.00}). Submitted amount was {row.Amount:0.00}.";
+                continue;
+            }
 
             staged.Add(new PortfolioTransaction
             {
@@ -142,7 +153,7 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
                 TransactionType = NormalizeType(row.TransactionType),
                 Units = row.Units,
                 Nav = row.Nav,
-                Amount = row.Amount == 0 ? Math.Round(row.Units * row.Nav, 2) : row.Amount,
+                Amount = expectedAmount,
                 Notes = string.IsNullOrWhiteSpace(row.Notes) ? null : row.Notes.Trim()
             });
         }
@@ -159,7 +170,7 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
             {
                 funds.TryGetValue(r.SchemeCode, out var fund);
                 rowErrors.TryGetValue(RowKey(r), out var error);
-                return ToDto(r, fund?.SchemeName ?? "Unknown fund", error);
+                return ToDto(r, string.IsNullOrWhiteSpace(r.SchemeName) ? fund?.SchemeName ?? "Unknown fund" : r.SchemeName, error);
             }).ToList();
             return new SavePortfolioTransactionsResponse(false, "Fix highlighted rows before saving.", 0, invalidRows, BuildYearSummary(invalidRows));
         }

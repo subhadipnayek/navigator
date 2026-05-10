@@ -73,9 +73,7 @@ export class FundDetail implements OnInit {
     this.parseApiDisplayDate(this.navData()?.navStartDate ?? this.fund()?.navStartDate ?? null),
   );
 
-  readonly maxSelectableDate = computed<Date | null>(() =>
-    this.parseApiDisplayDate(this.navData()?.navEndDate ?? this.fund()?.navEndDate ?? null),
-  );
+  readonly maxSelectableDate = computed<Date>(() => new Date());
 
   readonly navChartSeries = computed<ChartSeriesData[]>(() => {
     const nav = this.navData();

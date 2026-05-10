@@ -140,7 +140,7 @@
 <mat-card appearance="outlined">
   <mat-card-header>
     <mat-card-title>Year Transaction Editor</mat-card-title>
-    <mat-card-subtitle>Paste date, type, units, NAV, amount, and notes from Excel or Google Sheets. Fund identity comes from the selected backend fund.</mat-card-subtitle>
+    <mat-card-subtitle>Paste date, NAV, units, type, and notes from Excel or Google Sheets. Amount is calculated from units x NAV.</mat-card-subtitle>
   </mat-card-header>
   <mat-card-content>
     <div class="editor-toolbar">
@@ -178,6 +178,8 @@
         [columnDefs]="transactionColumnDefs"
         [defaultColDef]="defaultColDef"
         rowSelection="multiple"
+        [enableBrowserTooltips]="true"
+        [tooltipShowDelay]="250"
         [stopEditingWhenCellsLoseFocus]="true"
         (gridReady)="onGridReady($event)"
         (cellValueChanged)="onCellValueChanged($event)"
@@ -188,6 +190,18 @@
         (filterChanged)="onGridStateChanged()"
       />
     </div>
+
+    @if (gridErrors().length > 0) {
+      <div class="grid-error-panel">
+        @for (error of gridErrors(); track error.rowNumber + error.message) {
+          <div>
+            <strong>Row {{ error.rowNumber }}</strong>
+            <span>{{ error.fund }}</span>
+            <p>{{ error.message }}</p>
+          </div>
+        }
+      </div>
+    }
 
     <div class="year-summary">
       <div><strong>{{ yearSummary().totalInvested | number: '1.0-0' }}</strong><span>Total invested</span></div>

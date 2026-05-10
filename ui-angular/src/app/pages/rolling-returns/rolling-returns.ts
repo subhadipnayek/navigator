@@ -61,9 +61,7 @@ export class RollingReturns implements OnInit {
     this.parseApiDisplayDate(this.data()?.navStartDate ?? null),
   );
 
-  readonly maxSelectableDate = computed<Date | null>(() =>
-    this.parseApiDisplayDate(this.data()?.navEndDate ?? null),
-  );
+  readonly maxSelectableDate = computed<Date>(() => new Date());
 
   readonly percentFormat = { type: 'price' as const, precision: 2, minMove: 0.01 };
 
