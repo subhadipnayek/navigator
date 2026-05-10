@@ -309,6 +309,27 @@ export interface SavePortfolioTransactionsResponse {
   summary: YearTransactionSummary;
 }
 
+export interface ImportPortfolioTransactionsResponse {
+  isValid: boolean;
+  message: string | null;
+  totalRows: number;
+  importedCount: number;
+  replacedCount: number;
+  skippedOutOfRangeCount: number;
+  importedDateStart: string | null;
+  importedDateEnd: string | null;
+  totalAmountImported: number;
+  fundCount: number;
+  rowErrors: string[];
+  rowWarnings: string[];
+  transactions: PortfolioTransaction[];
+  summary: YearTransactionSummary;
+}
+
+export interface ImportDeletePreviewResponse {
+  deleteCount: number;
+}
+
 export interface PortfolioBenchmarkRequest {
   benchmarkType: 'fund' | 'basket';
   schemeCode?: number | null;

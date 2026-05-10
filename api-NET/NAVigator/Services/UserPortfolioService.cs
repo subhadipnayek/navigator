@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using NAVigator.Data;
 using NAVigator.Models.Database;
@@ -5,7 +6,7 @@ using NAVigator.Models.Dto.Portfolio;
 
 namespace NAVigator.Services;
 
-public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
+public class UserPortfolioService(AppDbContext db, INavService navService) : IUserPortfolioService
 {
     private static readonly string[] BuyTypes = ["Buy", "Purchase", "SIP", "SwitchIn"];
     private static readonly string[] SellTypes = ["Sell", "Redeem", "Redemption", "SwitchOut"];
@@ -51,18 +52,27 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
 
         var fundCodes = transactions.Select(t => t.SchemeCode).Distinct().ToList();
         var latestNavs = await GetLatestNavsAsync(fundCodes, ct);
+        var missingNavCodes = fundCodes.Where(code => !latestNavs.ContainsKey(code)).ToList();
+        foreach (var schemeCode in missingNavCodes)
+        {
+            await navService.GetNavHistoryAsync(schemeCode, ct: ct);
+        }
+        if (missingNavCodes.Count > 0)
+            latestNavs = await GetLatestNavsAsync(fundCodes, ct);
         var fundInsights = BuildFundInsights(transactions, latestNavs, emptyStates);
         var visibleFunds = showFullyExitedFunds ? fundInsights : fundInsights.Where(f => !f.IsFullyExited).ToList();
-        var metrics = BuildMetrics(fundInsights, transactions);
+        var visibleFundCodes = visibleFunds.Select(f => f.SchemeCode).ToHashSet();
+        var visibleTransactions = transactions.Where(t => visibleFundCodes.Contains(t.SchemeCode)).ToList();
+        var metrics = BuildMetrics(visibleFunds, visibleTransactions);
         var fundAllocation = BuildAllocation(
-            fundInsights.Where(f => f.CurrentValue > 0).Select(f => (f.SchemeName, f.CurrentValue)));
+            visibleFunds.Where(f => f.CurrentValue > 0).Select(f => (f.SchemeName, f.CurrentValue)));
 
         return new PortfolioDashboardDto(
             portfolio.Id,
             portfolio.Name,
             metrics,
             visibleFunds,
-            BuildAllocation(fundInsights.Where(f => f.CurrentValue > 0).Select(f => (f.AssetClass, f.CurrentValue))),
+            BuildAllocation(visibleFunds.Where(f => f.CurrentValue > 0).Select(f => (f.AssetClass, f.CurrentValue))),
             fundAllocation,
             BuildContributions(transactions, financialYear: true),
             BuildContributions(transactions, financialYear: false),
@@ -110,6 +120,7 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
 
         var staged = new List<PortfolioTransaction>();
         var rowErrors = new Dictionary<string, string>();
+        var rowWarnings = new Dictionary<string, string>();
         foreach (var row in request.Transactions)
         {
             var rowKey = RowKey(row);
@@ -162,7 +173,7 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
             .AsNoTracking()
             .Where(t => t.PortfolioId == portfolioId && (t.TransactionDate < start || t.TransactionDate > end))
             .ToListAsync(ct);
-        FlagNegativeUnitRows(existingOutsideYear.Concat(staged).ToList(), staged, rowErrors, request.Transactions);
+        FlagNegativeUnitRows(existingOutsideYear.Concat(staged).ToList(), staged, rowWarnings, request.Transactions);
 
         if (rowErrors.Count > 0)
         {
@@ -184,7 +195,204 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
         await db.SaveChangesAsync(ct);
 
         var result = await GetTransactionsAsync(userId, portfolioId, request.FinancialYear, ct);
-        return new SavePortfolioTransactionsResponse(true, "Transactions saved.", staged.Count, result!.Value.Rows, result.Value.Summary);
+        var transactionRows = ApplyImportWarnings(result!.Value.Rows, request.Transactions, rowWarnings);
+        return new SavePortfolioTransactionsResponse(true, "Transactions saved.", staged.Count, transactionRows, result.Value.Summary);
+    }
+
+    public async Task<int?> GetImportDeletePreviewAsync(int userId, long portfolioId, DateOnly startDate, DateOnly endDate, CancellationToken ct)
+    {
+        if (!await db.UserPortfolios.AnyAsync(p => p.Id == portfolioId && p.UserId == userId, ct))
+            return null;
+
+        return await db.PortfolioTransactions
+            .AsNoTracking()
+            .CountAsync(t => t.PortfolioId == portfolioId && t.TransactionDate >= startDate && t.TransactionDate <= endDate, ct);
+    }
+
+    public async Task<ImportPortfolioTransactionsResponse?> ImportTransactionsAsync(
+        int userId,
+        long portfolioId,
+        string financialYear,
+        string importMode,
+        DateOnly startDate,
+        DateOnly endDate,
+        Stream fileStream,
+        string fileName,
+        CancellationToken ct)
+    {
+        var portfolio = await db.UserPortfolios.FirstOrDefaultAsync(p => p.Id == portfolioId && p.UserId == userId, ct);
+        if (portfolio is null) return null;
+
+        List<ExcelTransactionDraft> drafts;
+        try
+        {
+            drafts = ExcelTransactionWorkbookParser.Parse(fileStream, fileName);
+        }
+        catch (InvalidDataException ex)
+        {
+            var empty = await GetTransactionsAsync(userId, portfolioId, financialYear, ct);
+            return EmptyImportResponse(ex.Message, empty!.Value.Rows, empty.Value.Summary, [ex.Message]);
+        }
+
+        if (drafts.Count == 0)
+        {
+            var empty = await GetTransactionsAsync(userId, portfolioId, financialYear, ct);
+            return EmptyImportResponse("The Excel file did not contain any transaction rows.", empty!.Value.Rows, empty.Value.Summary, ["The Excel file did not contain any transaction rows."]);
+        }
+
+        var upserts = new List<PortfolioTransactionUpsertDto>();
+        var rowErrors = new Dictionary<string, string>();
+        var rowWarnings = new Dictionary<string, string>();
+        var skippedOutOfRange = 0;
+        var fundKeys = drafts
+            .Select(d => (SchemeCode: NormalizeOptional(d.SchemeCode), Isin: NormalizeOptional(d.Isin)))
+            .Where(x => int.TryParse(x.SchemeCode, out _) || !string.IsNullOrWhiteSpace(x.Isin))
+            .ToList();
+        var schemeCodes = fundKeys
+            .Select(x => int.TryParse(x.SchemeCode, out var schemeCode) ? schemeCode : (int?)null)
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+        var isins = fundKeys
+            .Select(x => x.Isin)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var funds = await db.Funds
+            .AsNoTracking()
+            .Where(f => schemeCodes.Contains(f.SchemeCode) || isins.Contains(f.IsinGrowth!) || isins.Contains(f.IsinDivReinvestment!))
+            .ToListAsync(ct);
+
+        foreach (var draft in drafts)
+        {
+            var clientRowId = $"excel-{draft.RowNumber}";
+            var rowKey = clientRowId;
+            if (!TryParseImportDate(draft.TradeDate, out var txDate))
+            {
+                rowErrors[rowKey] = $"Unrecognised date format: '{draft.TradeDate ?? ""}'.";
+                continue;
+            }
+            if (txDate < startDate || txDate > endDate)
+            {
+                skippedOutOfRange++;
+                continue;
+            }
+
+            var fund = MatchFund(draft, funds);
+            if (fund.Error is not null || fund.Value is null)
+            {
+                rowErrors[rowKey] = fund.Error ?? "Fund match failed.";
+                continue;
+            }
+            if (!TryParseDecimal(draft.Price, out var nav) || nav <= 0)
+            {
+                rowErrors[rowKey] = "Price is required or invalid.";
+                continue;
+            }
+            if (!TryParseDecimal(draft.Quantity, out var units) || units <= 0)
+            {
+                rowErrors[rowKey] = "Quantity is required or invalid.";
+                continue;
+            }
+            if (!IsBuy(draft.TradeType ?? string.Empty) && !IsSell(draft.TradeType ?? string.Empty))
+            {
+                rowErrors[rowKey] = "Trade Type must be Buy, SIP, Sell, Redeem, SwitchIn, or SwitchOut.";
+                continue;
+            }
+
+            upserts.Add(new PortfolioTransactionUpsertDto(
+                null,
+                clientRowId,
+                fund.Value.SchemeCode,
+                fund.Value.SchemeName,
+                txDate.ToString("yyyy-MM-dd"),
+                NormalizeType(draft.TradeType ?? string.Empty),
+                units,
+                nav,
+                Math.Round(units * nav, 2),
+                NormalizeOptional(draft.Notes)));
+        }
+
+        var staged = upserts.Select(row => new PortfolioTransaction
+        {
+            PortfolioId = portfolioId,
+            SchemeCode = row.SchemeCode,
+            TransactionDate = DateOnly.ParseExact(row.TransactionDate, "yyyy-MM-dd"),
+            TransactionType = NormalizeType(row.TransactionType),
+            Units = row.Units,
+            Nav = row.Nav,
+            Amount = Math.Round(row.Units * row.Nav, 2),
+            Notes = string.IsNullOrWhiteSpace(row.Notes) ? null : row.Notes.Trim()
+        }).ToList();
+
+        if (staged.Count > 0)
+        {
+            var rowsToKeepForUnitCheck = string.Equals(importMode, "Replace", StringComparison.OrdinalIgnoreCase)
+                ? await db.PortfolioTransactions
+                    .AsNoTracking()
+                    .Where(t => t.PortfolioId == portfolioId && (t.TransactionDate < startDate || t.TransactionDate > endDate))
+                    .ToListAsync(ct)
+                : await db.PortfolioTransactions
+                    .AsNoTracking()
+                    .Where(t => t.PortfolioId == portfolioId)
+                    .ToListAsync(ct);
+            FlagNegativeUnitRows(rowsToKeepForUnitCheck.Concat(staged).ToList(), staged, rowWarnings, upserts);
+        }
+
+        if (staged.Count == 0)
+        {
+            var result = await GetTransactionsAsync(userId, portfolioId, financialYear, ct);
+            return new ImportPortfolioTransactionsResponse(
+                false,
+                BuildImportMessage(0, rowErrors.Count, skippedOutOfRange, rowWarnings.Count),
+                drafts.Count,
+                0,
+                0,
+                skippedOutOfRange,
+                null,
+                null,
+                0,
+                0,
+                FormatImportErrors(rowErrors),
+                FormatImportErrors(rowWarnings),
+                result!.Value.Rows,
+                result.Value.Summary);
+        }
+
+        var replacedCount = 0;
+        if (string.Equals(importMode, "Replace", StringComparison.OrdinalIgnoreCase))
+        {
+            var existingRangeRows = await db.PortfolioTransactions
+                .Where(t => t.PortfolioId == portfolioId && t.TransactionDate >= startDate && t.TransactionDate <= endDate)
+                .ToListAsync(ct);
+            replacedCount = existingRangeRows.Count;
+            db.PortfolioTransactions.RemoveRange(existingRangeRows);
+        }
+
+        db.PortfolioTransactions.AddRange(staged);
+        portfolio.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        var updated = await GetTransactionsAsync(userId, portfolioId, financialYear, ct);
+        var transactionRows = ApplyImportWarnings(updated!.Value.Rows, upserts, rowWarnings);
+        var importedStart = staged.Min(t => t.TransactionDate);
+        var importedEnd = staged.Max(t => t.TransactionDate);
+        return new ImportPortfolioTransactionsResponse(
+            true,
+            BuildImportMessage(staged.Count, rowErrors.Count, skippedOutOfRange, rowWarnings.Count),
+            drafts.Count,
+            staged.Count,
+            replacedCount,
+            skippedOutOfRange,
+            importedStart.ToString("yyyy-MM-dd"),
+            importedEnd.ToString("yyyy-MM-dd"),
+            staged.Sum(t => t.Amount),
+            staged.Select(t => t.SchemeCode).Distinct().Count(),
+            FormatImportErrors(rowErrors),
+            FormatImportErrors(rowWarnings),
+            transactionRows,
+            updated.Value.Summary);
     }
 
     public async Task<PortfolioBenchmarkResponse?> CompareBenchmarkAsync(int userId, long portfolioId, PortfolioBenchmarkRequest request, CancellationToken ct)
@@ -253,6 +461,9 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
             var invested = ledger.Invested;
             var redemptions = group.Where(t => IsSell(t.TransactionType)).Sum(t => t.Amount);
             var currentValue = latestNav is null ? 0 : Math.Round(units * latestNav.Nav, 2);
+            var isFullyExited = latestNav is not null
+                ? Math.Abs(currentValue) < 10
+                : units == 0;
             var totalGain = redemptions + currentValue - invested;
             var xirr = BuildXirr(group.ToList(), currentValue, latestNav?.Date);
             var firstDate = group.Min(t => t.TransactionDate);
@@ -260,6 +471,8 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
 
             if (units > 0 && latestNav is null)
                 emptyStates.Add($"{first.Fund.SchemeName} has units but no NAV is available.");
+            if (units < 0)
+                emptyStates.Add($"{first.Fund.SchemeName} has negative units and needs transaction review.");
 
             insights.Add(new PortfolioFundInsightDto(
                 group.Key,
@@ -276,7 +489,7 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
                 CalculateCagr(invested, redemptions + currentValue, firstDate, lastDate),
                 xirr,
                 Math.Max(0, lastDate.DayNumber - firstDate.DayNumber),
-                units <= 0,
+                isFullyExited,
                 latestNav?.Nav,
                 latestNav?.Date.ToString("dd-MM-yyyy"),
                 latestNav is not null));
@@ -286,12 +499,13 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
 
     private static PortfolioMetricsDto BuildMetrics(List<PortfolioFundInsightDto> funds, List<PortfolioTransaction> transactions)
     {
-        var invested = funds.Sum(f => f.InvestedAmount);
+        var totalInvested = transactions.Where(t => IsBuy(t.TransactionType)).Sum(t => t.Amount);
+        var totalWithdrawn = transactions.Where(t => IsSell(t.TransactionType)).Sum(t => t.Amount);
+        var invested = totalInvested - totalWithdrawn;
         var current = funds.Sum(f => f.CurrentValue);
         var realizedPnl = funds.Sum(f => f.RealizedPnl);
         var unrealizedPnl = funds.Sum(f => f.UnrealizedPnl);
-        var redemptions = transactions.Where(t => IsSell(t.TransactionType)).Sum(t => t.Amount);
-        var gain = current + redemptions - invested;
+        var gain = current - invested;
         var start = transactions.Count == 0 ? DateOnly.FromDateTime(DateTime.UtcNow) : transactions.Min(t => t.TransactionDate);
         var end = DateOnly.FromDateTime(DateTime.UtcNow);
         var xirr = BuildXirr(transactions, current, end);
@@ -302,7 +516,7 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
             realizedPnl,
             unrealizedPnl,
             invested == 0 ? 0 : Math.Round(gain / invested * 100, 2),
-            CalculateCagr(invested, current + redemptions, start, end),
+            CalculateCagr(totalInvested, totalWithdrawn + current, start, end),
             xirr,
             funds.Count,
             funds.Count(f => !f.IsFullyExited),
@@ -461,6 +675,13 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
     private static YearTransactionSummaryDto BuildYearSummary(List<PortfolioTransactionDto> rows) =>
         new(rows.Where(r => IsBuy(r.TransactionType)).Sum(r => r.Amount), rows.Count, rows.Select(r => r.SchemeCode).Distinct().Count());
 
+    private static ImportPortfolioTransactionsResponse EmptyImportResponse(
+        string message,
+        List<PortfolioTransactionDto> rows,
+        YearTransactionSummaryDto summary,
+        List<string> rowErrors) =>
+        new(false, message, 0, 0, 0, 0, null, null, 0, 0, rowErrors, [], rows, summary);
+
     private static PortfolioTransactionDto ToDto(PortfolioTransaction t, string? clientRowId, string? error) =>
         new(t.Id, clientRowId, t.SchemeCode, t.Fund.SchemeName, t.TransactionDate.ToString("yyyy-MM-dd"), t.TransactionType, t.Units, t.Nav, t.Amount, t.Notes, error);
 
@@ -476,11 +697,111 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
     private static bool TryParseDate(string value, out DateOnly date) =>
         DateOnly.TryParseExact(value, "yyyy-MM-dd", out date) || DateOnly.TryParseExact(value, "dd-MM-yyyy", out date);
 
+    private static bool TryParseImportDate(string? value, out DateOnly date)
+    {
+        var text = NormalizeOptional(value) ?? string.Empty;
+        var formats = new[]
+        {
+            "yyyy-MM-dd",
+            "dd/MM/yyyy",
+            "d/M/yyyy",
+            "MM/dd/yyyy",
+            "M/d/yyyy",
+            "dd-MM-yyyy",
+            "d-M-yyyy",
+            "dd MMM yyyy",
+            "d MMM yyyy",
+            "MMM dd, yyyy",
+            "MMM d, yyyy"
+        };
+
+        return DateOnly.TryParseExact(text, formats, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out date);
+    }
+
     private static string ToFinancialYear(DateOnly date)
     {
         var startYear = date.Month >= 4 ? date.Year : date.Year - 1;
         return $"{startYear}-{(startYear + 1) % 100:00}";
     }
+
+    private static (Fund? Value, string? Error) MatchFund(ExcelTransactionDraft row, List<Fund> funds)
+    {
+        var isin = NormalizeOptional(row.Isin);
+        var schemeCodeText = NormalizeOptional(row.SchemeCode);
+        var schemeName = NormalizeOptional(row.SchemeName);
+        var hasSchemeCode = int.TryParse(schemeCodeText, out var schemeCode);
+
+        if (string.IsNullOrWhiteSpace(isin) && !hasSchemeCode)
+            return (null, "SchemeCode and ISIN both missing.");
+
+        var matches = funds.Where(f =>
+        {
+            var codeMatches = hasSchemeCode && f.SchemeCode == schemeCode;
+            var isinMatches = !string.IsNullOrWhiteSpace(isin) &&
+                (string.Equals(f.IsinGrowth, isin, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(f.IsinDivReinvestment, isin, StringComparison.OrdinalIgnoreCase));
+            return hasSchemeCode && !string.IsNullOrWhiteSpace(isin)
+                ? codeMatches && isinMatches
+                : codeMatches || isinMatches;
+        }).Take(5).ToList();
+
+        if (matches.Count == 0)
+            return (null, "SchemeCode and ISIN not found in database.");
+
+        var match = matches.Count == 1
+            ? matches[0]
+            : matches.FirstOrDefault(f => string.Equals(f.SchemeName, schemeName, StringComparison.OrdinalIgnoreCase));
+
+        return match is null
+            ? (null, "Multiple fund matches found; SchemeName did not disambiguate.")
+            : (match, null);
+    }
+
+    private static bool TryParseDecimal(string? value, out decimal result)
+    {
+        var normalized = NormalizeOptional(value)?.Replace(",", string.Empty);
+        return decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out result) ||
+               decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.CurrentCulture, out result);
+    }
+
+    private static List<string> FormatImportErrors(Dictionary<string, string> rowErrors) =>
+        rowErrors
+            .OrderBy(x => int.TryParse(x.Key.Replace("excel-", string.Empty), out var rowNumber) ? rowNumber : int.MaxValue)
+            .Select(x => $"Row {x.Key.Replace("excel-", string.Empty)} ({x.Value})")
+            .ToList();
+
+    private static List<PortfolioTransactionDto> ApplyImportWarnings(
+        List<PortfolioTransactionDto> rows,
+        List<PortfolioTransactionUpsertDto> importedRows,
+        Dictionary<string, string> rowWarnings)
+    {
+        if (rowWarnings.Count == 0) return rows;
+
+        var warningsBySignature = importedRows
+            .Where(row => rowWarnings.ContainsKey(RowKey(row)))
+            .GroupBy(row => ImportSignature(row))
+            .ToDictionary(g => g.Key, g => rowWarnings[RowKey(g.First())]);
+
+        return rows.Select(row =>
+            warningsBySignature.TryGetValue(ImportSignature(row), out var warning)
+                ? row with { Error = warning }
+                : row).ToList();
+    }
+
+    private static string BuildImportMessage(int importedCount, int invalidCount, int outOfRangeCount, int warningCount)
+    {
+        var parts = new List<string> { $"{importedCount} transaction{(importedCount == 1 ? "" : "s")} imported" };
+        if (outOfRangeCount > 0)
+            parts.Add($"{outOfRangeCount} row{(outOfRangeCount == 1 ? "" : "s")} skipped outside selected date range");
+        if (invalidCount > 0)
+            parts.Add($"{invalidCount} row{(invalidCount == 1 ? "" : "s")} skipped with errors");
+        if (warningCount > 0)
+            parts.Add($"{warningCount} row{(warningCount == 1 ? "" : "s")} need review");
+        return string.Join(". ", parts) + ".";
+    }
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string ClassifyAsset(Fund fund)
     {
@@ -498,6 +819,8 @@ public class UserPortfolioService(AppDbContext db) : IUserPortfolioService
     private static string NormalizeType(string type) => IsSell(type) ? "Sell" : "Buy";
     private static string RowKey(PortfolioTransactionUpsertDto row) => row.ClientRowId ?? row.Id?.ToString() ?? $"{row.SchemeCode}:{row.TransactionDate}:{row.Units}:{row.Amount}";
     private static string Signature(PortfolioTransaction row, int index) => $"{index}:{row.SchemeCode}:{row.TransactionDate}:{row.Units}:{row.Amount}";
+    private static string ImportSignature(PortfolioTransactionUpsertDto row) => $"{row.SchemeCode}:{row.TransactionDate}:{row.Units}:{row.Amount}";
+    private static string ImportSignature(PortfolioTransactionDto row) => $"{row.SchemeCode}:{row.TransactionDate}:{row.Units}:{row.Amount}";
 
     private record NamedMetric(string Name, decimal InvestedAmount, decimal CurrentValue, decimal AbsoluteReturnPercent, decimal? XirrPercent)
         : PortfolioBenchmarkMetricDto(InvestedAmount, CurrentValue, AbsoluteReturnPercent, XirrPercent);

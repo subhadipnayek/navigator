@@ -38,6 +38,24 @@ public record SavePortfolioTransactionsResponse(
     List<PortfolioTransactionDto> Transactions,
     YearTransactionSummaryDto Summary);
 
+public record ImportPortfolioTransactionsResponse(
+    bool IsValid,
+    string? Message,
+    int TotalRows,
+    int ImportedCount,
+    int ReplacedCount,
+    int SkippedOutOfRangeCount,
+    string? ImportedDateStart,
+    string? ImportedDateEnd,
+    decimal TotalAmountImported,
+    int FundCount,
+    List<string> RowErrors,
+    List<string> RowWarnings,
+    List<PortfolioTransactionDto> Transactions,
+    YearTransactionSummaryDto Summary);
+
+public record ImportDeletePreviewResponse(int DeleteCount);
+
 public record YearTransactionSummaryDto(decimal TotalInvested, int TransactionCount, int FundsCovered);
 
 public record PortfolioDashboardDto(

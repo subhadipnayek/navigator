@@ -54,6 +54,42 @@ public class UserPortfoliosController(IUserPortfolioService portfolioService, Ap
         return result.IsValid ? Ok(result) : BadRequest(result);
     }
 
+    [HttpGet("{portfolioId:long}/transactions/import-delete-preview")]
+    public async Task<IActionResult> GetImportDeletePreview(long portfolioId, [FromQuery] string startDate, [FromQuery] string endDate, CancellationToken ct)
+    {
+        if (!TryParseDateRange(startDate, endDate, out var start, out var end, out var error))
+            return BadRequest(new { message = error });
+
+        var deleteCount = await portfolioService.GetImportDeletePreviewAsync(GetUserId(), portfolioId, start, end, ct);
+        return deleteCount is null ? NotFound() : Ok(new ImportDeletePreviewResponse(deleteCount.Value));
+    }
+
+    [HttpPost("{portfolioId:long}/transactions/import-excel")]
+    [RequestSizeLimit(50_000_000)]
+    public async Task<IActionResult> ImportTransactions(
+        long portfolioId,
+        [FromQuery] string financialYear,
+        [FromQuery] string importMode,
+        [FromQuery] string startDate,
+        [FromQuery] string endDate,
+        IFormFile file,
+        CancellationToken ct)
+    {
+        if (!IsValidFinancialYear(financialYear))
+            return BadRequest(new { message = "financialYear must use the format 2023-24." });
+        if (!IsValidImportMode(importMode))
+            return BadRequest(new { message = "importMode must be Append or Replace." });
+        if (!TryParseDateRange(startDate, endDate, out var start, out var end, out var error))
+            return BadRequest(new { message = error });
+        if (file.Length == 0)
+            return BadRequest(new { message = "Upload a non-empty Excel file." });
+
+        await using var stream = file.OpenReadStream();
+        var result = await portfolioService.ImportTransactionsAsync(GetUserId(), portfolioId, financialYear, importMode, start, end, stream, file.FileName, ct);
+        if (result is null) return NotFound();
+        return result.IsValid ? Ok(result) : BadRequest(result);
+    }
+
     [HttpPost("{portfolioId:long}/benchmark")]
     public async Task<IActionResult> CompareBenchmark(long portfolioId, [FromBody] PortfolioBenchmarkRequest request, CancellationToken ct)
     {
@@ -174,6 +210,34 @@ public class UserPortfoliosController(IUserPortfolioService portfolioService, Ap
         int.TryParse(value[..4], out _) &&
         value[4] == '-' &&
         int.TryParse(value[5..], out _);
+
+    private static bool IsValidImportMode(string value) =>
+        string.Equals(value, "Append", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(value, "Replace", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryParseDateRange(string startDate, string endDate, out DateOnly start, out DateOnly end, out string error)
+    {
+        start = default;
+        end = default;
+        error = "";
+        if (string.IsNullOrWhiteSpace(startDate) || string.IsNullOrWhiteSpace(endDate))
+        {
+            error = "startDate and endDate are required for transaction Excel imports.";
+            return false;
+        }
+        if (!DateOnly.TryParseExact(startDate, "yyyy-MM-dd", out start) ||
+            !DateOnly.TryParseExact(endDate, "yyyy-MM-dd", out end))
+        {
+            error = "startDate and endDate must use yyyy-MM-dd.";
+            return false;
+        }
+        if (end < start)
+        {
+            error = "endDate must be on or after startDate.";
+            return false;
+        }
+        return true;
+    }
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

@@ -378,6 +378,15 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
 
             var isEtf = parts[5].Trim().IndexOf("etf", StringComparison.OrdinalIgnoreCase) >= 0;
 
+            var isIndexFund = parts[4].Trim().IndexOf("index", StringComparison.OrdinalIgnoreCase) >= 0;
+            var isDirectIndexFund = isIndexFund &&
+                MatchesFilter(
+                    parts[5].Trim(),
+                    mustContain: new[] { "direct" },
+                    mustNotContain: new[] { "idcw", "dividend", "regular" },
+                    matchAll: false
+                );
+
             var isDirectGrowth = MatchesFilter(
                 parts[5].Trim(),
                 mustContain: new[] { "direct", "growth" },
@@ -388,7 +397,7 @@ public class AmfiService(IHttpClientFactory httpClientFactory, ILogger<AmfiServi
             if (!isOpenEnded) continue;
 
             // ETFs skip the direct/growth filter — they're always growth by nature
-            if (!isEtf && !isDirectGrowth) continue;
+            if (!isEtf && !isDirectGrowth && !isDirectIndexFund) continue;
             funds.Add(new Fund
             {
                 SchemeCode = schemeCode,

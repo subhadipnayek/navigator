@@ -16,6 +16,8 @@ import {
   SavePortfolioTransactionsResponse,
   PortfolioBenchmarkRequest,
   PortfolioBenchmarkResponse,
+  ImportDeletePreviewResponse,
+  ImportPortfolioTransactionsResponse,
   UserGridPreference,
   MatchPortfolioFundRow,
   MatchPortfolioFundResponse,
@@ -86,6 +88,34 @@ export class PortfolioService {
     return this.http.put<SavePortfolioTransactionsResponse>(
       this.userPortfolioUrl(`${portfolioId}/transactions`),
       { financialYear, transactions },
+    );
+  }
+
+  importUserPortfolioTransactions(
+    portfolioId: number,
+    financialYear: string,
+    importMode: 'Append' | 'Replace',
+    startDate: string,
+    endDate: string,
+    file: File,
+  ): Observable<ImportPortfolioTransactionsResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<ImportPortfolioTransactionsResponse>(
+      this.userPortfolioUrl(`${portfolioId}/transactions/import-excel`),
+      formData,
+      { params: { financialYear, importMode, startDate, endDate } },
+    );
+  }
+
+  getImportDeletePreview(
+    portfolioId: number,
+    startDate: string,
+    endDate: string,
+  ): Observable<ImportDeletePreviewResponse> {
+    return this.http.get<ImportDeletePreviewResponse>(
+      this.userPortfolioUrl(`${portfolioId}/transactions/import-delete-preview`),
+      { params: { startDate, endDate } },
     );
   }
 

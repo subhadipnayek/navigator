@@ -88,6 +88,49 @@ td small {
   margin-bottom: 12px;
 }
 
+.upload-controls {
+  display: grid;
+  grid-template-columns: auto repeat(2, minmax(150px, 180px)) minmax(180px, 1fr) auto auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.upload-controls .mat-button-toggle-group,
+.upload-controls button {
+  min-height: 56px;
+}
+
+.upload-controls button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.import-summary-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.import-summary-panel div {
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 8px;
+  background: #f8faf9;
+}
+
+.import-summary-panel strong {
+  display: block;
+  overflow: hidden;
+  font-size: 20px;
+  text-overflow: ellipsis;
+}
+
+.import-summary-panel span {
+  color: #64748b;
+  font-size: 12px;
+}
+
 .editor-toolbar .mat-mdc-form-field {
   margin-right: 0;
 }
@@ -187,10 +230,20 @@ td small {
   font-weight: 700;
 }
 
+:host ::ng-deep tr.negative-units-row {
+  background: #fef2f2;
+}
+
+:host ::ng-deep tr.negative-units-row td {
+  color: #7f1d1d;
+}
+
 @media (max-width: 900px) {
   .portfolio-workbar .mat-mdc-card-content,
   .metric-grid,
   .portfolio-panels,
+  .upload-controls,
+  .import-summary-panel,
   .year-summary,
   .benchmark-result {
     grid-template-columns: 1fr;

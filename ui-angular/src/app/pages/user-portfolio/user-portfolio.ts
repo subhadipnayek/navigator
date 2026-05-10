@@ -28,7 +28,7 @@ import { Fund } from '../../models/fund.model';
 import {
   AllocationSlice,
   ContributionPeriod,
-  MatchPortfolioFundResponse,
+  ImportPortfolioTransactionsResponse,
   PortfolioBenchmarkResponse,
   PortfolioTransaction,
   UserPortfolioDashboard,
@@ -46,18 +46,6 @@ type TransactionGridField = 'transactionDate' | 'transactionType' | 'units' | 'n
 interface PersistedGridState {
   columnState: ColumnState[];
   filterModel: unknown;
-}
-
-interface ExcelTransactionDraft {
-  rowNumber: number;
-  transactionDate: string;
-  transactionType: string;
-  units: number;
-  nav: number;
-  notes: string | null;
-  isin: string | null;
-  schemeCode: string | null;
-  schemeName: string | null;
 }
 
 @Component({
@@ -87,6 +75,7 @@ export class UserPortfolio implements OnInit, OnDestroy {
   private readonly destroy$ = new Subject<void>();
   private readonly fundSearch$ = new Subject<string>();
   private readonly gridStateChanged$ = new Subject<void>();
+  private readonly transactionAutosave$ = new Subject<void>();
   private readonly transactionGridKey = 'portfolio-transactions';
 
   private gridApi: GridApi<PortfolioTransaction> | null = null;
@@ -103,6 +92,12 @@ export class UserPortfolio implements OnInit, OnDestroy {
   });
   readonly loading = signal(false);
   readonly saving = signal(false);
+  readonly importingExcel = signal(false);
+  readonly selectedExcelFile = signal<File | null>(null);
+  readonly importMode = signal<'Append' | 'Replace'>('Append');
+  readonly importStartDate = signal('');
+  readonly importEndDate = signal('');
+  readonly importSummary = signal<ImportPortfolioTransactionsResponse | null>(null);
   readonly showFullyExitedFunds = signal(false);
   readonly selectedFinancialYear = signal(this.currentFinancialYear());
   readonly contributionMode = signal<'financial' | 'calendar'>('financial');
@@ -184,6 +179,12 @@ export class UserPortfolio implements OnInit, OnDestroy {
       .filter((row): row is { rowNumber: number; fund: string; message: string } => !!row.message),
   );
 
+  readonly canImportExcel = computed(() => {
+    const start = this.importStartDate();
+    const end = this.importEndDate();
+    return !!this.selectedExcelFile() && !!start && !!end && end >= start && !this.importingExcel();
+  });
+
   ngOnInit(): void {
     this.loadPortfolios();
     this.fundSearch$
@@ -201,6 +202,10 @@ export class UserPortfolio implements OnInit, OnDestroy {
     this.gridStateChanged$
       .pipe(debounceTime(700), takeUntil(this.destroy$))
       .subscribe(() => this.saveGridState());
+
+    this.transactionAutosave$
+      .pipe(debounceTime(900), takeUntil(this.destroy$))
+      .subscribe(() => this.saveTransactions());
   }
 
   ngOnDestroy(): void {
@@ -321,6 +326,52 @@ export class UserPortfolio implements OnInit, OnDestroy {
     if (selected.size === 0) return;
     this.transactions.set(this.collectGridRows().filter((r) => !selected.has(r.clientRowId)));
     this.recomputeSummary();
+    this.scheduleTransactionAutosave();
+  }
+
+  downloadExcelTemplate(): void {
+    const headers = [
+      'TradeDate',
+      'TradeType',
+      'Price',
+      'Quantity',
+      'SchemeCode',
+      'ISIN',
+      'SchemeName',
+      'Notes',
+    ];
+    const sampleRows = [
+      {
+        TradeDate: '2024-04-01',
+        TradeType: 'Buy',
+        Price: 25.34,
+        Quantity: 100,
+        SchemeCode: '120503',
+        ISIN: 'INF209K01UN8',
+        SchemeName: 'Axis Bluechip Fund - Direct Growth',
+        Notes: 'SIP April',
+      },
+      {
+        TradeDate: '2024-09-15',
+        TradeType: 'Sell',
+        Price: 31.20,
+        Quantity: 50,
+        SchemeCode: '120503',
+        ISIN: 'INF209K01UN8',
+        SchemeName: 'Axis Bluechip Fund - Direct Growth',
+        Notes: '',
+      },
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(sampleRows, { header: headers });
+
+    // Style the header row with a wider column width for readability
+    const columnWidths = [14, 12, 10, 10, 14, 16, 45, 20];
+    worksheet['!cols'] = columnWidths.map((wch) => ({ wch }));
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Transactions');
+    XLSX.writeFile(workbook, 'transaction-template.xlsx');
   }
 
   onExcelFileSelected(event: Event): void {
@@ -328,23 +379,36 @@ export class UserPortfolio implements OnInit, OnDestroy {
     const file = input.files?.[0];
     input.value = '';
     if (!file) return;
+    this.selectedExcelFile.set(file);
+    this.importSummary.set(null);
+    this.excelImportMessages.set([]);
+  }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const bytes = new Uint8Array(reader.result as ArrayBuffer);
-        const workbook = XLSX.read(bytes, { type: 'array', cellDates: true });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-          defval: null,
-          raw: false,
-        });
-        this.importExcelRows(rows);
-      } catch {
-        this.toast.error('Unable to read the Excel file.');
-      }
-    };
-    reader.readAsArrayBuffer(file);
+  importExcelFile(): void {
+    const portfolioId = this.selectedPortfolioId();
+    const file = this.selectedExcelFile();
+    const startDate = this.importStartDate();
+    const endDate = this.importEndDate();
+    if (!portfolioId || !file) return;
+    if (!startDate || !endDate || endDate < startDate) {
+      this.toast.info('Select a valid import date range before uploading.');
+      return;
+    }
+
+    if (this.importMode() === 'Replace') {
+      this.portfolioService.getImportDeletePreview(portfolioId, startDate, endDate).subscribe({
+        next: (preview) => {
+          const confirmed = window.confirm(
+            `Replace transactions from ${startDate} to ${endDate}?\n\n${preview.deleteCount} existing transaction${preview.deleteCount === 1 ? '' : 's'} will be deleted before importing.`,
+          );
+          if (confirmed) this.submitExcelImport(portfolioId, file, startDate, endDate);
+        },
+        error: () => this.toast.error('Unable to preview transactions for the selected range.'),
+      });
+      return;
+    }
+
+    this.submitExcelImport(portfolioId, file, startDate, endDate);
   }
 
   onCellValueChanged(event: CellValueChangedEvent<PortfolioTransaction>): void {
@@ -355,6 +419,7 @@ export class UserPortfolio implements OnInit, OnDestroy {
     }
     this.transactions.set(this.collectGridRows());
     this.recomputeSummary();
+    this.scheduleTransactionAutosave();
   }
 
   onPaste(event: ClipboardEvent): void {
@@ -381,7 +446,7 @@ export class UserPortfolio implements OnInit, OnDestroy {
           this.transactions.set(response.transactions.map(ensureClientRowId));
           this.yearSummary.set(response.summary);
           this.saving.set(false);
-          this.toast.success(response.message ?? 'Transactions saved.');
+          this.gridApi?.refreshCells({ force: true });
           this.loadDashboard();
         },
         error: (err) => {
@@ -521,6 +586,7 @@ export class UserPortfolio implements OnInit, OnDestroy {
     this.transactions.set(rows);
     this.recomputeSummary();
     this.gridApi?.refreshCells({ force: true });
+    this.scheduleTransactionAutosave();
 
     const pastedCells = matrix.reduce((sum, row) => sum + row.length, 0);
     if (rejectedCells > 0) {
@@ -528,81 +594,6 @@ export class UserPortfolio implements OnInit, OnDestroy {
     } else {
       this.toast.success(`${touchedRows.size} row${touchedRows.size === 1 ? '' : 's'} updated from paste.`);
     }
-  }
-
-  private importExcelRows(rows: Record<string, unknown>[]): void {
-    if (rows.length === 0) {
-      this.toast.info('The Excel file did not contain any transaction rows.');
-      return;
-    }
-
-    const drafts: ExcelTransactionDraft[] = [];
-    const skipped: string[] = [];
-    rows.forEach((row, index) => {
-      const rowNumber = index + 2;
-      const draft = parseExcelTransactionRow(row, rowNumber);
-      if ('error' in draft) {
-        skipped.push(`Row ${rowNumber} (${draft.error})`);
-      } else {
-        drafts.push(draft);
-      }
-    });
-
-    if (drafts.length === 0) {
-      this.excelImportMessages.set(skipped);
-      this.toast.info('No rows were imported from the Excel file.');
-      return;
-    }
-
-    this.portfolioService
-      .matchPortfolioFunds(
-        drafts.map((draft) => ({
-          rowNumber: draft.rowNumber,
-          isin: draft.isin,
-          schemeCode: draft.schemeCode,
-          schemeName: draft.schemeName,
-        })),
-      )
-      .subscribe({
-        next: (response: MatchPortfolioFundResponse) => {
-          const matchesByRow = new Map(response.rows.map((row) => [row.rowNumber, row]));
-          const importedRows: PortfolioTransaction[] = [];
-
-          for (const draft of drafts) {
-            const match = matchesByRow.get(draft.rowNumber);
-            if (!match || match.error || !match.schemeCode || !match.schemeName) {
-              skipped.push(`Row ${draft.rowNumber} (${match?.error ?? 'fund match failed'})`);
-              continue;
-            }
-
-            importedRows.push(
-              ensureClientRowId({
-                id: null,
-                clientRowId: null,
-                schemeCode: match.schemeCode,
-                schemeName: match.schemeName,
-                transactionDate: draft.transactionDate,
-                transactionType: draft.transactionType,
-                units: draft.units,
-                nav: draft.nav,
-                amount: round2(draft.units * draft.nav),
-                notes: draft.notes,
-                error: null,
-              }),
-            );
-          }
-
-          if (importedRows.length > 0) {
-            this.transactions.set([...this.collectGridRows(), ...importedRows]);
-            this.recomputeSummary();
-            this.gridApi?.refreshCells({ force: true });
-          }
-
-          this.excelImportMessages.set(skipped);
-          this.toast.success(`${importedRows.length} Excel row${importedRows.length === 1 ? '' : 's'} imported.`);
-        },
-        error: () => this.toast.error('Unable to match Excel rows against funds in the database.'),
-      });
   }
 
   private currentFinancialYear(): string {
@@ -680,6 +671,42 @@ export class UserPortfolio implements OnInit, OnDestroy {
     this.portfolioService
       .saveGridPreference(this.transactionGridKey, JSON.stringify(state))
       .subscribe({ error: () => this.toast.error('Unable to save grid layout.') });
+  }
+
+  private scheduleTransactionAutosave(): void {
+    this.transactionAutosave$.next();
+  }
+
+  private submitExcelImport(portfolioId: number, file: File, startDate: string, endDate: string): void {
+    this.importingExcel.set(true);
+    this.excelImportMessages.set([]);
+    this.importSummary.set(null);
+    this.portfolioService
+      .importUserPortfolioTransactions(portfolioId, this.selectedFinancialYear(), this.importMode(), startDate, endDate, file)
+      .subscribe({
+        next: (response) => {
+          this.importSummary.set(response);
+          this.excelImportMessages.set(response.rowErrors);
+          this.transactions.set(response.transactions.map(ensureClientRowId));
+          this.yearSummary.set(response.summary);
+          this.importingExcel.set(false);
+          this.toast.success(response.message ?? `${response.importedCount} Excel transactions imported.`);
+          this.loadDashboard();
+        },
+        error: (err) => {
+          const response = err.error;
+          if (response?.transactions) {
+            this.transactions.set(response.transactions.map(ensureClientRowId));
+            this.yearSummary.set(response.summary);
+          }
+          if (response?.rowErrors) {
+            this.importSummary.set(response);
+          }
+          this.excelImportMessages.set(response?.rowErrors ?? [response?.message ?? 'Unable to import the Excel file.']);
+          this.importingExcel.set(false);
+          this.toast.error(response?.message ?? 'Unable to import the Excel file.');
+        },
+      });
   }
 }
 
@@ -776,70 +803,6 @@ function parseNumberCell(value: string): number | null {
   const normalized = value.replace(/,/g, '');
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function parseExcelTransactionRow(
-  row: Record<string, unknown>,
-  rowNumber: number,
-): ExcelTransactionDraft | { error: string } {
-  const getter = excelValueGetter(row);
-  const rawDate = getter(['TradeDate', 'Trade Date']);
-  const rawNav = getter(['Price']);
-  const rawUnits = getter(['Quantity']);
-  const rawType = getter(['TradeType', 'Trade Type']);
-  const schemeName = normalizeOptionalText(getter(['SchemeName', 'Scheme Name']));
-  const isin = normalizeOptionalText(getter(['ISIN']));
-  const schemeCode = normalizeOptionalText(getter(['SchemeCode', 'Scheme Code']));
-  const notes = normalizeOptionalText(getter(['Notes']));
-
-  if (!isin && !schemeCode) return { error: 'SchemeCode and ISIN both missing' };
-
-  const transactionDate = parseDateCell(String(rawDate ?? '').trim());
-  if (!transactionDate) return { error: 'Trade Date is required or invalid' };
-
-  const nav = parseNumberCell(String(rawNav ?? '').trim());
-  if (nav === null || nav <= 0) return { error: 'Price is required or invalid' };
-
-  const units = parseNumberCell(String(rawUnits ?? '').trim());
-  if (units === null || units <= 0) return { error: 'Quantity is required or invalid' };
-
-  const transactionType = parseTransactionType(String(rawType ?? '').trim());
-  if (!transactionType) return { error: 'Trade Type is required or invalid' };
-
-  return {
-    rowNumber,
-    transactionDate,
-    transactionType,
-    units,
-    nav,
-    notes,
-    isin,
-    schemeCode,
-    schemeName,
-  };
-}
-
-function excelValueGetter(row: Record<string, unknown>): (names: string[]) => unknown {
-  const valuesByHeader = new Map(
-    Object.entries(row).map(([key, value]) => [normalizeHeader(key), value] as const),
-  );
-  return (names: string[]) => {
-    for (const name of names) {
-      const value = valuesByHeader.get(normalizeHeader(name));
-      if (value !== undefined && value !== null && String(value).trim() !== '') return value;
-    }
-    return null;
-  };
-}
-
-function normalizeHeader(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-function normalizeOptionalText(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  const text = String(value).trim();
-  return text.length > 0 ? text : null;
 }
 
 function parseGridState(value: string): PersistedGridState | null {

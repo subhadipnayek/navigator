@@ -33,7 +33,7 @@
     </mat-card>
     <mat-card appearance="outlined">
       <strong>{{ view.metrics.investedAmount | number: '1.0-0' }}</strong>
-      <span>Invested amount</span>
+      <span>Net invested</span>
     </mat-card>
     <mat-card appearance="outlined">
       <strong>{{ view.metrics.xirrPercent ?? 0 | number: '1.2-2' }}%</strong>
@@ -45,7 +45,7 @@
     </mat-card>
     <mat-card appearance="outlined">
       <strong>{{ view.metrics.fullyExitedFundCount }}</strong>
-      <span>Fully exited included in totals</span>
+      <span>Fully exited funds</span>
     </mat-card>
   </section>
 
@@ -110,6 +110,10 @@
           <th mat-header-cell *matHeaderCellDef>Value</th>
           <td mat-cell *matCellDef="let fund">{{ fund.currentValue | number: '1.0-0' }}</td>
         </ng-container>
+        <ng-container matColumnDef="units">
+          <th mat-header-cell *matHeaderCellDef>Units</th>
+          <td mat-cell *matCellDef="let fund">{{ fund.units | number: '1.2-4' }}</td>
+        </ng-container>
         <ng-container matColumnDef="xirr">
           <th mat-header-cell *matHeaderCellDef>XIRR</th>
           <td mat-cell *matCellDef="let fund">{{ fund.xirrPercent ?? 0 | number: '1.2-2' }}%</td>
@@ -123,6 +127,8 @@
           <td mat-cell *matCellDef="let fund">
             @if (fund.isFullyExited) {
               Fully exited
+            } @else if (fund.units < 0) {
+              Negative units
             } @else if (!fund.hasNav) {
               NAV missing
             } @else {
@@ -130,12 +136,96 @@
             }
           </td>
         </ng-container>
-        <tr mat-header-row *matHeaderRowDef="['fund', 'value', 'xirr', 'returns', 'status']"></tr>
-        <tr mat-row *matRowDef="let row; columns: ['fund', 'value', 'xirr', 'returns', 'status']"></tr>
+        <tr mat-header-row *matHeaderRowDef="['fund', 'value', 'units', 'xirr', 'returns', 'status']"></tr>
+        <tr
+          mat-row
+          *matRowDef="let row; columns: ['fund', 'value', 'units', 'xirr', 'returns', 'status']"
+          [class.negative-units-row]="row.units < 0 && !row.isFullyExited"
+        ></tr>
       </table>
     </mat-card-content>
   </mat-card>
 }
+
+<mat-card appearance="outlined" class="excel-upload-card">
+  <mat-card-header>
+    <mat-card-title>Transaction Excel Upload</mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+    <div class="upload-controls">
+      <mat-button-toggle-group
+        [ngModel]="importMode()"
+        (ngModelChange)="importMode.set($event)"
+        aria-label="Import mode"
+      >
+        <mat-button-toggle value="Append">Append</mat-button-toggle>
+        <mat-button-toggle value="Replace">Replace</mat-button-toggle>
+      </mat-button-toggle-group>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Start date</mat-label>
+        <input matInput type="date" [ngModel]="importStartDate()" (ngModelChange)="importStartDate.set($event)" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>End date</mat-label>
+        <input matInput type="date" [ngModel]="importEndDate()" (ngModelChange)="importEndDate.set($event)" />
+      </mat-form-field>
+
+      <input
+        #excelUpload
+        class="file-input"
+        type="file"
+        accept=".xlsx"
+        (change)="onExcelFileSelected($event)"
+      />
+      <button mat-stroked-button type="button" (click)="excelUpload.click()">
+        {{ selectedExcelFile()?.name ?? 'Choose Excel' }}
+      </button>
+      <button mat-flat-button type="button" [disabled]="!canImportExcel()" (click)="importExcelFile()">
+        {{ importingExcel() ? 'Importing...' : 'Import Excel' }}
+      </button>
+      <button mat-stroked-button type="button" (click)="downloadExcelTemplate()" title="Download a blank template with the required column headers">Download Template</button>
+    </div>
+
+    @if (importSummary(); as summary) {
+      <div class="import-summary-panel">
+        <div><strong>{{ summary.totalRows }}</strong><span>Total rows in file</span></div>
+        <div><strong>{{ summary.importedCount }}</strong><span>Rows imported</span></div>
+        <div><strong>{{ summary.rowErrors.length + summary.skippedOutOfRangeCount }}</strong><span>Rows skipped</span></div>
+        <div><strong>{{ summary.rowWarnings.length }}</strong><span>Rows to review</span></div>
+        <div><strong>{{ summary.importedDateStart ?? 'None' }}</strong><span>Imported start</span></div>
+        <div><strong>{{ summary.importedDateEnd ?? 'None' }}</strong><span>Imported end</span></div>
+        <div><strong>{{ summary.totalAmountImported | number: '1.2-2' }}</strong><span>Total amount imported</span></div>
+        <div><strong>{{ summary.fundCount }}</strong><span>Funds imported</span></div>
+        <div><strong>{{ summary.replacedCount }}</strong><span>Rows deleted before import</span></div>
+      </div>
+    }
+
+    @if (excelImportMessages().length > 0 || importSummary()?.skippedOutOfRangeCount || importSummary()?.rowWarnings?.length) {
+      <div class="grid-error-panel">
+        @if (importSummary()?.skippedOutOfRangeCount) {
+          <div>
+            <strong>{{ importSummary()?.skippedOutOfRangeCount }} outside range</strong>
+            <p>Rows outside {{ importStartDate() }} to {{ importEndDate() }} were skipped.</p>
+          </div>
+        }
+        @for (message of excelImportMessages(); track message) {
+          <div>
+            <strong>Skipped</strong>
+            <p>{{ message }}</p>
+          </div>
+        }
+        @for (message of importSummary()?.rowWarnings ?? []; track message) {
+          <div>
+            <strong>Review</strong>
+            <p>{{ message }}</p>
+          </div>
+        }
+      </div>
+    }
+  </mat-card-content>
+</mat-card>
 
 <mat-card appearance="outlined">
   <mat-card-header>
@@ -169,14 +259,6 @@
         }
       </mat-autocomplete>
       <button mat-flat-button type="button" (click)="addRow()">Add Row</button>
-      <input
-        #excelUpload
-        class="file-input"
-        type="file"
-        accept=".xlsx,.xls"
-        (change)="onExcelFileSelected($event)"
-      />
-      <button mat-button type="button" (click)="excelUpload.click()">Upload Excel</button>
       <button mat-button type="button" (click)="deleteSelectedRows()">Delete Selected</button>
     </div>
 
@@ -211,25 +293,12 @@
       </div>
     }
 
-    @if (excelImportMessages().length > 0) {
-      <div class="status-callout">
-        <strong>The following rows were not imported:</strong>
-        @for (message of excelImportMessages(); track message) {
-          <div>{{ message }}</div>
-        }
-      </div>
-    }
-
     <div class="year-summary">
       <div><strong>{{ yearSummary().totalInvested | number: '1.0-0' }}</strong><span>Total invested</span></div>
       <div><strong>{{ yearSummary().transactionCount }}</strong><span>Transactions</span></div>
       <div><strong>{{ yearSummary().fundsCovered }}</strong><span>Funds covered</span></div>
     </div>
   </mat-card-content>
-  <mat-card-actions>
-    <button mat-flat-button type="button" [disabled]="saving()" (click)="saveTransactions()">Save Year</button>
-    <button mat-button type="button" [disabled]="saving()" (click)="cancelTransactions()">Cancel</button>
-  </mat-card-actions>
 </mat-card>
 
 @if (dashboard(); as view) {
