@@ -108,12 +108,23 @@ public record ContributionPeriodDto(string Period, decimal Invested, decimal Red
 
 public record SipConsistencyDto(int ActiveMonths, int InvestedMonths, decimal ConsistencyPercent, decimal AverageMonthlyInvestment);
 
-public record PortfolioBenchmarkRequest(string BenchmarkType, int? SchemeCode, BasketDefinition? Basket);
+public record PortfolioBenchmarkRequest(
+    string BenchmarkType,
+    int? SchemeCode,
+    BasketDefinition? Basket,
+    int? DurationYears,
+    string? StartDate,
+    string? EndDate,
+    int? RollingPeriodYears);
 
 public record PortfolioBenchmarkResponse(
     string BenchmarkName,
+    string EffectiveStartDate,
+    string EffectiveEndDate,
+    string? ComparisonNote,
     PortfolioBenchmarkMetricDto Portfolio,
     PortfolioBenchmarkMetricDto Benchmark,
+    BenchmarkRollingReturnDto? BenchmarkRollingReturn,
     decimal? AlphaPercent,
     string Verdict);
 
@@ -122,6 +133,13 @@ public record PortfolioBenchmarkMetricDto(
     decimal CurrentValue,
     decimal AbsoluteReturnPercent,
     decimal? XirrPercent);
+
+public record BenchmarkRollingReturnDto(
+    int PeriodYears,
+    int DataPoints,
+    decimal? MinimumPercent,
+    decimal? MaximumPercent,
+    decimal? AveragePercent);
 
 public record UserGridPreferenceDto(string GridKey, string? StateJson);
 

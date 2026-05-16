@@ -1,4 +1,7 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using NAVigator.Data;
 using NAVigator.Models.Database;
@@ -10,6 +13,7 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
 {
     private static readonly string[] BuyTypes = ["Buy", "Purchase", "SIP", "SwitchIn"];
     private static readonly string[] SellTypes = ["Sell", "Redeem", "Redemption", "SwitchOut"];
+    private static readonly JsonSerializerOptions DashboardCacheJsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<List<UserPortfolioSummaryDto>> GetPortfoliosAsync(int userId, CancellationToken ct)
     {
@@ -52,13 +56,35 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
 
         var fundCodes = transactions.Select(t => t.SchemeCode).Distinct().ToList();
         var latestNavs = await GetLatestNavsAsync(fundCodes, ct);
+        var cacheKey = await BuildDashboardCacheKey(portfolio, fundCodes, showFullyExitedFunds, ct);
+        if (fundCodes.Count == latestNavs.Count)
+        {
+            var cached = await db.UserPortfolioDashboardCaches
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c =>
+                    c.UserId == userId &&
+                    c.PortfolioId == portfolioId &&
+                    c.IncludeFullyExitedFunds == showFullyExitedFunds &&
+                    c.DependencyKey == cacheKey,
+                    ct);
+            if (cached is not null)
+            {
+                var cachedDashboard = JsonSerializer.Deserialize<PortfolioDashboardDto>(cached.DashboardJson, DashboardCacheJsonOptions);
+                if (cachedDashboard is not null)
+                    return cachedDashboard;
+            }
+        }
+
         var missingNavCodes = fundCodes.Where(code => !latestNavs.ContainsKey(code)).ToList();
         foreach (var schemeCode in missingNavCodes)
         {
             await navService.GetNavHistoryAsync(schemeCode, ct: ct);
         }
         if (missingNavCodes.Count > 0)
+        {
             latestNavs = await GetLatestNavsAsync(fundCodes, ct);
+            cacheKey = await BuildDashboardCacheKey(portfolio, fundCodes, showFullyExitedFunds, ct);
+        }
         var fundInsights = BuildFundInsights(transactions, latestNavs, emptyStates);
         var visibleFunds = showFullyExitedFunds ? fundInsights : fundInsights.Where(f => !f.IsFullyExited).ToList();
         var visibleFundCodes = visibleFunds.Select(f => f.SchemeCode).ToHashSet();
@@ -67,7 +93,7 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
         var fundAllocation = BuildAllocation(
             visibleFunds.Where(f => f.CurrentValue > 0).Select(f => (f.SchemeName, f.CurrentValue)));
 
-        return new PortfolioDashboardDto(
+        var dashboard = new PortfolioDashboardDto(
             portfolio.Id,
             portfolio.Name,
             metrics,
@@ -78,6 +104,8 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
             BuildContributions(transactions, financialYear: false),
             BuildSipConsistency(transactions),
             emptyStates);
+        await SaveDashboardCache(userId, portfolioId, showFullyExitedFunds, cacheKey, dashboard, ct);
+        return dashboard;
     }
 
     public async Task<(List<PortfolioTransactionDto> Rows, YearTransactionSummaryDto Summary)?> GetTransactionsAsync(
@@ -397,20 +425,44 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
 
     public async Task<PortfolioBenchmarkResponse?> CompareBenchmarkAsync(int userId, long portfolioId, PortfolioBenchmarkRequest request, CancellationToken ct)
     {
-        var dashboard = await GetDashboardAsync(userId, portfolioId, true, ct);
-        if (dashboard is null) return null;
-
         var transactions = await LoadTransactions(portfolioId, ct);
-        var portfolioRedemptions = transactions.Where(t => IsSell(t.TransactionType)).Sum(t => t.Amount);
-        var benchmark = request.BenchmarkType.Equals("basket", StringComparison.OrdinalIgnoreCase) && request.Basket is not null
-            ? await SimulateBenchmarkBasket(transactions, request.Basket, ct)
-            : await SimulateBenchmarkFund(transactions, request.SchemeCode, ct);
+        if (transactions.Count == 0) return null;
 
-        var portfolioMetric = new PortfolioBenchmarkMetricDto(
-            dashboard.Metrics.InvestedAmount,
-            dashboard.Metrics.CurrentValue + portfolioRedemptions,
-            dashboard.Metrics.AbsoluteReturnPercent,
-            dashboard.Metrics.XirrPercent);
+        var benchmarkCodes = request.BenchmarkType.Equals("basket", StringComparison.OrdinalIgnoreCase) && request.Basket is not null
+            ? request.Basket.Funds.Select(f => f.SchemeCode).Distinct().ToList()
+            : request.SchemeCode.HasValue ? [request.SchemeCode.Value] : new List<int>();
+        if (benchmarkCodes.Count == 0)
+            return null;
+
+        var benchmarkNavs = await navService.EnsureNavHistoriesAsync(benchmarkCodes, ct: ct);
+        var benchmarkFirstNavDate = benchmarkNavs.Values.SelectMany(rows => rows).Select(n => (DateOnly?)n.Date).Min();
+        var benchmarkLastNavDate = benchmarkNavs.Values.SelectMany(rows => rows).Select(n => (DateOnly?)n.Date).Max();
+        if (!benchmarkFirstNavDate.HasValue || !benchmarkLastNavDate.HasValue)
+            return null;
+
+        var portfolioStart = transactions.Min(t => t.TransactionDate);
+        var requestedEnd = ParseBenchmarkDate(request.EndDate) ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var requestedStart = ParseBenchmarkDate(request.StartDate)
+            ?? (request.DurationYears.HasValue ? requestedEnd.AddYears(-request.DurationYears.Value) : (DateOnly?)null);
+        var effectiveStart = MaxDate(portfolioStart, benchmarkFirstNavDate.Value, requestedStart ?? DateOnly.MinValue);
+        var effectiveEnd = MinDate(requestedEnd, benchmarkLastNavDate.Value, DateOnly.FromDateTime(DateTime.UtcNow));
+        if (effectiveStart > effectiveEnd)
+            return null;
+
+        var scopedTransactions = transactions
+            .Where(t => t.TransactionDate >= effectiveStart && t.TransactionDate <= effectiveEnd)
+            .ToList();
+        if (scopedTransactions.Count == 0)
+            return null;
+
+        var portfolioMetric = await SimulateActualPortfolio(scopedTransactions, effectiveEnd, ct);
+        var benchmark = request.BenchmarkType.Equals("basket", StringComparison.OrdinalIgnoreCase) && request.Basket is not null
+            ? await SimulateBenchmarkBasket(scopedTransactions, request.Basket, effectiveEnd, ct)
+            : await SimulateBenchmarkFund(scopedTransactions, request.SchemeCode, effectiveEnd, ct);
+
+        var rolling = request.RollingPeriodYears is > 0 && benchmarkCodes.Count == 1
+            ? BuildBenchmarkRollingReturn(benchmarkNavs[benchmarkCodes[0]], request.RollingPeriodYears.Value, effectiveStart, effectiveEnd)
+            : null;
 
         var alpha = portfolioMetric.XirrPercent.HasValue && benchmark.XirrPercent.HasValue
             ? portfolioMetric.XirrPercent.Value - benchmark.XirrPercent.Value
@@ -424,7 +476,20 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
             _ => "Portfolio is in line with the benchmark."
         };
 
-        return new PortfolioBenchmarkResponse(benchmark.Name, portfolioMetric, benchmark, alpha, verdict);
+        var note = effectiveStart == portfolioStart
+            ? "Comparison starts from the first portfolio transaction in the selected window."
+            : $"Comparison starts from benchmark NAV availability on {effectiveStart:yyyy-MM-dd}.";
+
+        return new PortfolioBenchmarkResponse(
+            benchmark.Name,
+            effectiveStart.ToString("yyyy-MM-dd"),
+            effectiveEnd.ToString("yyyy-MM-dd"),
+            note,
+            portfolioMetric,
+            benchmark,
+            rolling,
+            alpha,
+            verdict);
     }
 
     private async Task<List<PortfolioTransaction>> LoadTransactions(long portfolioId, CancellationToken ct) =>
@@ -444,6 +509,105 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
             .OrderByDescending(n => n.Date)
             .ToListAsync(ct);
         return rows.GroupBy(n => n.SchemeCode).ToDictionary(g => g.Key, g => g.First());
+    }
+
+    private async Task<string> BuildDashboardCacheKey(
+        UserPortfolio portfolio,
+        List<int> schemeCodes,
+        bool includeFullyExitedFunds,
+        CancellationToken ct)
+    {
+        var distinctCodes = schemeCodes.Distinct().OrderBy(code => code).ToList();
+        var trackers = await db.NavSyncTrackers
+            .AsNoTracking()
+            .Where(t => distinctCodes.Contains(t.SchemeCode))
+            .Select(t => new
+            {
+                t.SchemeCode,
+                t.LatestNav,
+                t.LatestNavDate,
+                t.NavHistoryCount,
+                t.CorporateActionCount,
+                t.NavHistoryUpdatedAtIst,
+                t.UpdatedAtIst
+            })
+            .ToListAsync(ct);
+        var trackerByCode = trackers.ToDictionary(t => t.SchemeCode);
+
+        var corporateActionKeys = await db.CorporateActions
+            .AsNoTracking()
+            .Where(c => distinctCodes.Contains(c.SchemeCode))
+            .GroupBy(c => c.SchemeCode)
+            .Select(g => new
+            {
+                SchemeCode = g.Key,
+                Count = g.Count(),
+                LastCreatedAtUtc = g.Max(c => c.CreatedAtUtc)
+            })
+            .ToListAsync(ct);
+        var corporateActionByCode = corporateActionKeys.ToDictionary(c => c.SchemeCode);
+
+        var parts = new List<string>
+        {
+            $"portfolio:{portfolio.Id}:{portfolio.UpdatedAtUtc.Ticks}",
+            $"includeExited:{includeFullyExitedFunds}"
+        };
+
+        foreach (var code in distinctCodes)
+        {
+            trackerByCode.TryGetValue(code, out var tracker);
+            corporateActionByCode.TryGetValue(code, out var action);
+            parts.Add(string.Join(':',
+                code,
+                tracker?.LatestNav?.ToString(CultureInfo.InvariantCulture) ?? "nav-null",
+                tracker?.LatestNavDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "date-null",
+                tracker?.NavHistoryCount.ToString(CultureInfo.InvariantCulture) ?? "history-null",
+                tracker?.CorporateActionCount.ToString(CultureInfo.InvariantCulture) ?? "tracker-ca-null",
+                tracker?.NavHistoryUpdatedAtIst?.Ticks.ToString(CultureInfo.InvariantCulture) ?? "history-updated-null",
+                tracker?.UpdatedAtIst.Ticks.ToString(CultureInfo.InvariantCulture) ?? "tracker-updated-null",
+                action?.Count.ToString(CultureInfo.InvariantCulture) ?? "ca-null",
+                action?.LastCreatedAtUtc.Ticks.ToString(CultureInfo.InvariantCulture) ?? "ca-created-null"));
+        }
+
+        var rawKey = string.Join('|', parts);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawKey)));
+    }
+
+    private async Task SaveDashboardCache(
+        int userId,
+        long portfolioId,
+        bool includeFullyExitedFunds,
+        string dependencyKey,
+        PortfolioDashboardDto dashboard,
+        CancellationToken ct)
+    {
+        var json = JsonSerializer.Serialize(dashboard, DashboardCacheJsonOptions);
+        var cache = await db.UserPortfolioDashboardCaches
+            .FirstOrDefaultAsync(c =>
+                c.UserId == userId &&
+                c.PortfolioId == portfolioId &&
+                c.IncludeFullyExitedFunds == includeFullyExitedFunds,
+                ct);
+
+        if (cache is null)
+        {
+            db.UserPortfolioDashboardCaches.Add(new UserPortfolioDashboardCache
+            {
+                UserId = userId,
+                PortfolioId = portfolioId,
+                IncludeFullyExitedFunds = includeFullyExitedFunds,
+                DependencyKey = dependencyKey,
+                DashboardJson = json
+            });
+        }
+        else
+        {
+            cache.DependencyKey = dependencyKey;
+            cache.DashboardJson = json;
+            cache.UpdatedAtUtc = DateTime.UtcNow;
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 
     private static List<PortfolioFundInsightDto> BuildFundInsights(
@@ -560,25 +724,56 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
         return new SipConsistencyDto(activeMonths, investedMonths, Math.Round((decimal)investedMonths / activeMonths * 100, 2), Math.Round(buyRows.Sum(t => t.Amount) / activeMonths, 2));
     }
 
-    private async Task<NamedMetric> SimulateBenchmarkFund(List<PortfolioTransaction> rows, int? schemeCode, CancellationToken ct)
+    private async Task<PortfolioBenchmarkMetricDto> SimulateActualPortfolio(List<PortfolioTransaction> rows, DateOnly endDate, CancellationToken ct)
+    {
+        var codes = rows.Select(t => t.SchemeCode).Distinct().ToList();
+        var navs = await navService.EnsureNavHistoriesAsync(codes, to: endDate, ct: ct);
+        var units = codes.ToDictionary(code => code, _ => 0m);
+        foreach (var tx in rows)
+            units[tx.SchemeCode] += IsBuy(tx.TransactionType) ? tx.Units : -tx.Units;
+
+        var current = 0m;
+        foreach (var item in units)
+        {
+            var nav = navs.GetValueOrDefault(item.Key)?.LastOrDefault(n => n.Date <= endDate);
+            if (nav is not null)
+                current += item.Value * nav.Nav;
+        }
+
+        current = Math.Round(current, 2);
+        var invested = rows.Where(t => IsBuy(t.TransactionType)).Sum(t => t.Amount);
+        var redemptions = rows.Where(t => IsSell(t.TransactionType)).Sum(t => t.Amount);
+        var cashFlows = rows
+            .Select(t => (t.TransactionDate.ToDateTime(TimeOnly.MinValue), (double)(IsBuy(t.TransactionType) ? -t.Amount : t.Amount)))
+            .ToList();
+        cashFlows.Add((endDate.ToDateTime(TimeOnly.MinValue), (double)current));
+        return new PortfolioBenchmarkMetricDto(
+            invested,
+            current + redemptions,
+            invested == 0 ? 0 : Math.Round((current + redemptions - invested) / invested * 100, 2),
+            XirrCalculator.Calculate(cashFlows));
+    }
+
+    private async Task<NamedMetric> SimulateBenchmarkFund(List<PortfolioTransaction> rows, int? schemeCode, DateOnly endDate, CancellationToken ct)
     {
         if (schemeCode is null) return new NamedMetric("Select a benchmark", 0, 0, 0, null);
         var fund = await db.Funds.AsNoTracking().FirstOrDefaultAsync(f => f.SchemeCode == schemeCode.Value, ct);
-        var navs = await db.NavHistories.AsNoTracking().Where(n => n.SchemeCode == schemeCode.Value).OrderBy(n => n.Date).ToListAsync(ct);
-        return SimulateBenchmark(rows, [(schemeCode.Value, 100m)], navs.ToLookup(n => n.SchemeCode), fund?.SchemeName ?? "Benchmark");
+        var navs = await navService.EnsureNavHistoriesAsync([schemeCode.Value], to: endDate, ct: ct);
+        return SimulateBenchmark(rows, [(schemeCode.Value, 100m)], navs.SelectMany(kvp => kvp.Value).ToLookup(n => n.SchemeCode), fund?.SchemeName ?? "Benchmark", endDate);
     }
 
-    private async Task<NamedMetric> SimulateBenchmarkBasket(List<PortfolioTransaction> rows, BasketDefinition basket, CancellationToken ct)
+    private async Task<NamedMetric> SimulateBenchmarkBasket(List<PortfolioTransaction> rows, BasketDefinition basket, DateOnly endDate, CancellationToken ct)
     {
         var codes = basket.Funds.Select(f => f.SchemeCode).ToList();
-        var navs = await db.NavHistories.AsNoTracking().Where(n => codes.Contains(n.SchemeCode)).OrderBy(n => n.Date).ToListAsync(ct);
-        return SimulateBenchmark(rows, basket.Funds.Select(f => (f.SchemeCode, f.AllocationPercent)).ToList(), navs.ToLookup(n => n.SchemeCode), basket.Name);
+        var navs = await navService.EnsureNavHistoriesAsync(codes, to: endDate, ct: ct);
+        return SimulateBenchmark(rows, basket.Funds.Select(f => (f.SchemeCode, f.AllocationPercent)).ToList(), navs.SelectMany(kvp => kvp.Value).ToLookup(n => n.SchemeCode), basket.Name, endDate);
     }
 
-    private static NamedMetric SimulateBenchmark(List<PortfolioTransaction> rows, List<(int SchemeCode, decimal Allocation)> basket, ILookup<int, NavHistory> navs, string name)
+    private static NamedMetric SimulateBenchmark(List<PortfolioTransaction> rows, List<(int SchemeCode, decimal Allocation)> basket, ILookup<int, NavHistory> navs, string name, DateOnly endDate)
     {
         var units = basket.ToDictionary(b => b.SchemeCode, _ => 0m);
         var invested = 0m;
+        var withdrawn = 0m;
         foreach (var tx in rows)
         {
             foreach (var item in basket)
@@ -589,18 +784,39 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
                 units[item.SchemeCode] += IsBuy(tx.TransactionType) ? allocated / nav.Nav : -allocated / nav.Nav;
             }
             if (IsBuy(tx.TransactionType)) invested += tx.Amount;
+            if (IsSell(tx.TransactionType)) withdrawn += tx.Amount;
         }
 
         var current = 0m;
         foreach (var item in basket)
         {
-            var latest = navs[item.SchemeCode].LastOrDefault();
+            var latest = navs[item.SchemeCode].LastOrDefault(n => n.Date <= endDate);
             if (latest is not null) current += units[item.SchemeCode] * latest.Nav;
         }
         current = Math.Round(current, 2);
         var cashFlows = rows.Select(t => (t.TransactionDate.ToDateTime(TimeOnly.MinValue), (double)(IsBuy(t.TransactionType) ? -t.Amount : t.Amount))).ToList();
-        cashFlows.Add((DateTime.UtcNow.Date, (double)current));
-        return new NamedMetric(name, invested, current, invested == 0 ? 0 : Math.Round((current - invested) / invested * 100, 2), XirrCalculator.Calculate(cashFlows));
+        cashFlows.Add((endDate.ToDateTime(TimeOnly.MinValue), (double)current));
+        var totalValue = current + withdrawn;
+        return new NamedMetric(name, invested, totalValue, invested == 0 ? 0 : Math.Round((totalValue - invested) / invested * 100, 2), XirrCalculator.Calculate(cashFlows));
+    }
+
+    private static BenchmarkRollingReturnDto? BuildBenchmarkRollingReturn(List<NavHistory> navs, int periodYears, DateOnly start, DateOnly end)
+    {
+        var sorted = navs.Where(n => n.Date >= start.AddYears(-periodYears) && n.Date <= end).OrderBy(n => n.Date).ToList();
+        var returns = new List<decimal>();
+        foreach (var endNav in sorted.Where(n => n.Date >= start))
+        {
+            var startDate = endNav.Date.AddYears(-periodYears);
+            var startNav = FindClosestNavValue(sorted, startDate, 7);
+            if (startNav is null || startNav.Value.Nav <= 0) continue;
+            var years = (endNav.Date.DayNumber - startNav.Value.Date.DayNumber) / 365.25d;
+            if (years <= 0) continue;
+            returns.Add(Math.Round(((decimal)Math.Pow((double)(endNav.Nav / startNav.Value.Nav), 1 / years) - 1) * 100, 2));
+        }
+
+        return returns.Count == 0
+            ? new BenchmarkRollingReturnDto(periodYears, 0, null, null, null)
+            : new BenchmarkRollingReturnDto(periodYears, returns.Count, returns.Min(), returns.Max(), Math.Round(returns.Average(), 2));
     }
 
     private static void FlagNegativeUnitRows(List<PortfolioTransaction> allRows, List<PortfolioTransaction> stagedRows, Dictionary<string, string> rowErrors, List<PortfolioTransactionUpsertDto> requestRows)
@@ -696,6 +912,28 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
 
     private static bool TryParseDate(string value, out DateOnly date) =>
         DateOnly.TryParseExact(value, "yyyy-MM-dd", out date) || DateOnly.TryParseExact(value, "dd-MM-yyyy", out date);
+
+    private static DateOnly? ParseBenchmarkDate(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? null
+            : DateOnly.TryParseExact(value, "yyyy-MM-dd", out var date)
+                ? date
+                : null;
+
+    private static DateOnly MaxDate(params DateOnly[] dates) => dates.Max();
+
+    private static DateOnly MinDate(params DateOnly[] dates) => dates.Min();
+
+    private static (DateOnly Date, decimal Nav)? FindClosestNavValue(List<NavHistory> sortedAsc, DateOnly targetDate, int toleranceDays)
+    {
+        var best = sortedAsc
+            .Select(n => new { n.Date, n.Nav, Distance = Math.Abs(n.Date.DayNumber - targetDate.DayNumber) })
+            .Where(x => x.Distance <= toleranceDays)
+            .OrderBy(x => x.Distance)
+            .ThenByDescending(x => x.Date)
+            .FirstOrDefault();
+        return best is null ? null : (best.Date, best.Nav);
+    }
 
     private static bool TryParseImportDate(string? value, out DateOnly date)
     {

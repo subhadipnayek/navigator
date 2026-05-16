@@ -445,6 +445,59 @@ namespace NAVigator.Migrations
                     b.ToTable("UserPortfolios");
                 });
 
+            modelBuilder.Entity("NAVigator.Models.Database.UserPortfolioDashboardCache", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("DashboardJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("dashboard_json");
+
+                    b.Property<string>("DependencyKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("dependency_key");
+
+                    b.Property<bool>("IncludeFullyExitedFunds")
+                        .HasColumnType("boolean")
+                        .HasColumnName("include_fully_exited_funds");
+
+                    b.Property<long>("PortfolioId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("portfolio_id");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_portfolio_dashboard_caches");
+
+                    b.HasIndex("PortfolioId")
+                        .HasDatabaseName("ix_user_portfolio_dashboard_caches_portfolio_id");
+
+                    b.HasIndex("UserId", "PortfolioId", "IncludeFullyExitedFunds")
+                        .IsUnique()
+                        .HasDatabaseName("ix_user_portfolio_dashboard_caches_user_id_portfolio_id_include_f");
+
+                    b.ToTable("UserPortfolioDashboardCaches");
+                });
+
             modelBuilder.Entity("NAVigator.Models.Database.CorporateAction", b =>
                 {
                     b.HasOne("NAVigator.Models.Database.Fund", "Fund")
@@ -522,6 +575,27 @@ namespace NAVigator.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_user_portfolios_app_users_user_id");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("NAVigator.Models.Database.UserPortfolioDashboardCache", b =>
+                {
+                    b.HasOne("NAVigator.Models.Database.UserPortfolio", "Portfolio")
+                        .WithMany()
+                        .HasForeignKey("PortfolioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_portfolio_dashboard_caches_user_portfolios_portfolio_id");
+
+                    b.HasOne("NAVigator.Models.Database.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_portfolio_dashboard_caches_app_users_user_id");
+
+                    b.Navigation("Portfolio");
 
                     b.Navigation("User");
                 });

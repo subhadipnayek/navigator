@@ -25,6 +25,23 @@ public class NavService(
     /// <summary>Fallback starting point when AMFI master data has no launch date.</summary>
     private static readonly DateOnly HistoricalFetchStartDate = new(1990, 1, 1);
 
+    public async Task<Dictionary<int, List<NavHistory>>> EnsureNavHistoriesAsync(
+        IEnumerable<int> schemeCodes,
+        DateOnly? from = null,
+        DateOnly? to = null,
+        CancellationToken ct = default)
+    {
+        var result = new Dictionary<int, List<NavHistory>>();
+        foreach (var schemeCode in schemeCodes.Distinct())
+        {
+            await GetNavHistoryAsync(schemeCode, ct: ct);
+            var rows = await navRepo.GetBySchemeCodeAsync(schemeCode, from, to);
+            result[schemeCode] = rows.OrderBy(n => n.Date).ToList();
+        }
+
+        return result;
+    }
+
     public async Task<NavDataResponse?> GetNavHistoryAsync(int schemeCode, DateOnly? from = null, DateOnly? to = null, string? interval = null, bool adjusted = false, CancellationToken ct = default)
     {
         // 1. Verify the fund exists in our master list

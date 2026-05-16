@@ -334,6 +334,10 @@ export interface PortfolioBenchmarkRequest {
   benchmarkType: 'fund' | 'basket';
   schemeCode?: number | null;
   basket?: BasketDefinition | null;
+  durationYears?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  rollingPeriodYears?: number | null;
 }
 
 export interface PortfolioBenchmarkMetric {
@@ -345,10 +349,22 @@ export interface PortfolioBenchmarkMetric {
 
 export interface PortfolioBenchmarkResponse {
   benchmarkName: string;
+  effectiveStartDate: string;
+  effectiveEndDate: string;
+  comparisonNote: string | null;
   portfolio: PortfolioBenchmarkMetric;
   benchmark: PortfolioBenchmarkMetric;
+  benchmarkRollingReturn: BenchmarkRollingReturn | null;
   alphaPercent: number | null;
   verdict: string;
+}
+
+export interface BenchmarkRollingReturn {
+  periodYears: number;
+  dataPoints: number;
+  minimumPercent: number | null;
+  maximumPercent: number | null;
+  averagePercent: number | null;
 }
 
 export interface UserGridPreference {

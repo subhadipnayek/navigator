@@ -227,12 +227,19 @@
   </mat-card-content>
 </mat-card>
 
-<mat-card appearance="outlined">
-  <mat-card-header>
-    <mat-card-title>Year Transaction Editor</mat-card-title>
-    <mat-card-subtitle>Paste date, NAV, units, type, and notes from Excel or Google Sheets. Amount is calculated from units x NAV.</mat-card-subtitle>
-  </mat-card-header>
-  <mat-card-content>
+<section class="transaction-editor-shell">
+  <button mat-stroked-button type="button" (click)="showTransactionEditor.set(!showTransactionEditor())">
+    {{ showTransactionEditor() ? 'Hide Transactions' : 'View Transactions' }}
+  </button>
+</section>
+
+@if (showTransactionEditor()) {
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Year Transaction Editor</mat-card-title>
+      <mat-card-subtitle>Paste date, NAV, units, type, and notes from Excel or Google Sheets. Amount is calculated from units x NAV.</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
     <div class="editor-toolbar">
       <mat-form-field appearance="outline">
         <mat-label>Financial year</mat-label>
@@ -298,8 +305,9 @@
       <div><strong>{{ yearSummary().transactionCount }}</strong><span>Transactions</span></div>
       <div><strong>{{ yearSummary().fundsCovered }}</strong><span>Funds covered</span></div>
     </div>
-  </mat-card-content>
-</mat-card>
+    </mat-card-content>
+  </mat-card>
+}
 
 @if (dashboard(); as view) {
   <section class="portfolio-panels">
@@ -373,14 +381,38 @@
           </mat-option>
         }
       </mat-autocomplete>
+      <mat-form-field appearance="outline">
+        <mat-label>Window</mat-label>
+        <mat-select [ngModel]="benchmarkDurationYears()" (ngModelChange)="benchmarkDurationYears.set($event)">
+          <mat-option [value]="null">Auto</mat-option>
+          <mat-option [value]="1">1 year</mat-option>
+          <mat-option [value]="3">3 years</mat-option>
+          <mat-option [value]="5">5 years</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Rolling period</mat-label>
+        <mat-select [ngModel]="benchmarkRollingPeriodYears()" (ngModelChange)="benchmarkRollingPeriodYears.set($event)">
+          <mat-option [value]="1">1 year</mat-option>
+          <mat-option [value]="3">3 years</mat-option>
+          <mat-option [value]="5">5 years</mat-option>
+        </mat-select>
+      </mat-form-field>
       <button mat-flat-button type="button" (click)="runBenchmark()">Compare</button>
     </div>
 
     @if (benchmark(); as result) {
       <div class="benchmark-result">
+        <p>{{ result.effectiveStartDate }} to {{ result.effectiveEndDate }}. {{ result.comparisonNote }}</p>
         <div><span>Portfolio XIRR</span><strong>{{ result.portfolio.xirrPercent ?? 0 | number: '1.2-2' }}%</strong></div>
         <div><span>{{ result.benchmarkName }} XIRR</span><strong>{{ result.benchmark.xirrPercent ?? 0 | number: '1.2-2' }}%</strong></div>
         <div><span>Alpha</span><strong>{{ result.alphaPercent ?? 0 | number: '1.2-2' }}%</strong></div>
+        <div><span>Portfolio value</span><strong>{{ result.portfolio.currentValue | number: '1.0-0' }}</strong></div>
+        <div><span>{{ result.benchmarkName }} value</span><strong>{{ result.benchmark.currentValue | number: '1.0-0' }}</strong></div>
+        @if (result.benchmarkRollingReturn; as rolling) {
+          <div><span>{{ rolling.periodYears }}Y rolling avg</span><strong>{{ rolling.averagePercent ?? 0 | number: '1.2-2' }}%</strong></div>
+          <div><span>{{ rolling.periodYears }}Y rolling range</span><strong>{{ rolling.minimumPercent ?? 0 | number: '1.2-2' }}% - {{ rolling.maximumPercent ?? 0 | number: '1.2-2' }}%</strong></div>
+        }
         <p>{{ result.verdict }}</p>
       </div>
     }

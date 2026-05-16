@@ -204,9 +204,9 @@ public partial class PortfolioSimulationService
             .Distinct()
             .ToList();
 
+        await navService.EnsureNavHistoriesAsync(uniqueSchemeCodes, ct: ct);
         foreach (var schemeCode in uniqueSchemeCodes)
         {
-            await navService.GetNavHistoryAsync(schemeCode, ct: ct);
             var fund = await fundRepo.GetBySchemeCodeAsync(schemeCode);
             if (fund is null) continue;
 
@@ -338,11 +338,11 @@ public partial class PortfolioSimulationService
     {
         // Load NAV data for all funds
         var fundData = new Dictionary<int, List<NavHistory>>();
+        var navHistories = await navService.EnsureNavHistoriesAsync(
+            basket.Funds.Select(f => f.SchemeCode), start.AddYears(-periodYears), end, ct);
         foreach (var alloc in basket.Funds)
         {
-            await navService.GetNavHistoryAsync(alloc.SchemeCode, ct: ct);
-            var navs = await navRepo.GetBySchemeCodeAsync(alloc.SchemeCode, start.AddYears(-periodYears), end);
-            fundData[alloc.Key()] = navs.OrderBy(n => n.Date).ToList();
+            fundData[alloc.Key()] = navHistories.GetValueOrDefault(alloc.SchemeCode) ?? [];
         }
 
         // Get union of all dates in the evaluation window

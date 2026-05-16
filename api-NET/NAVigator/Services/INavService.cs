@@ -1,4 +1,5 @@
 using NAVigator.Models.Dto;
+using NAVigator.Models.Database;
 
 namespace NAVigator.Services;
 
@@ -13,6 +14,13 @@ public interface INavService
     /// and split-adjusted NAVs when <paramref name="adjusted"/> is true.
     /// </summary>
     Task<NavDataResponse?> GetNavHistoryAsync(int schemeCode, DateOnly? from = null, DateOnly? to = null, string? interval = null, bool adjusted = false, CancellationToken ct = default);
+
+    /// <summary>
+    /// Central lazy NAV history access point. Ensures each requested fund has
+    /// history loaded/up-to-date, then returns stored DB history for callers that
+    /// need raw rows for calculations.
+    /// </summary>
+    Task<Dictionary<int, List<NavHistory>>> EnsureNavHistoriesAsync(IEnumerable<int> schemeCodes, DateOnly? from = null, DateOnly? to = null, CancellationToken ct = default);
 
     Task<List<NavGapDto>?> DetectNavGapsAsync(int schemeCode, int minGapDays = 30, CancellationToken ct = default);
 

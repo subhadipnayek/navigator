@@ -98,6 +98,7 @@ export class UserPortfolio implements OnInit, OnDestroy {
   readonly importStartDate = signal('');
   readonly importEndDate = signal('');
   readonly importSummary = signal<ImportPortfolioTransactionsResponse | null>(null);
+  readonly showTransactionEditor = signal(false);
   readonly showFullyExitedFunds = signal(false);
   readonly selectedFinancialYear = signal(this.currentFinancialYear());
   readonly contributionMode = signal<'financial' | 'calendar'>('financial');
@@ -108,6 +109,8 @@ export class UserPortfolio implements OnInit, OnDestroy {
   readonly benchmarkResults = signal<Fund[]>([]);
   readonly selectedBenchmarkFund = signal<Fund | null>(null);
   readonly benchmark = signal<PortfolioBenchmarkResponse | null>(null);
+  readonly benchmarkDurationYears = signal<number | null>(null);
+  readonly benchmarkRollingPeriodYears = signal<number>(3);
   readonly excelImportMessages = signal<string[]>([]);
 
   readonly contributionRows = computed<ContributionPeriod[]>(() => {
@@ -481,6 +484,8 @@ export class UserPortfolio implements OnInit, OnDestroy {
       .compareUserPortfolioBenchmark(portfolioId, {
         benchmarkType: 'fund',
         schemeCode: fund.schemeCode,
+        durationYears: this.benchmarkDurationYears(),
+        rollingPeriodYears: this.benchmarkRollingPeriodYears(),
       })
       .subscribe({
         next: (result) => this.benchmark.set(result),

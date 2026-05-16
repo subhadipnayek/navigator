@@ -143,6 +143,11 @@ td small {
   display: none;
 }
 
+.transaction-editor-shell {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .transaction-grid {
   width: 100%;
   height: 460px;

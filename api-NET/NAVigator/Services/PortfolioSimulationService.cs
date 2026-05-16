@@ -7,7 +7,6 @@ using NAVigator.Repositories;
 namespace NAVigator.Services;
 
 public partial class PortfolioSimulationService(
-    INavHistoryRepository navRepo,
     IFundRepository fundRepo,
     INavService navService,
     ICorporateActionService corporateActionService,
@@ -52,13 +51,13 @@ public partial class PortfolioSimulationService(
             basket.Name, basket.Funds.Count, sipAmount, lumpSum, startDate, endDate);
 
         var fundData = new Dictionary<int, FundNavData>();
+        var navHistories = await navService.EnsureNavHistoriesAsync(
+            basket.Funds.Select(f => f.SchemeCode), startDate, endDate, ct);
         foreach (var alloc in basket.Funds)
         {
-            await navService.GetNavHistoryAsync(alloc.SchemeCode, ct: ct);
             var fund = await fundRepo.GetBySchemeCodeAsync(alloc.SchemeCode)
                        ?? throw new ArgumentException($"Fund {alloc.SchemeCode} not found.");
-            var navs   = await navRepo.GetBySchemeCodeAsync(alloc.SchemeCode, startDate, endDate);
-            var sorted = navs.OrderBy(n => n.Date).ToList();
+            var sorted = navHistories.GetValueOrDefault(alloc.SchemeCode) ?? [];
             var actions = await corporateActionService.GetActionsAsync(alloc.SchemeCode);
             fundData[alloc.SchemeCode] = new FundNavData(fund, sorted, actions, alloc.AllocationPercent);
         }

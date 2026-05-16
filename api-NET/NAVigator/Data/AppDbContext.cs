@@ -13,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UserPortfolio> UserPortfolios => Set<UserPortfolio>();
     public DbSet<PortfolioTransaction> PortfolioTransactions => Set<PortfolioTransaction>();
     public DbSet<UserGridPreference> UserGridPreferences => Set<UserGridPreference>();
+    public DbSet<UserPortfolioDashboardCache> UserPortfolioDashboardCaches => Set<UserPortfolioDashboardCache>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -73,6 +74,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .WithOne(p => p.User)
              .HasForeignKey(p => p.UserId)
              .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasMany<UserPortfolioDashboardCache>()
+             .WithOne(p => p.User)
+             .HasForeignKey(p => p.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<UserPortfolio>(e =>
@@ -82,6 +88,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasMany(p => p.Transactions)
              .WithOne(t => t.Portfolio)
              .HasForeignKey(t => t.PortfolioId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasMany<UserPortfolioDashboardCache>()
+             .WithOne(c => c.Portfolio)
+             .HasForeignKey(c => c.PortfolioId)
              .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -99,6 +110,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<UserGridPreference>(e =>
         {
             e.HasIndex(p => new { p.UserId, p.GridKey }).IsUnique();
+        });
+
+        modelBuilder.Entity<UserPortfolioDashboardCache>(e =>
+        {
+            e.HasIndex(c => new { c.UserId, c.PortfolioId, c.IncludeFullyExitedFunds }).IsUnique();
         });
     }
 }
