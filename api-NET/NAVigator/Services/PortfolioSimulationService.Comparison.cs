@@ -138,7 +138,7 @@ public partial class PortfolioSimulationService
                 MinReturn = values.Count > 0 ? values[0] : null,
                 MaxReturn = values.Count > 0 ? values[^1] : null,
                 AverageReturn = values.Count > 0 ? Math.Round(values.Average(), 2) : null,
-                MedianReturn = values.Count > 0 ? GetMedian(values) : null
+                MedianReturn = values.Count > 0 ? NavCalculationRules.GetMedian(values) : null
             });
             allSeries[entry.Name] = rollingData;
         }
@@ -149,7 +149,7 @@ public partial class PortfolioSimulationService
         // Apply interval sampling
         if (!string.IsNullOrEmpty(request.Interval) && !request.Interval.Equals("daily", StringComparison.OrdinalIgnoreCase))
         {
-            allDates = SampleDates(allDates, request.Interval);
+            allDates = NavCalculationRules.SampleByInterval(allDates, request.Interval, d => d);
         }
 
         var timeSeries = new List<RollingComparisonTimePoint>();
@@ -361,8 +361,8 @@ public partial class PortfolioSimulationService
             foreach (var alloc in basket.Funds)
             {
                 var navs = fundData[alloc.SchemeCode];
-                var startNav = FindClosestNavValue(navs, lookbackDate, 7);
-                var endNav = FindClosestNavValue(navs, evalDate, 7);
+                var startNav = NavCalculationRules.FindClosestNavValue(navs, lookbackDate);
+                var endNav = NavCalculationRules.FindClosestNavValue(navs, evalDate);
                 if (startNav is null || endNav is null || startNav.Value.Nav <= 0)
                 { valid = false; break; }
 
@@ -372,38 +372,12 @@ public partial class PortfolioSimulationService
             }
             if (!valid || startVal <= 0) continue;
 
-            int days = evalDate.DayNumber - lookbackDate.DayNumber;
-            if (days <= 0) continue;
-            var cagr = (decimal)(Math.Pow((double)(endVal / startVal), 365.25 / days) - 1) * 100m;
-            results.Add((evalDate, Math.Round(cagr, 2)));
+            var cagr = NavCalculationRules.CalculateCagr(startVal, endVal, lookbackDate, evalDate);
+            if (!cagr.HasValue) continue;
+            results.Add((evalDate, Math.Round(cagr.Value, 2)));
         }
         return results;
     }
-
-    private static (DateOnly Date, decimal Nav)? FindClosestNavValue(List<NavHistory> sorted, DateOnly target, int tolerance)
-    {
-        var nav = FindNavOnOrBefore(sorted, target);
-        if (nav is not null && target.DayNumber - nav.Date.DayNumber <= tolerance)
-            return (nav.Date, nav.Nav);
-        var navAfter = FindNavOnOrAfter(sorted, target);
-        if (navAfter is not null && navAfter.Date.DayNumber - target.DayNumber <= tolerance)
-            return (navAfter.Date, navAfter.Nav);
-        return null;
-    }
-
-    private static decimal GetMedian(List<decimal> sorted) =>
-        sorted.Count % 2 == 0
-            ? Math.Round((sorted[sorted.Count / 2 - 1] + sorted[sorted.Count / 2]) / 2m, 2)
-            : sorted[sorted.Count / 2];
-
-    private static List<DateOnly> SampleDates(List<DateOnly> dates, string interval) =>
-        interval.ToLowerInvariant() switch
-        {
-            "weekly" => dates.GroupBy(d => (ISOWeek.GetYear(d.ToDateTime(TimeOnly.MinValue)),
-                ISOWeek.GetWeekOfYear(d.ToDateTime(TimeOnly.MinValue)))).Select(g => g.Last()).ToList(),
-            "monthly" => dates.GroupBy(d => (d.Year, d.Month)).Select(g => g.Last()).ToList(),
-            _ => dates
-        };
 }
 
 // Extension to support keying by SchemeCode

@@ -9,6 +9,7 @@ public class FundService(
     IFundRepository fundRepo,
     INavHistoryRepository navRepo,
     IAmfiService amfiService,
+    INavHistoryProvider navHistoryProvider,
     ILogger<FundService> logger) : IFundService
 {
     private const int LikelyDiscontinuedGraceDays = 30;
@@ -26,9 +27,9 @@ public class FundService(
             return null;
 
         if (fund.NavSyncTracker?.LastLatestNavCheckAtIst is not { } lastCheck
-            || GetIndiaNow() - lastCheck >= TimeSpan.FromHours(1))
+            || IndiaTime.Now() - lastCheck >= TimeSpan.FromHours(1))
         {
-            await RefreshLatestNavTrackerIfStaleAsync(schemeCode);
+            await navHistoryProvider.RefreshLatestNavTrackerIfStaleAsync(schemeCode);
             fund = await fundRepo.GetBySchemeCodeAsync(schemeCode);
         }
 
@@ -51,7 +52,7 @@ public class FundService(
         var existingCount = await fundRepo.GetCountAsync();
         await fundRepo.BulkUpsertAsync(funds);
         var latestNavSnapshots = await amfiService.FetchLatestNavSnapshotsAsync(ct);
-        await navRepo.UpsertLatestNavSnapshotsAsync(latestNavSnapshots, GetIndiaNow(), ct);
+        await navRepo.UpsertLatestNavSnapshotsAsync(latestNavSnapshots, IndiaTime.Now(), ct);
         var newCount = await fundRepo.GetCountAsync();
 
         sw.Stop();
@@ -107,7 +108,7 @@ public class FundService(
         if (!latestNavDate.HasValue)
             return "Unknown";
 
-        var today = GetIndiaToday();
+        var today = IndiaTime.Today();
         if (today.DayNumber - latestNavDate.Value.DayNumber <= LikelyDiscontinuedGraceDays)
             return "Active";
 
@@ -126,32 +127,5 @@ public class FundService(
 
         var lastCheckDate = DateOnly.FromDateTime(lastSuccessfulCheckAtIst.Value);
         return lastCheckDate.DayNumber - latestNavDate.Value.DayNumber > LikelyDiscontinuedGraceDays;
-    }
-
-    private static DateOnly GetIndiaToday()
-        => DateOnly.FromDateTime(GetIndiaNow());
-
-    private static DateTime GetIndiaNow()
-        => TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("India Standard Time"));
-
-    private async Task RefreshLatestNavTrackerIfStaleAsync(int schemeCode, CancellationToken ct = default)
-    {
-        var tracker = await navRepo.GetSyncTrackerAsync(schemeCode);
-        var nowIst = GetIndiaNow();
-        if (tracker?.LastLatestNavCheckAtIst is { } lastCheck && nowIst - lastCheck < TimeSpan.FromHours(1))
-            return;
-
-        try
-        {
-            var snapshots = await amfiService.FetchLatestNavSnapshotsAsync(ct);
-            await navRepo.UpsertLatestNavSnapshotsAsync(snapshots, nowIst, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(
-                ex,
-                "Failed to refresh latest NAV tracker snapshots before returning fund {SchemeCode}",
-                schemeCode);
-        }
     }
 }

@@ -118,7 +118,7 @@ public partial class PortfolioSimulationService(
                     {
                         // Use FindNavOnOrAfter so the purchase executes at the next
                         // available NAV (mimics real-world T+1 cut-off behaviour).
-                        var nav = FindNavOnOrAfter(kvp.Value.Navs, date);
+                        var nav = NavCalculationRules.FindNavOnOrAfter(kvp.Value.Navs, date);
                         if (nav is null) continue;
 
                         // Apply any splits / bonuses since the last event BEFORE buying.
@@ -152,7 +152,7 @@ public partial class PortfolioSimulationService(
 
                     foreach (var kvp in fundData)
                     {
-                        var nav = FindNavOnOrAfter(kvp.Value.Navs, date);
+                        var nav = NavCalculationRules.FindNavOnOrAfter(kvp.Value.Navs, date);
                         if (nav is null) continue;
 
                         ApplyCorporateActions(state[kvp.Key], kvp.Value.Actions,
@@ -187,7 +187,7 @@ public partial class PortfolioSimulationService(
                     foreach (var kvp in fundData)
                     {
                         // FindNavOnOrBefore for valuation — we never look ahead.
-                        var nav = FindNavOnOrBefore(kvp.Value.Navs, date);
+                        var nav = NavCalculationRules.FindNavOnOrBefore(kvp.Value.Navs, date);
                         if (nav is null) continue;
 
                         // CAs must still be applied here. A split causes the raw NAV
@@ -227,7 +227,7 @@ public partial class PortfolioSimulationService(
         // Flush any remaining CAs up to endDate before computing final values.
         foreach (var kvp in fundData)
         {
-            var lastNav = FindNavOnOrBefore(kvp.Value.Navs, endDate);
+            var lastNav = NavCalculationRules.FindNavOnOrBefore(kvp.Value.Navs, endDate);
             if (lastNav is null) continue;
             ApplyCorporateActions(state[kvp.Key], kvp.Value.Actions,
                 state[kvp.Key].LastCaAppliedUpTo, lastNav.Date);
@@ -238,7 +238,7 @@ public partial class PortfolioSimulationService(
         var fundDetails = new List<FundSimulationDetail>();
         foreach (var kvp in fundData)
         {
-            var lastNav = FindNavOnOrBefore(kvp.Value.Navs, endDate);
+            var lastNav = NavCalculationRules.FindNavOnOrBefore(kvp.Value.Navs, endDate);
             if (lastNav is null) continue;
             var val      = state[kvp.Key].Units * lastNav.Nav;
             var invested = state[kvp.Key].Invested;
@@ -261,9 +261,7 @@ public partial class PortfolioSimulationService(
             ? (finalCorpus - totalInvested) / totalInvested * 100m : 0;
 
         int days = endDate.DayNumber - startDate.DayNumber;
-        decimal? cagr = days > 0 && totalInvested > 0
-            ? (decimal)(Math.Pow((double)(finalCorpus / totalInvested), 365.25 / days) - 1) * 100m
-            : null;
+        var cagr = NavCalculationRules.CalculateCagr(totalInvested, finalCorpus, startDate, endDate);
 
         cashFlows.Add((endDate.ToDateTime(TimeOnly.MinValue), (double)finalCorpus));
         var xirr = XirrCalculator.Calculate(cashFlows);
@@ -296,51 +294,6 @@ public partial class PortfolioSimulationService(
     private static DateOnly ParseDate(string s) =>
         DateOnly.ParseExact(s, DateFmt, Inv);
 
-    /// <summary>
-    /// Finds the earliest NAV on or after <paramref name="target"/>.
-    /// Falls back to the last available NAV if it is within 7 days before target
-    /// (handles end-of-data edge case). Returns null if the nearest NAV is more
-    /// than 7 days away in either direction.
-    /// </summary>
-    private static NavHistory? FindNavOnOrAfter(List<NavHistory> sorted, DateOnly target)
-    {
-        int lo = 0, hi = sorted.Count - 1;
-        NavHistory? best = null;
-        while (lo <= hi)
-        {
-            int mid = (lo + hi) / 2;
-            if (sorted[mid].Date >= target) { best = sorted[mid]; hi = mid - 1; }
-            else lo = mid + 1;
-        }
-        // Last-resort: accept a NAV up to 7 days before target when there is no
-        // future data (e.g. fund is brand-new or end-of-range).
-        if (best is null && sorted.Count > 0)
-        {
-            var last = sorted[^1];
-            if (target.DayNumber - last.Date.DayNumber <= 7) return last;
-        }
-        // Reject if the found NAV is more than 7 trading days ahead (stale data).
-        if (best is not null && best.Date.DayNumber - target.DayNumber > 7) return null;
-        return best;
-    }
-
-    /// <summary>
-    /// Finds the latest NAV on or before <paramref name="target"/>.
-    /// </summary>
-    private static NavHistory? FindNavOnOrBefore(List<NavHistory> sorted, DateOnly target)
-    {
-        int lo = 0, hi = sorted.Count - 1;
-        NavHistory? best = null;
-        while (lo <= hi)
-        {
-            int mid = (lo + hi) / 2;
-            if (sorted[mid].Date <= target) { best = sorted[mid]; lo = mid + 1; }
-            else hi = mid - 1;
-        }
-        return best;
-    }
-
-    /// <summary>
     /// Applies split / bonus corporate actions in the half-open window
     /// (from, to].  The <paramref name="from"/> value is non-nullable;
     /// initialise FundState.LastCaAppliedUpTo to startDate - 1 so the first
@@ -352,8 +305,7 @@ public partial class PortfolioSimulationService(
     {
         foreach (var action in actions)
         {
-            if (action.ActionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase) ||
-                action.ActionType.Equals("MissingData",   StringComparison.OrdinalIgnoreCase))
+            if (CorporateActionRules.IsSeriesBreakAction(action.ActionType))
                 continue;
 
             if (!DateOnly.TryParseExact(action.ActionDate, DateFmt, Inv,

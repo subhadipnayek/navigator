@@ -9,7 +9,10 @@ using NAVigator.Models.Dto.Portfolio;
 
 namespace NAVigator.Services;
 
-public class UserPortfolioService(AppDbContext db, INavService navService) : IUserPortfolioService
+public class UserPortfolioService(
+    AppDbContext db,
+    INavService navService,
+    INavHistoryProvider navHistoryProvider) : IUserPortfolioService
 {
     private static readonly string[] BuyTypes = ["Buy", "Purchase", "SIP", "SwitchIn"];
     private static readonly string[] SellTypes = ["Sell", "Redeem", "Redemption", "SwitchOut"];
@@ -75,16 +78,6 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
             }
         }
 
-        var missingNavCodes = fundCodes.Where(code => !latestNavs.ContainsKey(code)).ToList();
-        foreach (var schemeCode in missingNavCodes)
-        {
-            await navService.GetNavHistoryAsync(schemeCode, ct: ct);
-        }
-        if (missingNavCodes.Count > 0)
-        {
-            latestNavs = await GetLatestNavsAsync(fundCodes, ct);
-            cacheKey = await BuildDashboardCacheKey(portfolio, fundCodes, showFullyExitedFunds, ct);
-        }
         var fundInsights = BuildFundInsights(transactions, latestNavs, emptyStates);
         var visibleFunds = showFullyExitedFunds ? fundInsights : fundInsights.Where(f => !f.IsFullyExited).ToList();
         var visibleFundCodes = visibleFunds.Select(f => f.SchemeCode).ToHashSet();
@@ -503,12 +496,20 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
 
     private async Task<Dictionary<int, NavHistory>> GetLatestNavsAsync(List<int> schemeCodes, CancellationToken ct)
     {
-        var rows = await db.NavHistories
-            .AsNoTracking()
-            .Where(n => schemeCodes.Contains(n.SchemeCode) && n.Date <= DateOnly.FromDateTime(DateTime.UtcNow))
-            .OrderByDescending(n => n.Date)
-            .ToListAsync(ct);
-        return rows.GroupBy(n => n.SchemeCode).ToDictionary(g => g.Key, g => g.First());
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var snapshots = await navHistoryProvider.GetHistoriesAsync(
+            schemeCodes,
+            new NavHistoryScope(To: today),
+            ct);
+
+        return snapshots
+            .Select(kvp => new
+            {
+                SchemeCode = kvp.Key,
+                Latest = kvp.Value.Rows.LastOrDefault(n => n.Date <= today)
+            })
+            .Where(x => x.Latest is not null)
+            .ToDictionary(x => x.SchemeCode, x => x.Latest!);
     }
 
     private async Task<string> BuildDashboardCacheKey(
@@ -650,7 +651,7 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
                 ledger.RealizedPnl,
                 currentValue - ledger.RemainingCost,
                 invested == 0 ? 0 : Math.Round(totalGain / invested * 100, 2),
-                CalculateCagr(invested, redemptions + currentValue, firstDate, lastDate),
+                RoundCagr(invested, redemptions + currentValue, firstDate, lastDate),
                 xirr,
                 Math.Max(0, lastDate.DayNumber - firstDate.DayNumber),
                 isFullyExited,
@@ -680,7 +681,7 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
             realizedPnl,
             unrealizedPnl,
             invested == 0 ? 0 : Math.Round(gain / invested * 100, 2),
-            CalculateCagr(totalInvested, totalWithdrawn + current, start, end),
+            RoundCagr(totalInvested, totalWithdrawn + current, start, end),
             xirr,
             funds.Count,
             funds.Count(f => !f.IsFullyExited),
@@ -807,11 +808,11 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
         foreach (var endNav in sorted.Where(n => n.Date >= start))
         {
             var startDate = endNav.Date.AddYears(-periodYears);
-            var startNav = FindClosestNavValue(sorted, startDate, 7);
+            var startNav = NavCalculationRules.FindClosestNavValue(sorted, startDate);
             if (startNav is null || startNav.Value.Nav <= 0) continue;
-            var years = (endNav.Date.DayNumber - startNav.Value.Date.DayNumber) / 365.25d;
-            if (years <= 0) continue;
-            returns.Add(Math.Round(((decimal)Math.Pow((double)(endNav.Nav / startNav.Value.Nav), 1 / years) - 1) * 100, 2));
+            var cagr = NavCalculationRules.CalculateCagr(startNav.Value.Nav, endNav.Nav, startNav.Value.Date, endNav.Date);
+            if (!cagr.HasValue) continue;
+            returns.Add(Math.Round(cagr.Value, 2));
         }
 
         return returns.Count == 0
@@ -853,12 +854,10 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
         return XirrCalculator.Calculate(cashFlows);
     }
 
-    private static decimal? CalculateCagr(decimal invested, decimal finalValue, DateOnly start, DateOnly end)
+    private static decimal? RoundCagr(decimal invested, decimal finalValue, DateOnly start, DateOnly end)
     {
-        if (invested <= 0 || finalValue <= 0 || end <= start) return null;
-        var years = (end.DayNumber - start.DayNumber) / 365.25d;
-        if (years <= 0) return null;
-        return Math.Round(((decimal)Math.Pow((double)(finalValue / invested), 1 / years) - 1) * 100, 2);
+        var cagr = NavCalculationRules.CalculateCagr(invested, finalValue, start, end);
+        return cagr.HasValue ? Math.Round(cagr.Value, 2) : null;
     }
 
     private static FundLedger BuildLedger(IEnumerable<PortfolioTransaction> rows)
@@ -923,17 +922,6 @@ public class UserPortfolioService(AppDbContext db, INavService navService) : IUs
     private static DateOnly MaxDate(params DateOnly[] dates) => dates.Max();
 
     private static DateOnly MinDate(params DateOnly[] dates) => dates.Min();
-
-    private static (DateOnly Date, decimal Nav)? FindClosestNavValue(List<NavHistory> sortedAsc, DateOnly targetDate, int toleranceDays)
-    {
-        var best = sortedAsc
-            .Select(n => new { n.Date, n.Nav, Distance = Math.Abs(n.Date.DayNumber - targetDate.DayNumber) })
-            .Where(x => x.Distance <= toleranceDays)
-            .OrderBy(x => x.Distance)
-            .ThenByDescending(x => x.Date)
-            .FirstOrDefault();
-        return best is null ? null : (best.Date, best.Nav);
-    }
 
     private static bool TryParseImportDate(string? value, out DateOnly date)
     {

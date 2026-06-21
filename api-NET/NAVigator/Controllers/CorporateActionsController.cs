@@ -16,7 +16,6 @@ public class CorporateActionsController(
     INavService navService,
     AppDbContext db) : ControllerBase
 {
-    private static readonly string[] ValidActionTypes = ["Split", "Merger", "Bonus", "Discontinuity", "MissingData", "Other"];
     private static readonly string[] ValidReviewFilters = ["all", "factor-actions", "gaps", "missing-data", "large-moves", "recorded", "needs-review"];
     private static readonly string[] ValidPriorities = ["all", "high", "medium", "low"];
 
@@ -80,7 +79,7 @@ public class CorporateActionsController(
         if (limit is < 1 or > 1000)
             return BadRequest(new { message = "limit must be between 1 and 1000." });
 
-        if (actionType is not null && !ValidActionTypes.Contains(actionType, StringComparer.OrdinalIgnoreCase))
+        if (actionType is not null && !CorporateActionRules.ValidActionTypes.Contains(actionType, StringComparer.OrdinalIgnoreCase))
             return BadRequest(new { message = "actionType must be 'Split', 'Merger', 'Bonus', 'Discontinuity', 'MissingData', or 'Other'." });
 
         var normalizedFilter = filter.ToLowerInvariant();
@@ -335,7 +334,7 @@ public class CorporateActionsController(
     [HttpPost("{schemeCode:int}")]
     public async Task<IActionResult> AddAction(int schemeCode, [FromBody] CreateCorporateActionRequest request)
     {
-        if (!ValidActionTypes.Contains(request.ActionType, StringComparer.OrdinalIgnoreCase))
+        if (!CorporateActionRules.ValidActionTypes.Contains(request.ActionType, StringComparer.OrdinalIgnoreCase))
             return BadRequest(new { message = "actionType must be 'Split', 'Merger', 'Bonus', 'Discontinuity', 'MissingData', or 'Other'." });
 
         var result = await actionService.AddActionAsync(schemeCode, request);
@@ -353,7 +352,7 @@ public class CorporateActionsController(
         int actionId,
         [FromBody] UpdateCorporateActionRequest request)
     {
-        if (!ValidActionTypes.Contains(request.ActionType, StringComparer.OrdinalIgnoreCase))
+        if (!CorporateActionRules.ValidActionTypes.Contains(request.ActionType, StringComparer.OrdinalIgnoreCase))
             return BadRequest(new { message = "actionType must be 'Split', 'Merger', 'Bonus', 'Discontinuity', 'MissingData', or 'Other'." });
 
         var result = await actionService.UpdateActionAsync(schemeCode, actionId, request);

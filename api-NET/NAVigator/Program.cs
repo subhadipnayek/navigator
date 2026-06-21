@@ -27,6 +27,7 @@ builder.Services.AddScoped<ICorporateActionRepository, CorporateActionRepository
 
 // ----- Services -----
 builder.Services.AddScoped<IAmfiService, AmfiService>();
+builder.Services.AddScoped<INavHistoryProvider, NavHistoryProvider>();
 builder.Services.AddScoped<IFundService, FundService>();
 builder.Services.AddScoped<INavService, NavService>();
 builder.Services.AddScoped<ICorporateActionService, CorporateActionService>();
