@@ -38,6 +38,12 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/portfolio-lab/portfolio-lab').then((m) => m.PortfolioLab),
   },
   {
+    path: 'portfolio-dashboard',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./pages/user-portfolio/user-portfolio').then((m) => m.UserPortfolio),
+  },
+  {
     path: 'login',
     loadComponent: () => import('./pages/login/login').then((m) => m.Login),
   },

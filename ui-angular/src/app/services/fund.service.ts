@@ -76,4 +76,7 @@ export class FundService {
   deleteFund(schemeCode: number): Observable<void> {
     return this.http.delete<void>(`${this.api.baseUrl}/api/admin/funds/${schemeCode}`);
   }
+  deleteAllFunds(): Observable<void> {
+    return this.http.delete<void>(`${this.api.baseUrl}/api/admin/funds/all`);
+  }
 }

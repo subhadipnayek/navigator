@@ -4,9 +4,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace NAVigator.Models.Database;
 
 /// <summary>
-/// Tracks per-fund NAV sync attempts to avoid hammering the external API.
-/// If we checked the API and it had no newer NAV, we wait at least
-/// <see cref="CooldownMinutes"/> before checking again.
+/// Per-fund NAV cache and sync state. The source of truth remains
+/// Funds for scheme metadata and NavHistories for the series itself.
 /// </summary>
 [Table("NavSyncTrackers")]
 public class NavSyncTracker
@@ -15,15 +14,37 @@ public class NavSyncTracker
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public int SchemeCode { get; set; }
 
-    /// <summary>Last time we called the external NAV API for this fund.</summary>
-    public DateTime LastApiCheckUtc { get; set; }
+    [Column(TypeName = "decimal(18,6)")]
+    public decimal? LatestNav { get; set; }
 
-    /// <summary>The latest NAV date that was available on the API during the last check.</summary>
-    public DateOnly? LatestNavDateFromApi { get; set; }
+    public DateOnly? LatestNavDate { get; set; }
+
+    public DateOnly? NavStartDate { get; set; }
+
+    public DateOnly? NavEndDate { get; set; }
+
+    public int NavHistoryCount { get; set; }
+
+    public int CorporateActionCount { get; set; }
+
+    /// <summary>Last time NAVAll.txt was checked for the latest NAV snapshot, in IST.</summary>
+    [Column(TypeName = "timestamp without time zone")]
+    public DateTime? LastLatestNavCheckAtIst { get; set; }
+
+    /// <summary>Last time AMFI historical NAV API was checked for this fund, in IST.</summary>
+    [Column(TypeName = "timestamp without time zone")]
+    public DateTime? LastHistoryCheckAtIst { get; set; }
+
+    /// <summary>Last time this fund's stored NAV history cache was changed, in IST.</summary>
+    [Column(TypeName = "timestamp without time zone")]
+    public DateTime? NavHistoryUpdatedAtIst { get; set; }
+
+    [Column(TypeName = "timestamp without time zone")]
+    public DateTime UpdatedAtIst { get; set; }
 
     /// <summary>
-    /// Whether the last API check returned newer data than what we already had.
-    /// False means the API had nothing new — so we should cool down.
+    /// Whether the last historical API check returned newer data than what we already had.
+    /// False means the API had nothing new, so we should cool down for this fund.
     /// </summary>
     public bool LastCheckHadNewData { get; set; }
 

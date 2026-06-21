@@ -10,11 +10,10 @@ namespace NAVigator.Services;
 public class CorporateActionService(
     AppDbContext db,
     ICorporateActionRepository actionRepo,
+    INavHistoryRepository navRepo,
     IFundRepository fundRepo,
     ILogger<CorporateActionService> logger) : ICorporateActionService
 {
-    private static readonly string[] ValidActionTypes = ["Split", "Merger", "Bonus", "Discontinuity", "MissingData", "Other"];
-    private static readonly decimal[] CommonAdjustmentFactors = [2m, 3m, 4m, 5m, 10m, 100m];
     private const string AutoRecordedPrefix = "[Auto-recorded]";
 
     public async Task<List<NavAnomalyDto>> DetectAnomaliesAsync(decimal thresholdPercent = 30m, int minDaysSincePrevious = 1, int? specificSchemeCode = null, CancellationToken ct = default)
@@ -177,11 +176,11 @@ public class CorporateActionService(
         if (fund is null)
             return null;
 
-        if (!ValidActionTypes.Contains(request.ActionType, StringComparer.OrdinalIgnoreCase))
+        if (!CorporateActionRules.ValidActionTypes.Contains(request.ActionType, StringComparer.OrdinalIgnoreCase))
             return null;
 
         var actionType = NormalizeActionType(request.ActionType);
-        var adjustmentFactor = IsSeriesBreakAction(actionType) ? 1m : request.AdjustmentFactor;
+        var adjustmentFactor = CorporateActionRules.IsSeriesBreakAction(actionType) ? 1m : request.AdjustmentFactor;
 
         var action = new CorporateAction
         {
@@ -194,10 +193,8 @@ public class CorporateActionService(
 
         await actionRepo.AddAsync(action);
 
-        // Update cached corporate action count
-        fund.CorporateActionCount = await db.CorporateActions.CountAsync(ca => ca.SchemeCode == schemeCode);
-        fund.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
+        var actionCount = await db.CorporateActions.CountAsync(ca => ca.SchemeCode == schemeCode);
+        await navRepo.UpdateTrackerCorporateActionCountAsync(schemeCode, actionCount, IndiaTime.Now());
 
         logger.LogInformation(
             "Added corporate action for {SchemeCode}: {ActionType} on {Date} with factor {Factor}",
@@ -212,11 +209,11 @@ public class CorporateActionService(
         if (action is null)
             return null;
 
-        if (!ValidActionTypes.Contains(request.ActionType, StringComparer.OrdinalIgnoreCase))
+        if (!CorporateActionRules.ValidActionTypes.Contains(request.ActionType, StringComparer.OrdinalIgnoreCase))
             return null;
 
         var actionType = NormalizeActionType(request.ActionType);
-        var adjustmentFactor = IsSeriesBreakAction(actionType) ? 1m : request.AdjustmentFactor;
+        var adjustmentFactor = CorporateActionRules.IsSeriesBreakAction(actionType) ? 1m : request.AdjustmentFactor;
 
         action.ActionDate = request.ActionDate;
         action.ActionType = actionType;
@@ -242,14 +239,8 @@ public class CorporateActionService(
 
         await actionRepo.DeleteAsync(action);
 
-        // Update cached corporate action count
-        var fund = await fundRepo.GetBySchemeCodeAsync(schemeCode);
-        if (fund is not null)
-        {
-            fund.CorporateActionCount = await db.CorporateActions.CountAsync(ca => ca.SchemeCode == schemeCode);
-            fund.UpdatedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
-        }
+        var actionCount = await db.CorporateActions.CountAsync(ca => ca.SchemeCode == schemeCode);
+        await navRepo.UpdateTrackerCorporateActionCountAsync(schemeCode, actionCount, IndiaTime.Now());
 
         logger.LogInformation("Deleted corporate action {Id} for scheme {SchemeCode}", actionId, schemeCode);
         return true;
@@ -266,7 +257,7 @@ public class CorporateActionService(
         foreach (var action in actions)
         {
             if (action.ActionDate > fromDate && action.ActionDate <= toDate
-                && !IsSeriesBreakAction(action.ActionType))
+                && !CorporateActionRules.IsSeriesBreakAction(action.ActionType))
             {
                 cumulativeFactor *= action.AdjustmentFactor;
             }
@@ -285,7 +276,7 @@ public class CorporateActionService(
 
         // Return the latest discontinuity date in the range (so callers can clamp to post-discontinuity)
         return actions
-            .Where(a => IsSeriesBreakAction(a.ActionType)
+            .Where(a => CorporateActionRules.IsSeriesBreakAction(a.ActionType)
                         && a.ActionDate > fromDate && a.ActionDate <= toDate)
             .OrderByDescending(a => a.ActionDate)
             .Select(a => (DateOnly?)a.ActionDate)
@@ -344,7 +335,7 @@ public class CorporateActionService(
 
     private static decimal? FindNearestCommonFactor(decimal ratio)
     {
-        foreach (var factor in CommonAdjustmentFactors)
+        foreach (var factor in CorporateActionRules.CommonAdjustmentFactors)
         {
             var relativeDifference = Math.Abs(ratio - factor) / factor;
             if (relativeDifference <= 0.1m)
@@ -355,15 +346,9 @@ public class CorporateActionService(
 
     private static string ChangeLabel(decimal changePercent) => changePercent < 0 ? "drop" : "spike";
 
-    private static bool IsSeriesBreakAction(string actionType)
-    {
-        return actionType.Equals("Discontinuity", StringComparison.OrdinalIgnoreCase)
-               || actionType.Equals("MissingData", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static string NormalizeActionType(string actionType)
     {
-        return ValidActionTypes.FirstOrDefault(t => t.Equals(actionType, StringComparison.OrdinalIgnoreCase))
+        return CorporateActionRules.ValidActionTypes.FirstOrDefault(t => t.Equals(actionType, StringComparison.OrdinalIgnoreCase))
                ?? actionType;
     }
 

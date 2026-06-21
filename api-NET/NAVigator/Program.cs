@@ -27,10 +27,12 @@ builder.Services.AddScoped<ICorporateActionRepository, CorporateActionRepository
 
 // ----- Services -----
 builder.Services.AddScoped<IAmfiService, AmfiService>();
+builder.Services.AddScoped<INavHistoryProvider, NavHistoryProvider>();
 builder.Services.AddScoped<IFundService, FundService>();
 builder.Services.AddScoped<INavService, NavService>();
 builder.Services.AddScoped<ICorporateActionService, CorporateActionService>();
 builder.Services.AddScoped<IPortfolioSimulationService, PortfolioSimulationService>();
+builder.Services.AddScoped<IUserPortfolioService, UserPortfolioService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
 
@@ -119,22 +121,36 @@ var app = builder.Build();
 // ----- Auto-migrate database on startup (unconditional for Docker QA support) -----
 using var scope = app.Services.CreateScope();
 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+var pendingMigrations = (await db.Database.GetPendingMigrationsAsync()).ToList();
+if (pendingMigrations.Count > 0)
+{
+    logger.LogInformation(
+        "Applying {Count} pending EF migration(s): {Migrations}",
+        pendingMigrations.Count,
+        string.Join(", ", pendingMigrations));
+}
+else
+{
+    logger.LogInformation("Database is up to date. No pending EF migrations found.");
+}
+
 await db.Database.MigrateAsync();
 
 // Backfill cached counts if they haven't been populated yet
 await db.Database.ExecuteSqlRawAsync(@"
-    UPDATE ""Funds"" f SET
+    UPDATE ""NavSyncTrackers"" t SET
         nav_history_count = sub.cnt,
         corporate_action_count = sub.ca_cnt
     FROM (
-        SELECT f2.scheme_code,
-               (SELECT COUNT(*) FROM ""NavHistories"" n WHERE n.scheme_code = f2.scheme_code) AS cnt,
-               (SELECT COUNT(*) FROM ""CorporateActions"" ca WHERE ca.scheme_code = f2.scheme_code) AS ca_cnt
-        FROM ""Funds"" f2
-        WHERE f2.nav_history_count = 0
+        SELECT t2.scheme_code,
+               (SELECT COUNT(*) FROM ""NavHistories"" n WHERE n.scheme_code = t2.scheme_code) AS cnt,
+               (SELECT COUNT(*) FROM ""CorporateActions"" ca WHERE ca.scheme_code = t2.scheme_code) AS ca_cnt
+        FROM ""NavSyncTrackers"" t2
+        WHERE t2.nav_history_count = 0
     ) sub
-    WHERE f.scheme_code = sub.scheme_code
-      AND f.nav_history_count = 0");
+    WHERE t.scheme_code = sub.scheme_code
+      AND t.nav_history_count = 0");
 
 app.MapOpenApi();
 

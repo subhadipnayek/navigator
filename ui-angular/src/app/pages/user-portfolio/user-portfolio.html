@@ -1,0 +1,420 @@
+<mat-card appearance="outlined" class="portfolio-workbar">
+  <mat-card-content>
+    <div>
+      <strong>{{ dashboard()?.portfolioName ?? 'Portfolio' }}</strong>
+      <span>User-scoped holdings, transactions, and benchmark checks</span>
+    </div>
+    <mat-form-field appearance="outline">
+      <mat-label>Portfolio</mat-label>
+      <mat-select [ngModel]="selectedPortfolioId()" (ngModelChange)="onPortfolioChange($event)">
+        @for (portfolio of portfolios(); track portfolio.id) {
+          <mat-option [value]="portfolio.id">{{ portfolio.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <mat-checkbox
+      [ngModel]="showFullyExitedFunds()"
+      (ngModelChange)="toggleExited($event)"
+    >
+      Show Fully Exited Funds
+    </mat-checkbox>
+  </mat-card-content>
+</mat-card>
+
+@if (loading()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
+@if (dashboard(); as view) {
+  <section class="metric-grid">
+    <mat-card appearance="outlined">
+      <strong>{{ view.metrics.currentValue | number: '1.0-0' }}</strong>
+      <span>Current value</span>
+    </mat-card>
+    <mat-card appearance="outlined">
+      <strong>{{ view.metrics.investedAmount | number: '1.0-0' }}</strong>
+      <span>Net invested</span>
+    </mat-card>
+    <mat-card appearance="outlined">
+      <strong>{{ view.metrics.xirrPercent ?? 0 | number: '1.2-2' }}%</strong>
+      <span>Overall XIRR</span>
+    </mat-card>
+    <mat-card appearance="outlined">
+      <strong>{{ view.metrics.absoluteReturnPercent | number: '1.2-2' }}%</strong>
+      <span>Absolute return</span>
+    </mat-card>
+    <mat-card appearance="outlined">
+      <strong>{{ view.metrics.fullyExitedFundCount }}</strong>
+      <span>Fully exited funds</span>
+    </mat-card>
+  </section>
+
+  @if (view.emptyStateMessages.length > 0) {
+    <div class="status-callout">
+      @for (message of view.emptyStateMessages; track message) {
+        <div>{{ message }}</div>
+      }
+    </div>
+  }
+
+  <section class="portfolio-panels">
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>Asset Allocation</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        @for (slice of view.assetAllocation; track slice.label) {
+          <div class="bar-row">
+            <span>{{ slice.label }}</span>
+            <div><i [style.width.%]="slice.percent"></i></div>
+            <strong>{{ slice.percent | number: '1.1-1' }}%</strong>
+          </div>
+        } @empty {
+          <p class="muted">No invested holdings yet.</p>
+        }
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>Fund Allocation</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        @for (slice of view.fundAllocation.slice(0, 8); track slice.label) {
+          <div class="bar-row">
+            <span>{{ slice.label }}</span>
+            <div><i [style.width.%]="slice.percent"></i></div>
+            <strong>{{ slice.percent | number: '1.1-1' }}%</strong>
+          </div>
+        } @empty {
+          <p class="muted">No fund allocation to show.</p>
+        }
+      </mat-card-content>
+    </mat-card>
+  </section>
+
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Fund Insights</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <table mat-table [dataSource]="view.funds">
+        <ng-container matColumnDef="fund">
+          <th mat-header-cell *matHeaderCellDef>Fund</th>
+          <td mat-cell *matCellDef="let fund">
+            <strong>{{ fund.schemeName }}</strong>
+            <small>{{ fund.assetClass }} · {{ fund.schemeCategory ?? 'Uncategorized' }}</small>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="value">
+          <th mat-header-cell *matHeaderCellDef>Value</th>
+          <td mat-cell *matCellDef="let fund">{{ fund.currentValue | number: '1.0-0' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="units">
+          <th mat-header-cell *matHeaderCellDef>Units</th>
+          <td mat-cell *matCellDef="let fund">{{ fund.units | number: '1.2-4' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="xirr">
+          <th mat-header-cell *matHeaderCellDef>XIRR</th>
+          <td mat-cell *matCellDef="let fund">{{ fund.xirrPercent ?? 0 | number: '1.2-2' }}%</td>
+        </ng-container>
+        <ng-container matColumnDef="returns">
+          <th mat-header-cell *matHeaderCellDef>Abs Return</th>
+          <td mat-cell *matCellDef="let fund">{{ fund.absoluteReturnPercent | number: '1.2-2' }}%</td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let fund">
+            @if (fund.isFullyExited) {
+              Fully exited
+            } @else if (fund.units < 0) {
+              Negative units
+            } @else if (!fund.hasNav) {
+              NAV missing
+            } @else {
+              Active
+            }
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="['fund', 'value', 'units', 'xirr', 'returns', 'status']"></tr>
+        <tr
+          mat-row
+          *matRowDef="let row; columns: ['fund', 'value', 'units', 'xirr', 'returns', 'status']"
+          [class.negative-units-row]="row.units < 0 && !row.isFullyExited"
+        ></tr>
+      </table>
+    </mat-card-content>
+  </mat-card>
+}
+
+<mat-card appearance="outlined" class="excel-upload-card">
+  <mat-card-header>
+    <mat-card-title>Transaction Excel Upload</mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+    <div class="upload-controls">
+      <mat-button-toggle-group
+        [ngModel]="importMode()"
+        (ngModelChange)="importMode.set($event)"
+        aria-label="Import mode"
+      >
+        <mat-button-toggle value="Append">Append</mat-button-toggle>
+        <mat-button-toggle value="Replace">Replace</mat-button-toggle>
+      </mat-button-toggle-group>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Start date</mat-label>
+        <input matInput type="date" [ngModel]="importStartDate()" (ngModelChange)="importStartDate.set($event)" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>End date</mat-label>
+        <input matInput type="date" [ngModel]="importEndDate()" (ngModelChange)="importEndDate.set($event)" />
+      </mat-form-field>
+
+      <input
+        #excelUpload
+        class="file-input"
+        type="file"
+        accept=".xlsx"
+        (change)="onExcelFileSelected($event)"
+      />
+      <button mat-stroked-button type="button" (click)="excelUpload.click()">
+        {{ selectedExcelFile()?.name ?? 'Choose Excel' }}
+      </button>
+      <button mat-flat-button type="button" [disabled]="!canImportExcel()" (click)="importExcelFile()">
+        {{ importingExcel() ? 'Importing...' : 'Import Excel' }}
+      </button>
+      <button mat-stroked-button type="button" (click)="downloadExcelTemplate()" title="Download a blank template with the required column headers">Download Template</button>
+    </div>
+
+    @if (importSummary(); as summary) {
+      <div class="import-summary-panel">
+        <div><strong>{{ summary.totalRows }}</strong><span>Total rows in file</span></div>
+        <div><strong>{{ summary.importedCount }}</strong><span>Rows imported</span></div>
+        <div><strong>{{ summary.rowErrors.length + summary.skippedOutOfRangeCount }}</strong><span>Rows skipped</span></div>
+        <div><strong>{{ summary.rowWarnings.length }}</strong><span>Rows to review</span></div>
+        <div><strong>{{ summary.importedDateStart ?? 'None' }}</strong><span>Imported start</span></div>
+        <div><strong>{{ summary.importedDateEnd ?? 'None' }}</strong><span>Imported end</span></div>
+        <div><strong>{{ summary.totalAmountImported | number: '1.2-2' }}</strong><span>Total amount imported</span></div>
+        <div><strong>{{ summary.fundCount }}</strong><span>Funds imported</span></div>
+        <div><strong>{{ summary.replacedCount }}</strong><span>Rows deleted before import</span></div>
+      </div>
+    }
+
+    @if (excelImportMessages().length > 0 || importSummary()?.skippedOutOfRangeCount || importSummary()?.rowWarnings?.length) {
+      <div class="grid-error-panel">
+        @if (importSummary()?.skippedOutOfRangeCount) {
+          <div>
+            <strong>{{ importSummary()?.skippedOutOfRangeCount }} outside range</strong>
+            <p>Rows outside {{ importStartDate() }} to {{ importEndDate() }} were skipped.</p>
+          </div>
+        }
+        @for (message of excelImportMessages(); track message) {
+          <div>
+            <strong>Skipped</strong>
+            <p>{{ message }}</p>
+          </div>
+        }
+        @for (message of importSummary()?.rowWarnings ?? []; track message) {
+          <div>
+            <strong>Review</strong>
+            <p>{{ message }}</p>
+          </div>
+        }
+      </div>
+    }
+  </mat-card-content>
+</mat-card>
+
+<section class="transaction-editor-shell">
+  <button mat-stroked-button type="button" (click)="showTransactionEditor.set(!showTransactionEditor())">
+    {{ showTransactionEditor() ? 'Hide Transactions' : 'View Transactions' }}
+  </button>
+</section>
+
+@if (showTransactionEditor()) {
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Year Transaction Editor</mat-card-title>
+      <mat-card-subtitle>Paste date, NAV, units, type, and notes from Excel or Google Sheets. Amount is calculated from units x NAV.</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+    <div class="editor-toolbar">
+      <mat-form-field appearance="outline">
+        <mat-label>Financial year</mat-label>
+        <mat-select [ngModel]="selectedFinancialYear()" (ngModelChange)="onYearChange($event)">
+          @for (year of financialYears(); track year) {
+            <mat-option [value]="year">{{ year }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="fund-picker">
+        <mat-label>Find fund to add</mat-label>
+        <input
+          matInput
+          [ngModel]="fundSearch()"
+          (ngModelChange)="onFundSearch($event)"
+          [matAutocomplete]="fundAuto"
+        />
+      </mat-form-field>
+      <mat-autocomplete #fundAuto="matAutocomplete">
+        @for (fund of fundResults(); track fund.schemeCode) {
+          <mat-option (onSelectionChange)="selectFund(fund)" [value]="fund.schemeName">
+            {{ fund.schemeCode }} · {{ fund.schemeName }}
+          </mat-option>
+        }
+      </mat-autocomplete>
+      <button mat-flat-button type="button" (click)="addRow()">Add Row</button>
+      <button mat-button type="button" (click)="deleteSelectedRows()">Delete Selected</button>
+    </div>
+
+    <div class="ag-theme-quartz transaction-grid" (paste)="onPaste($event)">
+      <ag-grid-angular
+        [rowData]="transactions()"
+        [columnDefs]="transactionColumnDefs"
+        [defaultColDef]="defaultColDef"
+        rowSelection="multiple"
+        [enableBrowserTooltips]="true"
+        [tooltipShowDelay]="250"
+        [stopEditingWhenCellsLoseFocus]="true"
+        (gridReady)="onGridReady($event)"
+        (cellValueChanged)="onCellValueChanged($event)"
+        (columnMoved)="onGridStateChanged()"
+        (columnResized)="onGridStateChanged()"
+        (columnVisible)="onGridStateChanged()"
+        (sortChanged)="onGridStateChanged()"
+        (filterChanged)="onGridStateChanged()"
+      />
+    </div>
+
+    @if (gridErrors().length > 0) {
+      <div class="grid-error-panel">
+        @for (error of gridErrors(); track error.rowNumber + error.message) {
+          <div>
+            <strong>Row {{ error.rowNumber }}</strong>
+            <span>{{ error.fund }}</span>
+            <p>{{ error.message }}</p>
+          </div>
+        }
+      </div>
+    }
+
+    <div class="year-summary">
+      <div><strong>{{ yearSummary().totalInvested | number: '1.0-0' }}</strong><span>Total invested</span></div>
+      <div><strong>{{ yearSummary().transactionCount }}</strong><span>Transactions</span></div>
+      <div><strong>{{ yearSummary().fundsCovered }}</strong><span>Funds covered</span></div>
+    </div>
+    </mat-card-content>
+  </mat-card>
+}
+
+@if (dashboard(); as view) {
+  <section class="portfolio-panels">
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>SIP Consistency</mat-card-title>
+      </mat-card-header>
+      <mat-card-content class="sip-box">
+        <strong>{{ view.sipConsistency.consistencyPercent | number: '1.1-1' }}%</strong>
+        <span>{{ view.sipConsistency.investedMonths }} of {{ view.sipConsistency.activeMonths }} months invested</span>
+        <span>Average monthly investment {{ view.sipConsistency.averageMonthlyInvestment | number: '1.0-0' }}</span>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>Yearly Contributions</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <mat-button-toggle-group
+          [ngModel]="contributionMode()"
+          (ngModelChange)="contributionMode.set($event)"
+        >
+          <mat-button-toggle value="financial">Financial Year</mat-button-toggle>
+          <mat-button-toggle value="calendar">Calendar Year</mat-button-toggle>
+        </mat-button-toggle-group>
+        <table mat-table [dataSource]="contributionRows()">
+          <ng-container matColumnDef="period">
+            <th mat-header-cell *matHeaderCellDef>Period</th>
+            <td mat-cell *matCellDef="let row">{{ row.period }}</td>
+          </ng-container>
+          <ng-container matColumnDef="invested">
+            <th mat-header-cell *matHeaderCellDef>Invested</th>
+            <td mat-cell *matCellDef="let row">{{ row.invested | number: '1.0-0' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="redemptions">
+            <th mat-header-cell *matHeaderCellDef>Redemptions</th>
+            <td mat-cell *matCellDef="let row">{{ row.redemptions | number: '1.0-0' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="net">
+            <th mat-header-cell *matHeaderCellDef>Net</th>
+            <td mat-cell *matCellDef="let row">{{ row.netContribution | number: '1.0-0' }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="['period', 'invested', 'redemptions', 'net']"></tr>
+          <tr mat-row *matRowDef="let row; columns: ['period', 'invested', 'redemptions', 'net']"></tr>
+        </table>
+      </mat-card-content>
+    </mat-card>
+  </section>
+}
+
+<mat-card appearance="outlined">
+  <mat-card-header>
+    <mat-card-title>Benchmark Comparison</mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+    <div class="editor-toolbar">
+      <mat-form-field appearance="outline" class="fund-picker">
+        <mat-label>Benchmark fund or index proxy</mat-label>
+        <input
+          matInput
+          [ngModel]="benchmarkSearch()"
+          (ngModelChange)="onFundSearch($event); benchmarkSearch.set($event)"
+          [matAutocomplete]="benchmarkAuto"
+        />
+      </mat-form-field>
+      <mat-autocomplete #benchmarkAuto="matAutocomplete">
+        @for (fund of benchmarkResults(); track fund.schemeCode) {
+          <mat-option (onSelectionChange)="selectBenchmarkFund(fund)" [value]="fund.schemeName">
+            {{ fund.schemeCode }} · {{ fund.schemeName }}
+          </mat-option>
+        }
+      </mat-autocomplete>
+      <mat-form-field appearance="outline">
+        <mat-label>Window</mat-label>
+        <mat-select [ngModel]="benchmarkDurationYears()" (ngModelChange)="benchmarkDurationYears.set($event)">
+          <mat-option [value]="null">Auto</mat-option>
+          <mat-option [value]="1">1 year</mat-option>
+          <mat-option [value]="3">3 years</mat-option>
+          <mat-option [value]="5">5 years</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Rolling period</mat-label>
+        <mat-select [ngModel]="benchmarkRollingPeriodYears()" (ngModelChange)="benchmarkRollingPeriodYears.set($event)">
+          <mat-option [value]="1">1 year</mat-option>
+          <mat-option [value]="3">3 years</mat-option>
+          <mat-option [value]="5">5 years</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <button mat-flat-button type="button" (click)="runBenchmark()">Compare</button>
+    </div>
+
+    @if (benchmark(); as result) {
+      <div class="benchmark-result">
+        <p>{{ result.effectiveStartDate }} to {{ result.effectiveEndDate }}. {{ result.comparisonNote }}</p>
+        <div><span>Portfolio XIRR</span><strong>{{ result.portfolio.xirrPercent ?? 0 | number: '1.2-2' }}%</strong></div>
+        <div><span>{{ result.benchmarkName }} XIRR</span><strong>{{ result.benchmark.xirrPercent ?? 0 | number: '1.2-2' }}%</strong></div>
+        <div><span>Alpha</span><strong>{{ result.alphaPercent ?? 0 | number: '1.2-2' }}%</strong></div>
+        <div><span>Portfolio value</span><strong>{{ result.portfolio.currentValue | number: '1.0-0' }}</strong></div>
+        <div><span>{{ result.benchmarkName }} value</span><strong>{{ result.benchmark.currentValue | number: '1.0-0' }}</strong></div>
+        @if (result.benchmarkRollingReturn; as rolling) {
+          <div><span>{{ rolling.periodYears }}Y rolling avg</span><strong>{{ rolling.averagePercent ?? 0 | number: '1.2-2' }}%</strong></div>
+          <div><span>{{ rolling.periodYears }}Y rolling range</span><strong>{{ rolling.minimumPercent ?? 0 | number: '1.2-2' }}% - {{ rolling.maximumPercent ?? 0 | number: '1.2-2' }}%</strong></div>
+        }
+        <p>{{ result.verdict }}</p>
+      </div>
+    }
+  </mat-card-content>
+</mat-card>

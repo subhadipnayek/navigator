@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NAVigator.Data;
 using NAVigator.Models.Database;
+using NAVigator.Models.Dto;
 
 namespace NAVigator.Repositories;
 
@@ -36,6 +37,22 @@ public class NavHistoryRepository(AppDbContext db) : INavHistoryRepository
             .FirstOrDefaultAsync();
 
         return range is null ? (null, null) : (range.StartDate, range.EndDate);
+    }
+
+    public async Task<(DateOnly? StartDate, DateOnly? EndDate, int Count)> GetStatsAsync(int schemeCode)
+    {
+        var stats = await db.NavHistories
+            .Where(n => n.SchemeCode == schemeCode)
+            .GroupBy(n => n.SchemeCode)
+            .Select(g => new
+            {
+                StartDate = g.Min(n => (DateOnly?)n.Date),
+                EndDate = g.Max(n => (DateOnly?)n.Date),
+                Count = g.Count()
+            })
+            .FirstOrDefaultAsync();
+
+        return stats is null ? (null, null, 0) : (stats.StartDate, stats.EndDate, stats.Count);
     }
 
     public async Task<DateOnly?> GetLatestNavDateAsync(int schemeCode)
@@ -101,20 +118,97 @@ public class NavHistoryRepository(AppDbContext db) : INavHistoryRepository
         return await db.NavSyncTrackers.FindAsync(schemeCode);
     }
 
-    public async Task UpsertSyncTrackerAsync(NavSyncTracker tracker)
+    public async Task UpsertLatestNavSnapshotsAsync(
+        List<AmfiLatestNavSnapshot> snapshots,
+        DateTime checkedAtIst,
+        CancellationToken ct = default)
     {
-        var existing = await db.NavSyncTrackers.FindAsync(tracker.SchemeCode);
-        if (existing is null)
+        if (snapshots.Count == 0)
+            return;
+
+        var schemeCodes = snapshots.Select(s => s.SchemeCode).Distinct().ToList();
+        var validSchemeCodes = await db.Funds
+            .Where(f => schemeCodes.Contains(f.SchemeCode))
+            .Select(f => f.SchemeCode)
+            .ToHashSetAsync(ct);
+        var existingTrackers = await db.NavSyncTrackers
+            .Where(t => schemeCodes.Contains(t.SchemeCode))
+            .ToDictionaryAsync(t => t.SchemeCode, ct);
+
+        foreach (var snapshot in snapshots)
         {
-            await db.NavSyncTrackers.AddAsync(tracker);
-        }
-        else
-        {
-            existing.LastApiCheckUtc = tracker.LastApiCheckUtc;
-            existing.LatestNavDateFromApi = tracker.LatestNavDateFromApi;
-            existing.LastCheckHadNewData = tracker.LastCheckHadNewData;
+            if (!validSchemeCodes.Contains(snapshot.SchemeCode))
+                continue;
+
+            if (!existingTrackers.TryGetValue(snapshot.SchemeCode, out var tracker))
+            {
+                tracker = new NavSyncTracker
+                {
+                    SchemeCode = snapshot.SchemeCode,
+                    UpdatedAtIst = checkedAtIst
+                };
+                await db.NavSyncTrackers.AddAsync(tracker, ct);
+                existingTrackers[snapshot.SchemeCode] = tracker;
+            }
+
+            tracker.LatestNav = snapshot.LatestNav;
+            tracker.LatestNavDate = snapshot.LatestNavDate;
+            tracker.LastLatestNavCheckAtIst = checkedAtIst;
+            tracker.UpdatedAtIst = checkedAtIst;
         }
 
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task UpdateTrackerHistoryStatsAsync(
+        int schemeCode,
+        DateOnly? startDate,
+        DateOnly? endDate,
+        int count,
+        DateTime checkedAtIst,
+        bool hadNewData,
+        CancellationToken ct = default)
+    {
+        var tracker = await db.NavSyncTrackers.FindAsync([schemeCode], ct);
+        if (tracker is null)
+        {
+            tracker = new NavSyncTracker
+            {
+                SchemeCode = schemeCode
+            };
+            await db.NavSyncTrackers.AddAsync(tracker, ct);
+        }
+
+        tracker.NavStartDate = startDate;
+        tracker.NavEndDate = endDate;
+        tracker.NavHistoryCount = count;
+        tracker.LastHistoryCheckAtIst = checkedAtIst;
+        tracker.NavHistoryUpdatedAtIst = hadNewData ? checkedAtIst : tracker.NavHistoryUpdatedAtIst;
+        tracker.LastCheckHadNewData = hadNewData;
+        tracker.UpdatedAtIst = checkedAtIst;
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task UpdateTrackerCorporateActionCountAsync(
+        int schemeCode,
+        int count,
+        DateTime updatedAtIst,
+        CancellationToken ct = default)
+    {
+        var tracker = await db.NavSyncTrackers.FindAsync([schemeCode], ct);
+        if (tracker is null)
+        {
+            tracker = new NavSyncTracker
+            {
+                SchemeCode = schemeCode
+            };
+            await db.NavSyncTrackers.AddAsync(tracker, ct);
+        }
+
+        tracker.CorporateActionCount = count;
+        tracker.UpdatedAtIst = updatedAtIst;
+
+        await db.SaveChangesAsync(ct);
     }
 }
