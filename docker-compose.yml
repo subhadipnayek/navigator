@@ -1,17 +1,43 @@
 services:
+  db:
+    image: postgres:17-alpine
+    container_name: navigator-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: NAVigatorDb_QA
+      POSTGRES_USER: devuser
+      POSTGRES_PASSWORD: devpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devuser -d NAVigatorDb_QA"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
-      context: ./api-NET
+      context: ./navigator-api
       dockerfile: Dockerfile
+    container_name: navigator-api
+    restart: unless-stopped
     ports:
       - "5038:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: "Production"
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=NAVigatorDb_QA;Username=devuser;Password=devpassword;"
+    depends_on:
+      db:
+        condition: service_healthy
 
   ui:
     build:
-      context: ./ui-angular
+      context: ./navigator-ui
       dockerfile: Dockerfile
+    container_name: navigator-ui
+    restart: unless-stopped
     ports:
       - "4000:4000"
     environment:
@@ -19,3 +45,6 @@ services:
       API_URL: "http://api:8080"
     depends_on:
       - api
+
+volumes:
+  postgres_data:
