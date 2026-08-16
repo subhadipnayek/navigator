@@ -82,9 +82,11 @@ NAVigator/
 The fastest way to launch the entire stack (PostgreSQL 17 Alpine + Go API + Angular UI) is with Docker Compose:
 
 ### 1. Prerequisites
+
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (ensure Docker daemon is running)
 
 ### 2. Start the Stack
+
 ```bash
 # Clone the repository
 git clone https://github.com/midtierhuman/NAVigator.git
@@ -93,21 +95,25 @@ cd NAVigator
 # Spin up all containers
 docker compose up -d --build
 ```
-*(On Windows, you can also double-click `docker-compose.bat`)*
+
+_(On Windows, you can also double-click `docker-compose.bat`)_
 
 ### 3. Service Endpoints
-| Service | URL | Default Credentials / Note |
-|---|---|---|
-| **Web UI** | [http://localhost:4000](http://localhost:4000) | Frontend Client Application |
-| **API** | [http://localhost:5038](http://localhost:5038) | REST API & `/health` endpoint |
-| **PostgreSQL** | `localhost:5432` | User: `devuser`, Password: `devpassword`, DB: `NAVigatorDb_QA` |
+
+| Service        | URL                                            | Default Credentials / Note                                     |
+| -------------- | ---------------------------------------------- | -------------------------------------------------------------- |
+| **Web UI**     | [http://localhost:4000](http://localhost:4000) | Frontend Client Application                                    |
+| **API**        | [http://localhost:5038](http://localhost:5038) | REST API & `/health` endpoint                                  |
+| **PostgreSQL** | `localhost:5432`                               | User: `devuser`, Password: `devpassword`, DB: `NAVigatorDb_QA` |
 
 ---
 
 ## 💻 Local Development Setup
 
 ### 1. Database (PostgreSQL)
+
 Run a lightweight PostgreSQL instance:
+
 ```bash
 docker run -d \
   --name navigator-postgres \
@@ -119,6 +125,7 @@ docker run -d \
 ```
 
 ### 2. Backend (`navigator-api`)
+
 ```bash
 cd navigator-api
 
@@ -128,9 +135,11 @@ go mod download
 # Run the API
 go run cmd/server/main.go
 ```
+
 API runs on `http://localhost:8080` (or `http://localhost:5038` via docker compose).
 
 ### 3. Frontend (`navigator-ui`)
+
 ```bash
 cd navigator-ui
 
@@ -140,23 +149,25 @@ npm install
 # Start the Angular dev server
 npm start
 ```
+
 Navigate to `http://localhost:4200/`. The app will automatically reload on code changes.
 
 ---
 
 ## 📡 API Reference Overview
 
-| Endpoint Group | Description |
-|---|---|
-| `/api/auth` | User registration, login, and JWT token issuance |
-| `/api/funds` | Search mutual funds, list fund categories, view fund metadata |
-| `/api/nav` | Fetch current & historical NAVs, rolling return analytics |
-| `/api/portfolio` | Run SIP/Lump-sum simulation backtests, benchmark comparisons |
-| `/api/user-portfolios` | Manage personal portfolios, upload transaction Excel files, view holdings & XIRR |
-| `/api/corporate-actions` | Query and track corporate actions (dividends, splits, mergers) |
-| `/api/admin` | Trigger manual AMFI sync, monitor worker status |
+| Endpoint Group           | Description                                                                      |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| `/api/auth`              | User registration, login, and JWT token issuance                                 |
+| `/api/funds`             | Search mutual funds, list fund categories, view fund metadata                    |
+| `/api/nav`               | Fetch current & historical NAVs, rolling return analytics                        |
+| `/api/portfolio`         | Run SIP/Lump-sum simulation backtests, benchmark comparisons                     |
+| `/api/user-portfolios`   | Manage personal portfolios, upload transaction Excel files, view holdings & XIRR |
+| `/api/corporate-actions` | Query and track corporate actions (dividends, splits, mergers)                   |
+| `/api/admin`             | Trigger manual AMFI sync, monitor worker status                                  |
 
 ---
 
 ## 📄 License
+
 This project is licensed under the terms of the MIT license.
