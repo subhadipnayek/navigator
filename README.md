@@ -104,7 +104,7 @@ _(On Windows, you can also double-click `docker-compose.bat`)_
 | -------------- | ---------------------------------------------- | -------------------------------------------------------------- |
 | **Web UI**     | [http://localhost:4000](http://localhost:4000) | Frontend Client Application                                    |
 | **API**        | [http://localhost:5038](http://localhost:5038) | REST API & `/health` endpoint                                  |
-| **PostgreSQL** | `localhost:5432`                               | User: `devuser`, Password: `devpassword`, DB: `NAVigatorDb_QA` |
+| **PostgreSQL** | `localhost:5433` (Host) / `5432` (Docker) | User: `devuser`, Password: `devpassword`, DB: `NAVigatorDb_QA` |
 
 ---
 
@@ -120,7 +120,7 @@ docker run -d \
   -e POSTGRES_DB=NAVigatorDb_QA \
   -e POSTGRES_USER=devuser \
   -e POSTGRES_PASSWORD=devpassword \
-  -p 5432:5432 \
+  -p 5433:5432 \
   postgres:17-alpine
 ```
 
