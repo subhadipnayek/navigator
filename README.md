@@ -1,4 +1,4 @@
-# NAVigator 🧭
+# navigator 🧭
 
 > **Mutual Fund Analytics, Portfolio Simulation & NAV Intelligence Platform**
 
