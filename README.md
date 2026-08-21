@@ -2,7 +2,7 @@
 
 > **Mutual Fund Analytics, Portfolio Simulation & NAV Intelligence Platform**
 
-NAVigator is a full-stack financial analytics application designed to track mutual fund Net Asset Values (NAV) directly from AMFI (Association of Mutual Funds in India), simulate SIP & lump-sum portfolio investments, analyze rolling returns, handle corporate actions, and manage personalized multi-asset portfolios with automated XIRR calculation.
+navigator is a full-stack financial analytics application designed to track mutual fund Net Asset Values (NAV) directly from AMFI (Association of Mutual Funds in India), simulate SIP & lump-sum portfolio investments, analyze rolling returns, handle corporate actions, and manage personalized multi-asset portfolios with automated XIRR calculation.
 
 ---
 
