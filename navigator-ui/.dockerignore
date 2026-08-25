@@ -8,5 +8,4 @@ dist
 *.log
 .editorconfig
 Dockerfile
-nginx.conf
 .dockerignore

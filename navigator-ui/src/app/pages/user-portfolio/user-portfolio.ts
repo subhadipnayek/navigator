@@ -120,6 +120,9 @@ export class UserPortfolio implements OnInit, OnDestroy {
   readonly excelImportMessages = signal<string[]>([]);
 
   // Multi-broker Ingestion Workbench Signals
+  readonly activeImportFile = signal<File | null>(null);
+  readonly creatingNewPortfolioInModal = signal(false);
+  readonly newPortfolioNameInput = signal('');
   readonly dryRunPreview = signal<ImportPreviewResult | null>(null);
   readonly selectedStrategy = signal<ImportStrategy>('SmartMerge');
   readonly previewFilterTab = signal<'all' | 'new' | 'duplicate' | 'ignored'>('all');
@@ -249,12 +252,13 @@ export class UserPortfolio implements OnInit, OnDestroy {
     this.loading.set(true);
     this.portfolioService.getUserPortfolios().subscribe({
       next: (rows) => {
-        this.portfolios.set(rows);
-        if (rows.length === 0) {
+        const list = rows ?? [];
+        this.portfolios.set(list);
+        if (list.length === 0) {
           this.createPortfolio('My Portfolio');
           return;
         }
-        this.selectedPortfolioId.set(rows[0].id);
+        this.selectedPortfolioId.set(list[0].id);
         this.loadDashboard();
         this.loadTransactions();
       },
@@ -268,7 +272,8 @@ export class UserPortfolio implements OnInit, OnDestroy {
   createPortfolio(name: string): void {
     this.portfolioService.createUserPortfolio(name).subscribe({
       next: (portfolio) => {
-        this.portfolios.set([portfolio, ...this.portfolios()]);
+        const current = this.portfolios() ?? [];
+        this.portfolios.set([portfolio, ...current]);
         this.selectedPortfolioId.set(portfolio.id);
         this.loading.set(false);
         this.loadDashboard();
@@ -417,12 +422,36 @@ export class UserPortfolio implements OnInit, OnDestroy {
   }
 
   executeDryRunPreview(file: File): void {
-    const portfolioId = this.selectedPortfolioId();
+    this.activeImportFile.set(file);
+    let portfolioId = this.selectedPortfolioId();
+
     if (!portfolioId) {
-      this.toast.error('Select a portfolio first.');
-      return;
+      const existing = this.portfolios() ?? [];
+      if (existing.length > 0) {
+        portfolioId = existing[0].id;
+        this.selectedPortfolioId.set(portfolioId);
+      } else {
+        // Auto-provision a default portfolio immediately if none exists!
+        this.previewingFile.set(true);
+        this.portfolioService.createUserPortfolio('Main Portfolio').subscribe({
+          next: (port) => {
+            this.portfolios.set([port]);
+            this.selectedPortfolioId.set(port.id);
+            this.runPreviewWithPortfolio(port.id, file);
+          },
+          error: () => {
+            this.previewingFile.set(false);
+            this.toast.error('Failed to create default portfolio.');
+          },
+        });
+        return;
+      }
     }
 
+    this.runPreviewWithPortfolio(portfolioId, file);
+  }
+
+  runPreviewWithPortfolio(portfolioId: number, file: File): void {
     this.previewingFile.set(true);
     this.portfolioService.importPreview(portfolioId, file).subscribe({
       next: (res) => {
@@ -435,6 +464,41 @@ export class UserPortfolio implements OnInit, OnDestroy {
       error: (err) => {
         this.previewingFile.set(false);
         this.toast.error(err.error?.message ?? 'Failed to parse trade statement file.');
+      },
+    });
+  }
+
+  onDestinationPortfolioChange(newPortfolioId: number): void {
+    const id = Number(newPortfolioId);
+    this.selectedPortfolioId.set(id);
+    const file = this.activeImportFile();
+    if (file) {
+      this.runPreviewWithPortfolio(id, file);
+    }
+    this.loadDashboard();
+    this.loadTransactions();
+  }
+
+  createPortfolioInModal(name: string): void {
+    const cleanName = name.trim();
+    if (!cleanName) return;
+
+    this.portfolioService.createUserPortfolio(cleanName).subscribe({
+      next: (port) => {
+        this.portfolios.set([port, ...this.portfolios()]);
+        this.selectedPortfolioId.set(port.id);
+        this.creatingNewPortfolioInModal.set(false);
+        this.newPortfolioNameInput.set('');
+        const file = this.activeImportFile();
+        if (file) {
+          this.runPreviewWithPortfolio(port.id, file);
+        }
+        this.loadDashboard();
+        this.loadTransactions();
+        this.toast.success(`Created portfolio '${cleanName}'`);
+      },
+      error: () => {
+        this.toast.error('Failed to create portfolio.');
       },
     });
   }
@@ -455,6 +519,7 @@ export class UserPortfolio implements OnInit, OnDestroy {
         this.committingImport.set(false);
         this.toast.success(`Successfully imported ${res.insertedCount} transactions.`);
         this.dryRunPreview.set(null);
+        this.activeImportFile.set(null);
         this.loadDashboard();
         this.loadTransactions();
       },
@@ -467,6 +532,9 @@ export class UserPortfolio implements OnInit, OnDestroy {
 
   closeDryRunModal(): void {
     this.dryRunPreview.set(null);
+    this.activeImportFile.set(null);
+    this.creatingNewPortfolioInModal.set(false);
+    this.newPortfolioNameInput.set('');
   }
 
   onExcelFileSelected(event: Event): void {

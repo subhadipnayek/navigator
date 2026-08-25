@@ -16,7 +16,8 @@ var DB *gorm.DB
 
 func InitDB(cfg *config.Config) (*gorm.DB, error) {
 	gormConfig := &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Warn),
+		Logger:                                   logger.Default.LogMode(logger.Warn),
+		DisableForeignKeyConstraintWhenMigrating: true,
 	}
 
 	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), gormConfig)

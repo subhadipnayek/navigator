@@ -56,7 +56,7 @@ func (s *UserPortfolioService) GetPortfolios(ctx context.Context, userId int) ([
 		return nil, err
 	}
 
-	var res []models.UserPortfolioSummaryDto
+	res := make([]models.UserPortfolioSummaryDto, 0)
 	for _, p := range portfolios {
 		var fundCount int64
 		_ = s.db.WithContext(ctx).Model(&models.PortfolioTransaction{}).
@@ -121,7 +121,7 @@ func (s *UserPortfolioService) GetDashboard(
 		return nil, err
 	}
 
-	var emptyStates []string
+	emptyStates := make([]string, 0)
 	if len(transactions) == 0 {
 		emptyStates = append(emptyStates, "No transactions have been added yet.")
 	}
@@ -284,7 +284,7 @@ func (s *UserPortfolioService) GetDashboard(
 		return fundInsights[i].CurrentValue > fundInsights[j].CurrentValue
 	})
 
-	var visibleFunds []models.FundInsightDto
+	visibleFunds := make([]models.FundInsightDto, 0)
 	for _, fi := range fundInsights {
 		if showFullyExitedFunds || !fi.IsFullyExited {
 			visibleFunds = append(visibleFunds, fi)
@@ -364,7 +364,7 @@ func (s *UserPortfolioService) GetTransactions(ctx context.Context, userId int, 
 		return nil, nil, err
 	}
 
-	var dtos []models.PortfolioTransactionDto
+	dtos := make([]models.PortfolioTransactionDto, 0)
 	totalPurchases := 0.0
 	totalRedemptions := 0.0
 
@@ -706,7 +706,7 @@ func buildAllocationBreakdown(funds []models.FundInsightDto, keySelector func(mo
 		totalVal += f.CurrentValue
 	}
 
-	var segments []models.AllocationSegmentDto
+	segments := make([]models.AllocationSegmentDto, 0)
 	for label, amt := range groupMap {
 		pct := 0.0
 		if totalVal > 0 {
@@ -725,7 +725,7 @@ func buildAllocationBreakdown(funds []models.FundInsightDto, keySelector func(mo
 
 func buildContributionBreakdown(transactions []models.PortfolioTransaction, financialYear bool) []models.PeriodContributionDto {
 	type periodData struct {
-		Label      string
+		Label       string
 		TotalInflow float64
 		SipInflow   float64
 		LumpInflow  float64
@@ -772,7 +772,7 @@ func buildContributionBreakdown(transactions []models.PortfolioTransaction, fina
 	}
 
 	sort.Strings(keys)
-	var res []models.PeriodContributionDto
+	res := make([]models.PeriodContributionDto, 0)
 	for _, k := range keys {
 		pd := m[k]
 		res = append(res, models.PeriodContributionDto{

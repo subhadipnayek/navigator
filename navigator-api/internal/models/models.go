@@ -6,18 +6,18 @@ import (
 
 // Fund represents a mutual fund scheme master record.
 type Fund struct {
-	SchemeCode           int             `gorm:"column:scheme_code;primaryKey" json:"schemeCode"`
-	SchemeName           string          `gorm:"column:scheme_name;size:500;not null;index:idx_funds_scheme_name" json:"schemeName"`
-	FundHouse            *string         `gorm:"column:fund_house;size:300;index:idx_funds_fund_house" json:"fundHouse"`
-	SchemeType           *string         `gorm:"column:scheme_type;size:200" json:"schemeType"`
-	SchemeCategory       *string         `gorm:"column:scheme_category;size:300" json:"schemeCategory"`
-	IsinGrowth           *string         `gorm:"column:isin_growth;size:20" json:"isinGrowth"`
-	IsinDivReinvestment  *string         `gorm:"column:isin_div_reinvestment;size:20" json:"isinDivReinvestment"`
-	CreatedAtUtc         time.Time       `gorm:"column:created_at;not null;autoCreateTime" json:"createdAt"`
-	UpdatedAtUtc         time.Time       `gorm:"column:updated_at;not null;autoUpdateTime" json:"updatedAt"`
-	NavSyncTracker       *NavSyncTracker `gorm:"foreignKey:SchemeCode;references:SchemeCode" json:"navSyncTracker,omitempty"`
-	NavHistories         []NavHistory    `gorm:"foreignKey:SchemeCode;references:SchemeCode" json:"-"`
-	CorporateActions     []CorporateAction `gorm:"foreignKey:SchemeCode;references:SchemeCode" json:"-"`
+	SchemeCode          int               `gorm:"column:scheme_code;primaryKey;autoIncrement:false" json:"schemeCode"`
+	SchemeName          string            `gorm:"column:scheme_name;size:500;not null;index:idx_funds_scheme_name" json:"schemeName"`
+	FundHouse           *string           `gorm:"column:fund_house;size:300;index:idx_funds_fund_house" json:"fundHouse"`
+	SchemeType          *string           `gorm:"column:scheme_type;size:200" json:"schemeType"`
+	SchemeCategory      *string           `gorm:"column:scheme_category;size:300" json:"schemeCategory"`
+	IsinGrowth          *string           `gorm:"column:isin_growth;size:20" json:"isinGrowth"`
+	IsinDivReinvestment *string           `gorm:"column:isin_div_reinvestment;size:20" json:"isinDivReinvestment"`
+	CreatedAtUtc        time.Time         `gorm:"column:created_at;not null;autoCreateTime" json:"createdAt"`
+	UpdatedAtUtc        time.Time         `gorm:"column:updated_at;not null;autoUpdateTime" json:"updatedAt"`
+	NavSyncTracker      *NavSyncTracker   `gorm:"foreignKey:SchemeCode;references:SchemeCode" json:"navSyncTracker,omitempty"`
+	NavHistories        []NavHistory      `gorm:"foreignKey:SchemeCode;references:SchemeCode" json:"-"`
+	CorporateActions    []CorporateAction `gorm:"foreignKey:SchemeCode;references:SchemeCode" json:"-"`
 }
 
 func (Fund) TableName() string {
@@ -38,7 +38,7 @@ func (NavHistory) TableName() string {
 
 // NavSyncTracker tracks metadata and synchronization state for each fund's NAV history.
 type NavSyncTracker struct {
-	SchemeCode              int        `gorm:"column:scheme_code;primaryKey" json:"schemeCode"`
+	SchemeCode              int        `gorm:"column:scheme_code;primaryKey;autoIncrement:false" json:"schemeCode"`
 	LatestNav               *float64   `gorm:"column:latest_nav;type:numeric(18,6)" json:"latestNav"`
 	LatestNavDate           *time.Time `gorm:"column:latest_nav_date;type:date" json:"latestNavDate"`
 	NavStartDate            *time.Time `gorm:"column:nav_start_date;type:date" json:"navStartDate"`

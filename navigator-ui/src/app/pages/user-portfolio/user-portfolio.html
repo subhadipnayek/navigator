@@ -210,6 +210,62 @@
           </div>
           <h2 style="margin: 6px 0 0; font-size: 18px; font-weight: 700;">Statement Ingestion Analysis</h2>
         </div>
+
+        <!-- Destination Portfolio Switcher -->
+        <div class="modal-destination-selector">
+          <span style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">Destination Portfolio</span>
+          <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+            @if (!creatingNewPortfolioInModal()) {
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" style="width: 200px;">
+                <mat-select
+                  [value]="selectedPortfolioId()"
+                  (selectionChange)="onDestinationPortfolioChange($event.value)"
+                >
+                  @for (port of portfolios(); track port.id) {
+                    <mat-option [value]="port.id">{{ port.name }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              <button
+                mat-stroked-button
+                type="button"
+                (click)="creatingNewPortfolioInModal.set(true)"
+                title="Create a new dedicated portfolio for this statement"
+                style="height: 34px; font-size: 11.5px;"
+              >
+                + New
+              </button>
+            } @else {
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" style="width: 180px;">
+                <input
+                  matInput
+                  placeholder="Portfolio name"
+                  [ngModel]="newPortfolioNameInput()"
+                  (ngModelChange)="newPortfolioNameInput.set($event)"
+                  (keyup.enter)="createPortfolioInModal(newPortfolioNameInput())"
+                />
+              </mat-form-field>
+              <button
+                mat-flat-button
+                type="button"
+                [disabled]="!newPortfolioNameInput().trim()"
+                (click)="createPortfolioInModal(newPortfolioNameInput())"
+                style="height: 34px; font-size: 11.5px;"
+              >
+                Create
+              </button>
+              <button
+                mat-button
+                type="button"
+                (click)="creatingNewPortfolioInModal.set(false)"
+                style="height: 34px; font-size: 11.5px;"
+              >
+                Cancel
+              </button>
+            }
+          </div>
+        </div>
+
         <button mat-icon-button type="button" (click)="closeDryRunModal()" aria-label="Close modal">
           ✕
         </button>

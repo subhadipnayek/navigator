@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import {
   SimulationRequest,
   SimulationResponse,
@@ -58,7 +58,9 @@ export class PortfolioService {
   }
 
   getUserPortfolios(): Observable<UserPortfolioSummary[]> {
-    return this.http.get<UserPortfolioSummary[]>(this.userPortfolioUrl());
+    return this.http.get<UserPortfolioSummary[]>(this.userPortfolioUrl()).pipe(
+      map((rows) => rows ?? []),
+    );
   }
 
   createUserPortfolio(name: string): Observable<UserPortfolioSummary> {
@@ -69,9 +71,86 @@ export class PortfolioService {
     portfolioId: number,
     showFullyExitedFunds: boolean,
   ): Observable<UserPortfolioDashboard> {
-    return this.http.get<UserPortfolioDashboard>(this.userPortfolioUrl(`${portfolioId}/dashboard`), {
-      params: { showFullyExitedFunds },
-    });
+    return this.http
+      .get<any>(this.userPortfolioUrl(`${portfolioId}/dashboard`), {
+        params: { showFullyExitedFunds },
+      })
+      .pipe(
+        map((raw) => {
+          if (!raw) return raw;
+          const fyInflows = (raw.financialYearInflows ?? raw.financialYearContributions ?? []).map((c: any) => ({
+            period: c.periodLabel ?? c.period ?? '',
+            invested: c.totalInflow ?? c.invested ?? 0,
+            redemptions: c.outflow ?? c.redemptions ?? 0,
+            netContribution: c.netInflow ?? c.netContribution ?? 0,
+          }));
+          const cyInflows = (raw.calendarYearInflows ?? raw.calendarYearContributions ?? []).map((c: any) => ({
+            period: c.periodLabel ?? c.period ?? '',
+            invested: c.totalInflow ?? c.invested ?? 0,
+            redemptions: c.outflow ?? c.redemptions ?? 0,
+            netContribution: c.netInflow ?? c.netContribution ?? 0,
+          }));
+          const assetAlloc = (raw.assetAllocation ?? []).map((a: any) => ({
+            label: a.label ?? '',
+            value: a.amount ?? a.value ?? 0,
+            percent: a.percentage ?? a.percent ?? 0,
+          }));
+          const fundAlloc = (raw.fundAllocation ?? []).map((a: any) => ({
+            label: a.label ?? '',
+            value: a.amount ?? a.value ?? 0,
+            percent: a.percentage ?? a.percent ?? 0,
+          }));
+          const emptyStates = raw.emptyStates ?? raw.emptyStateMessages ?? [];
+
+          return {
+            portfolioId: raw.id ?? raw.portfolioId ?? 0,
+            portfolioName: raw.name ?? raw.portfolioName ?? '',
+            metrics: {
+              investedAmount: raw.metrics?.investedAmount ?? 0,
+              currentValue: raw.metrics?.currentValue ?? 0,
+              realizedPnl: raw.metrics?.realizedGain ?? raw.metrics?.realizedPnl ?? 0,
+              unrealizedPnl: raw.metrics?.unrealizedGain ?? raw.metrics?.unrealizedPnl ?? 0,
+              absoluteReturnPercent: raw.metrics?.gainPercentage ?? raw.metrics?.absoluteReturnPercent ?? 0,
+              cagrPercent: raw.metrics?.cagrPercent ?? null,
+              xirrPercent: raw.metrics?.xirr ?? raw.metrics?.xirrPercent ?? null,
+              fundCount: raw.metrics?.activeFundsCount ?? raw.metrics?.fundCount ?? 0,
+              activeFundCount: raw.metrics?.activeFundsCount ?? raw.metrics?.activeFundCount ?? 0,
+              fullyExitedFundCount: raw.metrics?.fullyExitedFundsCount ?? raw.metrics?.fullyExitedFundCount ?? 0,
+            },
+            funds: (raw.funds ?? []).map((f: any) => ({
+              schemeCode: f.schemeCode,
+              schemeName: f.schemeName,
+              fundHouse: f.fundHouse,
+              schemeCategory: f.schemeCategory,
+              assetClass: f.assetClass ?? 'Equity',
+              units: f.units ?? 0,
+              investedAmount: f.investedAmount ?? 0,
+              currentValue: f.currentValue ?? 0,
+              realizedPnl: f.realizedGain ?? f.realizedPnl ?? 0,
+              unrealizedPnl: f.unrealizedGain ?? f.unrealizedPnl ?? 0,
+              absoluteReturnPercent: f.gainPercentage ?? f.absoluteReturnPercent ?? 0,
+              cagrPercent: f.cagr ?? f.cagrPercent ?? null,
+              xirrPercent: f.xirr ?? f.xirrPercent ?? null,
+              holdingPeriodDays: f.holdingPeriodDays ?? 0,
+              isFullyExited: f.isFullyExited ?? false,
+              latestNav: f.latestNav ?? null,
+              latestNavDate: f.latestNavDate ?? null,
+              hasNav: f.latestNav != null && f.latestNav > 0,
+            })),
+            assetAllocation: assetAlloc,
+            fundAllocation: fundAlloc,
+            financialYearContributions: fyInflows,
+            calendarYearContributions: cyInflows,
+            sipConsistency: {
+              activeMonths: raw.sipConsistency?.expectedMonthlySips ?? raw.sipConsistency?.activeMonths ?? 0,
+              investedMonths: raw.sipConsistency?.completedSips ?? raw.sipConsistency?.investedMonths ?? 0,
+              consistencyPercent: raw.sipConsistency?.consistencyScore ?? raw.sipConsistency?.consistencyPercent ?? 100,
+              averageMonthlyInvestment: raw.sipConsistency?.averageMonthlyInvestment ?? 0,
+            },
+            emptyStateMessages: emptyStates,
+          } as UserPortfolioDashboard;
+        }),
+      );
   }
 
   getUserPortfolioTransactions(portfolioId: number, financialYear: string): Observable<{
