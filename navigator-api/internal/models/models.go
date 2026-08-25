@@ -118,6 +118,8 @@ type PortfolioTransaction struct {
 	Amount          float64   `gorm:"column:amount;type:numeric(18,2);not null" json:"amount"`
 	Notes           *string   `gorm:"column:notes;size:500" json:"notes"`
 	Isin            *string   `gorm:"column:isin;size:20" json:"isin"`
+	TradeId         *string   `gorm:"column:trade_id;size:100" json:"tradeId,omitempty"`
+	Fingerprint     string    `gorm:"column:fingerprint;size:64;not null;index:idx_portfolio_transactions_port_fp,priority:2;default:''" json:"fingerprint"`
 	CreatedAtUtc    time.Time `gorm:"column:created_at_utc;not null;autoCreateTime" json:"createdAtUtc"`
 	UpdatedAtUtc    time.Time `gorm:"column:updated_at_utc;not null;autoUpdateTime" json:"updatedAtUtc"`
 

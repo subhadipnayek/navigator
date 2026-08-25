@@ -1,8 +1,9 @@
-import { Component, input } from '@angular/core';
+import { Component, input, ChangeDetectionStrategy } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
 
 @Component({
   selector: 'app-stat-card',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatCardModule],
   template: `
     <mat-card appearance="outlined">

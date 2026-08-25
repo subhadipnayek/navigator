@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnDestroy } from '@angular/core';
+import { Component, inject, signal, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
@@ -60,6 +60,7 @@ interface BasketSlot {
 
 @Component({
   selector: 'app-portfolio-lab',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule,
     DecimalPipe,

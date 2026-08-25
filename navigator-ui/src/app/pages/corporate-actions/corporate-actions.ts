@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DecimalPipe } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
@@ -36,6 +36,7 @@ type ReviewFilter =
 
 @Component({
   selector: 'app-corporate-actions',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule,
     DecimalPipe,

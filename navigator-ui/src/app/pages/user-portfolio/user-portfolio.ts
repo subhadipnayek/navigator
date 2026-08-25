@@ -1,5 +1,5 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AgGridAngular } from 'ag-grid-angular';
 import * as XLSX from 'xlsx';
@@ -54,6 +54,7 @@ interface PersistedGridState {
 
 @Component({
   selector: 'app-user-portfolio',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     DatePipe,
     DecimalPipe,

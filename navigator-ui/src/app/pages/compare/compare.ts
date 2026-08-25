@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnDestroy, computed } from '@angular/core';
+import { Component, inject, signal, OnDestroy, computed, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DecimalPipe } from '@angular/common';
 import {
@@ -35,6 +35,7 @@ import { MatTableModule } from '@angular/material/table';
 
 @Component({
   selector: 'app-compare',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule,
     LineChart,

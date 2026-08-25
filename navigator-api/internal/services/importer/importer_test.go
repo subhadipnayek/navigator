@@ -4,7 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"navigator-api/internal/models"
 	"navigator-api/internal/services/importer"
 )
 
@@ -85,18 +87,49 @@ func TestTabularReaderAndParsersOnRealSamples(t *testing.T) {
 	}
 }
 
-func TestDeduplicationFingerprints(t *testing.T) {
+func TestDeduplicationFingerprintsAndOccurrences(t *testing.T) {
 	dedup := importer.NewDeduplicationEngine()
 
-	fp1 := dedup.ComputeFingerprint(101, 120503, "HDFC TOP 100", "2023-05-15", "Buy", 100.5, 45.2, "")
-	fp2 := dedup.ComputeFingerprint(101, 120503, "HDFC TOP 100", "2023-05-15", "buy", 100.5000, 45.2000, "")
-	fp3 := dedup.ComputeFingerprint(101, 120503, "HDFC TOP 100", "2023-05-16", "Buy", 100.5, 45.2, "")
-
-	if fp1 != fp2 {
-		t.Errorf("Expected identical fingerprints for normalized casing/decimals, got %s != %s", fp1, fp2)
+	// 1. Same TradeID yields identical fingerprint regardless of casing
+	fpTrade1 := dedup.ComputeFingerprint(101, 0, "INFY", "2023-05-15", "Buy", 10, 1500, "TR12345", "", 1)
+	fpTrade2 := dedup.ComputeFingerprint(101, 0, "infy", "2023-05-15", "BUY", 10, 1500, "TR12345", "", 1)
+	if fpTrade1 != fpTrade2 {
+		t.Errorf("Expected identical fingerprints for TradeID, got %s != %s", fpTrade1, fpTrade2)
 	}
 
-	if fp1 == fp3 {
-		t.Errorf("Expected different fingerprints for different dates, got identical: %s", fp1)
+	// 2. Different TradeIDs on same second at same price yield distinct fingerprints (partial fill protection)
+	fpTrade3 := dedup.ComputeFingerprint(101, 0, "INFY", "2023-05-15", "Buy", 10, 1500, "TR12346", "", 1)
+	if fpTrade1 == fpTrade3 {
+		t.Errorf("Expected different fingerprints for distinct TradeIDs, got identical: %s", fpTrade1)
+	}
+
+	// 3. Mutual Fund identical intra-day purchases differentiated by occurrence index
+	fpOcc1 := dedup.ComputeFingerprint(101, 120503, "", "2023-05-15", "Buy", 50.0, 100.0, "", "FOLIO1", 1)
+	fpOcc2 := dedup.ComputeFingerprint(101, 120503, "", "2023-05-15", "Buy", 50.0, 100.0, "", "FOLIO1", 2)
+	if fpOcc1 == fpOcc2 {
+		t.Errorf("Expected different fingerprints for distinct intra-day occurrences, got identical: %s", fpOcc1)
+	}
+
+	// 4. Test ClassifyDrafts with 2 identical same-day trades when DB has 1
+	draftDate, _ := time.Parse("2006-01-02", "2023-05-15")
+	drafts := []importer.RawTradeDraft{
+		{SchemeCode: 120503, TransactionDate: draftDate, TransactionType: "Buy", Units: 50.0, Price: 100.0, FolioNumber: "FOLIO1"},
+		{SchemeCode: 120503, TransactionDate: draftDate, TransactionType: "Buy", Units: 50.0, Price: 100.0, FolioNumber: "FOLIO1"},
+	}
+
+	existingInDb := []models.PortfolioTransaction{
+		{PortfolioId: 101, SchemeCode: 120503, TransactionDate: draftDate, TransactionType: "Buy", Units: 50.0, Nav: 100.0},
+	}
+
+	classified := dedup.ClassifyDrafts(101, drafts, existingInDb)
+	if len(classified) != 2 {
+		t.Fatalf("Expected 2 classified drafts, got %d", len(classified))
+	}
+
+	if classified[0].Status != importer.StatusDuplicate {
+		t.Errorf("Expected 1st occurrence to be Duplicate (already in DB), got %s", classified[0].Status)
+	}
+	if classified[1].Status != importer.StatusNew {
+		t.Errorf("Expected 2nd occurrence to be New (genuine 2nd order), got %s", classified[1].Status)
 	}
 }

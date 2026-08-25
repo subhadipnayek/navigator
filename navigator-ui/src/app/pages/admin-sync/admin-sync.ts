@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink, RouterLinkActive } from '@angular/router';
@@ -24,6 +24,7 @@ type NavStatus = 'all' | 'with-nav' | 'without-nav';
 
 @Component({
   selector: 'app-admin-sync',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule,
     DecimalPipe,

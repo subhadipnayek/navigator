@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, input, OnInit, signal, ChangeDetectionStrategy } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { DecimalPipe, TitleCasePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -27,6 +27,7 @@ import { MatTableModule } from '@angular/material/table';
 
 @Component({
   selector: 'app-fund-detail',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     RouterLink,
     DecimalPipe,

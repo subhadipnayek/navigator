@@ -8,6 +8,7 @@ import {
   afterNextRender,
   PLATFORM_ID,
   inject,
+  ChangeDetectionStrategy,
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { CHART_COLORS } from '../../shared/chart-colors';
@@ -19,6 +20,7 @@ export interface ChartSeriesData {
 
 @Component({
   selector: 'app-line-chart',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="chart-shell">
       <div #chartContainer class="chart-host"></div>

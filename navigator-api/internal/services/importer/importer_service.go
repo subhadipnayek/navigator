@@ -228,6 +228,12 @@ func (s *ImporterService) Commit(
 			isinPtr = &i
 		}
 
+		var tradeIdPtr *string
+		if rec.TradeID != "" {
+			t := rec.TradeID
+			tradeIdPtr = &t
+		}
+
 		toInsert = append(toInsert, models.PortfolioTransaction{
 			PortfolioId:     portfolioId,
 			SchemeCode:      rec.SchemeCode,
@@ -238,6 +244,8 @@ func (s *ImporterService) Commit(
 			Amount:          amt,
 			Notes:           notesPtr,
 			Isin:            isinPtr,
+			TradeId:         tradeIdPtr,
+			Fingerprint:     rec.Fingerprint,
 			CreatedAtUtc:    time.Now().UTC(),
 			UpdatedAtUtc:    time.Now().UTC(),
 		})

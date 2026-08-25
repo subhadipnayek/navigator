@@ -56,6 +56,9 @@ func InitDB(cfg *config.Config) (*gorm.DB, error) {
 	_ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_funds_scheme_name_trgm ON "Funds" USING gin (scheme_name gin_trgm_ops);`).Error
 	_ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_funds_fund_house_trgm ON "Funds" USING gin (fund_house gin_trgm_ops);`).Error
 
+	// Create unique constraint on (portfolio_id, fingerprint)
+	_ = db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_portfolio_transactions_port_fp ON "PortfolioTransactions" (portfolio_id, fingerprint) WHERE fingerprint != '';`).Error
+
 	DB = db
 	log.Println("Database connection established and schema verified.")
 	return db, nil
