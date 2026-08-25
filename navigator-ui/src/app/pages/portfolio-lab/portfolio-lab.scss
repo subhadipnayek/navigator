@@ -1,15 +1,15 @@
 /* ── Layout ── */
 :host {
   display: grid;
-  gap: 20px;
-  width: min(1180px, calc(100% - 48px));
+  gap: 14px;
+  width: min(1520px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 32px 0 72px;
+  padding: 18px 0 54px;
 }
 
 .lab-shell {
   display: grid;
-  gap: 24px;
+  gap: 14px;
 }
 
 /* ── Header ── */
@@ -17,13 +17,17 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.09);
 }
 
 .lab-header-text h1 {
-  margin: 0 0 4px;
-  font-size: 26px;
+  margin: 0 0 2px;
+  font-size: 18px;
   font-weight: 800;
   color: #0f172a;
 }
@@ -31,47 +35,48 @@
 .lab-header-text p {
   margin: 0;
   color: #64748b;
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .lab-dates {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .lab-dates .date-field {
-  width: 170px;
+  width: 160px;
   margin-right: 0;
 }
 
 /* ── Error bar ── */
 .error-bar {
-  padding: 11px 16px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
   background: #fef2f2;
   border: 1px solid rgba(185, 28, 28, 0.25);
   color: #991b1b;
-  font-size: 14px;
+  font-size: 12.5px;
 }
 
 /* ── Date hint (auto-clamp notification) ── */
 .date-hint {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 14px;
-  border-radius: 8px;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 6px;
   background: #eff6ff;
   border: 1px solid rgba(37, 99, 235, 0.2);
   color: #1e40af;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .date-hint mat-icon {
-  font-size: 18px;
-  width: 18px;
-  height: 18px;
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
 }
 
@@ -85,19 +90,19 @@
 .simulate-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .basket-select-field {
-  width: 200px;
+  width: 180px;
   margin-right: 0;
 }
 
 /* ── Basket grid ── */
 .baskets-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
   align-items: start;
 }
 
@@ -108,7 +113,7 @@
 .basket-name-input {
   border: none;
   outline: none;
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 700;
   color: #0f172a;
   background: transparent;
@@ -122,9 +127,11 @@
 
 .remove-basket-btn {
   position: absolute !important;
-  top: 8px;
-  right: 8px;
+  top: 4px;
+  right: 4px;
   color: #94a3b8 !important;
+  width: 24px !important;
+  height: 24px !important;
 }
 
 .alloc-warn {
@@ -139,8 +146,8 @@
 }
 
 .search-dropdown {
-  margin-bottom: 10px;
-  max-height: 220px;
+  margin-bottom: 8px;
+  max-height: 200px;
   overflow-y: auto;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12) !important;
   z-index: 10;
@@ -148,6 +155,8 @@
 
 .search-result-item {
   cursor: pointer;
+  padding: 4px 8px !important;
+  min-height: 32px !important;
 }
 
 .search-result-item:hover {
@@ -157,18 +166,18 @@
 /* ── Fund allocation rows ── */
 .fund-rows {
   display: grid;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .fund-row {
   display: grid;
-  grid-template-columns: 1fr 72px 32px 32px;
+  grid-template-columns: 1fr 64px 26px 26px;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: #f8faf9;
+  gap: 4px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: #f8fafc;
   border: 1px solid rgba(15, 23, 42, 0.07);
 }
 
@@ -178,7 +187,7 @@
 
 .fund-name {
   display: block;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #0f172a;
   overflow: hidden;
@@ -188,7 +197,7 @@
 
 .fund-meta {
   display: block;
-  font-size: 11px;
+  font-size: 10.5px;
   color: #64748b;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -202,12 +211,13 @@
 }
 
 .alloc-input {
-  width: 48px;
-  padding: 4px 6px;
+  width: 42px;
+  height: 24px;
+  padding: 2px 4px;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font-size: 13px;
-  font-family: inherit;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
   text-align: right;
   color: #0f172a;
   background: #ffffff;
@@ -219,15 +229,24 @@
 }
 
 .alloc-pct {
-  font-size: 13px;
+  font-size: 11px;
   color: #64748b;
+  font-weight: 600;
 }
 
 .remove-fund-btn,
 .lock-fund-btn {
   color: #94a3b8 !important;
-  width: 28px !important;
-  height: 28px !important;
+  width: 24px !important;
+  height: 24px !important;
+}
+
+.remove-fund-btn mat-icon,
+.lock-fund-btn mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
 }
 
 .lock-fund-btn.locked {
@@ -237,16 +256,16 @@
 .empty-hint {
   text-align: center;
   color: #94a3b8;
-  font-size: 13px;
-  margin: 8px 0;
+  font-size: 12px;
+  margin: 6px 0;
 }
 
 /* ── Basket config ── */
 .basket-config {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin-top: 14px;
+  gap: 6px;
+  margin-top: 10px;
 }
 
 .basket-config .config-field {
@@ -256,11 +275,11 @@
 
 /* ── Add basket btn ── */
 .add-basket-btn {
-  height: 56px;
-  border: 2px dashed #cbd5e1 !important;
-  border-radius: 12px !important;
+  height: 42px;
+  border: 1px dashed #cbd5e1 !important;
+  border-radius: 6px !important;
   color: #64748b !important;
-  font-size: 14px;
+  font-size: 12.5px;
   align-self: center;
 }
 
@@ -275,62 +294,63 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.96);
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.97);
   border: 1px solid rgba(15, 23, 42, 0.1);
   backdrop-filter: blur(12px);
   position: sticky;
-  top: 64px;
-  z-index: 4;
+  top: 48px;
+  z-index: 10;
 }
 
 .compare-actions,
 .rolling-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .normalize-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 14px;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
   color: #334155;
   cursor: pointer;
   user-select: none;
 }
 
 .period-field {
-  width: 110px;
+  width: 100px;
   margin-right: 0;
 }
 
 /* ── Results section ── */
 .results-section {
   display: grid;
-  gap: 20px;
+  gap: 14px;
 }
 
 /* ── Stat tiles ── */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
 }
 
 .stat-tile {
-  padding: 14px 16px;
-  border-radius: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
   background: #ffffff;
   border: 1px solid rgba(15, 23, 42, 0.08);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
 }
 
 .stat-tile.primary {
-  background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
+  background: #0f172a;
   border-color: transparent;
 }
 
@@ -341,28 +361,29 @@
 
 .stat-label {
   display: block;
-  font-size: 11px;
+  font-size: 10px;
   color: #64748b;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 6px;
+  letter-spacing: 0.04em;
+  margin-bottom: 3px;
 }
 
 .stat-tile strong {
   display: block;
-  font-size: 20px;
-  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 17px;
+  font-weight: 700;
   color: #0f172a;
-  line-height: 1.1;
+  line-height: 1.15;
 }
 
 /* ── Pos/neg colours ── */
 .pos {
-  color: #0f766e !important;
+  color: #059669 !important;
 }
 .neg {
-  color: #b91c1c !important;
+  color: #dc2626 !important;
 }
 
 /* ── Chart card ── */
@@ -375,36 +396,39 @@
 .insight-callout {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 14px 18px;
-  border-radius: 10px;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 6px;
   background: #ecfdf5;
   border: 1px solid rgba(15, 118, 110, 0.25);
   color: #0f513f;
 }
 
 .insight-callout p {
-  margin: 4px 0 0;
-  font-size: 13px;
+  margin: 2px 0 0;
+  font-size: 12px;
   color: #1e4035;
 }
 
 .insight-icon {
   flex-shrink: 0;
-  margin-top: 2px;
+  margin-top: 1px;
   color: #0f766e;
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
 }
 
 .insight-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .chip {
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-size: 13px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11.5px;
   font-weight: 600;
 }
 
@@ -427,8 +451,8 @@
 /* ── Responsive ── */
 @media (max-width: 680px) {
   :host {
-    width: calc(100% - 24px);
-    padding: 20px 0 56px;
+    width: calc(100% - 16px);
+    padding: 12px 0 40px;
   }
 
   .baskets-grid {
@@ -445,6 +469,7 @@
 
   .lab-header {
     flex-direction: column;
+    align-items: flex-start;
   }
 
   .action-bar {

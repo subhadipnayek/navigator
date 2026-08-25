@@ -1,29 +1,60 @@
-<mat-toolbar>
+<mat-toolbar class="terminal-navbar">
   <a class="brand" mat-button routerLink="/">
-    <span class="brand-mark">N</span>
-    <span>NAVigator</span>
+    <span class="brand-badge">NAV</span>
+    <span class="brand-title">NAVIGATOR</span>
+    <span class="brand-sub">TERMINAL</span>
   </a>
+
+  <div class="status-live-pill" title="Live AMFI NAV synchronization active">
+    <span class="pulse-dot"></span>
+    <span>AMFI LIVE</span>
+  </div>
+
   <span class="toolbar-spacer"></span>
+
   <nav aria-label="Primary navigation">
     @if (auth.isAuthenticated()) {
-      <a mat-button routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
-      <a mat-button routerLink="/funds" routerLinkActive="active">Funds</a>
-      <a mat-button routerLink="/compare" routerLinkActive="active">Compare</a>
-      <a mat-button routerLink="/portfolio-dashboard" routerLinkActive="active">Portfolio</a>
-      <a mat-button routerLink="/portfolio-lab" routerLinkActive="active">Portfolio Lab</a>
+      <a mat-button routerLink="/dashboard" routerLinkActive="active">
+        <span class="nav-icon">dashboard</span>
+        <span>Dashboard</span>
+      </a>
+      <a mat-button routerLink="/funds" routerLinkActive="active">
+        <span class="nav-icon">search</span>
+        <span>Funds</span>
+      </a>
+      <a mat-button routerLink="/compare" routerLinkActive="active">
+        <span class="nav-icon">compare_arrows</span>
+        <span>Compare</span>
+      </a>
+      <a mat-button routerLink="/portfolio" routerLinkActive="active">
+        <span class="nav-icon">pie_chart</span>
+        <span>Portfolio</span>
+      </a>
+      <a mat-button routerLink="/portfolio-lab" routerLinkActive="active">
+        <span class="nav-icon">science</span>
+        <span>Lab</span>
+      </a>
       @if (auth.isAdmin()) {
-        <a mat-button routerLink="/admin" routerLinkActive="active">Admin</a>
+        <a mat-button routerLink="/admin" routerLinkActive="active">
+          <span class="nav-icon">tune</span>
+          <span>Admin</span>
+        </a>
       }
     }
   </nav>
 
-  @if (auth.user(); as user) {
-    <button class="user-pill" mat-button type="button" disabled>{{ user.username }} · {{ user.role }}</button>
-    <button mat-button type="button" (click)="logout()">Logout</button>
-  } @else {
-    <a mat-button routerLink="/login" routerLinkActive="active">Login</a>
-    <a mat-flat-button routerLink="/register" routerLinkActive="active">Register</a>
-  }
+  <div class="auth-group">
+    @if (auth.user(); as user) {
+      <div class="user-badge" title="Authenticated session">
+        <span class="user-name">{{ user.username }}</span>
+        <span class="user-role">{{ user.role }}</span>
+      </div>
+      <button mat-stroked-button class="logout-btn" type="button" (click)="logout()">Sign Out</button>
+    } @else {
+      <a mat-button routerLink="/login" routerLinkActive="active">Sign In</a>
+      <a mat-flat-button class="register-btn" routerLink="/register" routerLinkActive="active">Get Started</a>
+    }
+  </div>
 </mat-toolbar>
 
 <main>

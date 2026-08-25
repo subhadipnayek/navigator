@@ -4,11 +4,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"navigator-api/internal/middleware"
 	"navigator-api/internal/models"
 	"navigator-api/internal/services"
+	"navigator-api/internal/services/importer"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -16,11 +16,16 @@ import (
 
 type UserPortfolioHandler struct {
 	portService *services.UserPortfolioService
+	importerSvc *importer.ImporterService
 	db          *gorm.DB
 }
 
 func NewUserPortfolioHandler(portSvc *services.UserPortfolioService, db *gorm.DB) *UserPortfolioHandler {
-	return &UserPortfolioHandler{portService: portSvc, db: db}
+	return &UserPortfolioHandler{
+		portService: portSvc,
+		importerSvc: importer.NewImporterService(db),
+		db:          db,
+	}
 }
 
 func (h *UserPortfolioHandler) GetPortfolios(c *gin.Context) {
@@ -58,10 +63,9 @@ func (h *UserPortfolioHandler) GetDashboard(c *gin.Context) {
 	showFullyExited := strings.EqualFold(c.Query("showFullyExitedFunds"), "true")
 	res, err := h.portService.GetDashboard(c.Request.Context(), userId, portId, showFullyExited)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "Portfolio not found"})
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
 		return
 	}
-
 	c.JSON(http.StatusOK, res)
 }
 
@@ -75,14 +79,14 @@ func (h *UserPortfolioHandler) GetTransactions(c *gin.Context) {
 	}
 
 	fy := c.Query("financialYear")
-	txs, summary, err := h.portService.GetTransactions(c.Request.Context(), userId, portId, fy)
+	transactions, summary, err := h.portService.GetTransactions(c.Request.Context(), userId, portId, fy)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "Portfolio not found"})
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"transactions": txs,
+		"transactions": transactions,
 		"summary":      summary,
 	})
 }
@@ -116,6 +120,67 @@ func (h *UserPortfolioHandler) SaveTransactions(c *gin.Context) {
 	c.JSON(http.StatusOK, res)
 }
 
+// ImportPreview handles dry-run parsing across all supported broker formats.
+func (h *UserPortfolioHandler) ImportPreview(c *gin.Context) {
+	userId := middleware.GetCurrentUserID(c)
+	idStr := c.Param("portfolioId")
+	portId, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid portfolio ID"})
+		return
+	}
+
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Upload a valid file (.xlsx, .xls, or .csv)."})
+		return
+	}
+	defer file.Close()
+
+	res, err := h.importerSvc.Preview(c.Request.Context(), userId, portId, file, header.Filename)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, res)
+}
+
+// ImportCommit atomically commits the previewed batch of transactions with the selected strategy.
+func (h *UserPortfolioHandler) ImportCommit(c *gin.Context) {
+	userId := middleware.GetCurrentUserID(c)
+	idStr := c.Param("portfolioId")
+	portId, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid portfolio ID"})
+		return
+	}
+
+	var req importer.ImportCommitRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	insertedCount, err := h.importerSvc.Commit(c.Request.Context(), userId, portId, &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	// Fetch updated transactions & summary
+	fy := c.Query("financialYear")
+	transactions, summary, _ := h.portService.GetTransactions(c.Request.Context(), userId, portId, fy)
+
+	c.JSON(http.StatusOK, gin.H{
+		"insertedCount": insertedCount,
+		"strategy":      req.Strategy,
+		"transactions":  transactions,
+		"summary":       summary,
+	})
+}
+
+// Legacy fallback endpoint
 func (h *UserPortfolioHandler) ImportTransactions(c *gin.Context) {
 	userId := middleware.GetCurrentUserID(c)
 	idStr := c.Param("portfolioId")
@@ -200,8 +265,53 @@ func (h *UserPortfolioHandler) CompareBenchmark(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
-
 	c.JSON(http.StatusOK, res)
+}
+
+func (h *UserPortfolioHandler) MatchFunds(c *gin.Context) {
+	var req models.MatchPortfolioFundRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	var matches []models.MatchedPortfolioFundDto
+	for _, row := range req.Rows {
+		var fund models.Fund
+		var err error
+
+		if row.Isin != nil && *row.Isin != "" {
+			err = h.db.WithContext(c.Request.Context()).
+				Where("isin_growth = ? OR isin_div_reinvestment = ?", *row.Isin, *row.Isin).
+				First(&fund).Error
+		}
+
+		if err != nil && row.SchemeCode != nil && *row.SchemeCode != "" {
+			if code, parseErr := strconv.Atoi(*row.SchemeCode); parseErr == nil {
+				err = h.db.WithContext(c.Request.Context()).Where("scheme_code = ?", code).First(&fund).Error
+			}
+		}
+
+		if err != nil && row.SchemeName != nil && *row.SchemeName != "" {
+			err = h.db.WithContext(c.Request.Context()).Where("scheme_name ILIKE ?", "%"+*row.SchemeName+"%").First(&fund).Error
+		}
+
+		if err == nil {
+			matches = append(matches, models.MatchedPortfolioFundDto{
+				RowNumber:  row.RowNumber,
+				SchemeCode: &fund.SchemeCode,
+				SchemeName: &fund.SchemeName,
+			})
+		} else {
+			errMsg := "Fund not found"
+			matches = append(matches, models.MatchedPortfolioFundDto{
+				RowNumber: row.RowNumber,
+				Error:     &errMsg,
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, models.MatchPortfolioFundResponse{Matches: matches})
 }
 
 func (h *UserPortfolioHandler) GetGridPreference(c *gin.Context) {
@@ -213,14 +323,14 @@ func (h *UserPortfolioHandler) GetGridPreference(c *gin.Context) {
 		Where("user_id = ? AND grid_key = ?", userId, gridKey).
 		First(&pref).Error
 
-	var stateJson *string
-	if err == nil {
-		stateJson = &pref.StateJson
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Preference not found"})
+		return
 	}
 
 	c.JSON(http.StatusOK, models.UserGridPreferenceDto{
-		GridKey:   gridKey,
-		StateJson: stateJson,
+		GridKey:   pref.GridKey,
+		StateJson: &pref.StateJson,
 	})
 }
 
@@ -229,8 +339,8 @@ func (h *UserPortfolioHandler) SaveGridPreference(c *gin.Context) {
 	gridKey := c.Param("gridKey")
 
 	var req models.SaveUserGridPreferenceRequest
-	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.StateJson) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Grid state cannot be empty."})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -241,93 +351,18 @@ func (h *UserPortfolioHandler) SaveGridPreference(c *gin.Context) {
 
 	if err != nil {
 		pref = models.UserGridPreference{
-			UserId:       userId,
-			GridKey:      gridKey,
-			StateJson:    req.StateJson,
-			CreatedAtUtc: time.Now().UTC(),
-			UpdatedAtUtc: time.Now().UTC(),
+			UserId:    userId,
+			GridKey:   gridKey,
+			StateJson: req.StateJson,
 		}
 		_ = h.db.WithContext(c.Request.Context()).Create(&pref).Error
 	} else {
 		pref.StateJson = req.StateJson
-		pref.UpdatedAtUtc = time.Now().UTC()
 		_ = h.db.WithContext(c.Request.Context()).Save(&pref).Error
 	}
 
 	c.JSON(http.StatusOK, models.UserGridPreferenceDto{
-		GridKey:   gridKey,
+		GridKey:   pref.GridKey,
 		StateJson: &pref.StateJson,
 	})
-}
-
-func (h *UserPortfolioHandler) MatchFunds(c *gin.Context) {
-	var req models.MatchPortfolioFundRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-		return
-	}
-
-	var results []models.MatchedPortfolioFundDto
-	for _, row := range req.Rows {
-		var isin, schemeCodeText, schemeName string
-		if row.Isin != nil {
-			isin = strings.TrimSpace(*row.Isin)
-		}
-		if row.SchemeCode != nil {
-			schemeCodeText = strings.TrimSpace(*row.SchemeCode)
-		}
-		if row.SchemeName != nil {
-			schemeName = strings.TrimSpace(*row.SchemeName)
-		}
-
-		schemeCode, err := strconv.Atoi(schemeCodeText)
-		hasSchemeCode := (err == nil && schemeCode > 0)
-
-		if isin == "" && !hasSchemeCode {
-			msg := "SchemeCode and ISIN both missing."
-			results = append(results, models.MatchedPortfolioFundDto{
-				RowNumber: row.RowNumber,
-				Error:     &msg,
-			})
-			continue
-		}
-
-		var candidates []models.Fund
-		q := h.db.WithContext(c.Request.Context())
-		if hasSchemeCode && isin != "" {
-			q = q.Where("scheme_code = ? AND (isin_growth = ? OR isin_div_reinvestment = ?)", schemeCode, isin, isin)
-		} else if hasSchemeCode {
-			q = q.Where("scheme_code = ?", schemeCode)
-		} else {
-			q = q.Where("isin_growth = ? OR isin_div_reinvestment = ?", isin, isin)
-		}
-
-		_ = q.Limit(5).Find(&candidates).Error
-		if len(candidates) == 0 {
-			msg := "SchemeCode and ISIN not found in database."
-			results = append(results, models.MatchedPortfolioFundDto{
-				RowNumber: row.RowNumber,
-				Error:     &msg,
-			})
-			continue
-		}
-
-		match := candidates[0]
-		if len(candidates) > 1 && schemeName != "" {
-			for _, f := range candidates {
-				if strings.EqualFold(f.SchemeName, schemeName) {
-					match = f
-					break
-				}
-			}
-		}
-
-		results = append(results, models.MatchedPortfolioFundDto{
-			RowNumber:  row.RowNumber,
-			SchemeCode: &match.SchemeCode,
-			SchemeName: &match.SchemeName,
-		})
-	}
-
-	c.JSON(http.StatusOK, models.MatchPortfolioFundResponse{Matches: results})
 }

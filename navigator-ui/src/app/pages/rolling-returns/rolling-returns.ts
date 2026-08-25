@@ -1,4 +1,6 @@
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NavService } from '../../services/nav.service';
 import { RollingReturnResponse } from '../../models/fund.model';
@@ -17,6 +19,8 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 @Component({
   selector: 'app-rolling-returns',
   imports: [
+    RouterLink,
+    DecimalPipe,
     LineChart,
     FormsModule,
     MatButtonModule,

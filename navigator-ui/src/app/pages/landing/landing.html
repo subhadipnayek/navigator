@@ -1,43 +1,61 @@
 <section class="hero">
   <div class="hero-copy">
-    <mat-chip-set>
-      <mat-chip>Mutual fund research workspace</mat-chip>
-    </mat-chip-set>
+    <div style="display: flex; gap: 6px; align-items: center;">
+      <span class="mono-code" style="background: #0f172a; color: #10b981; border: none; font-size: 11px;">
+        PRO RESEARCH ENGINE
+      </span>
+      <span class="mono-code" style="background: #ecfdf5; color: #047857; border-color: #a7f3d0;">
+        AMFI LIVE VERIFIED
+      </span>
+    </div>
 
-    <h1>Compare, analyze, and decide between 14K+ funds.</h1>
+    <h1>Institutional mutual fund analytics &amp; portfolio engineering.</h1>
     <p>
-      NAVigator brings fund discovery, NAV history, rolling returns, comparison workflows, and
-      corporate-action checks into one focused research tool.
+      NAVigator is a high-density financial research terminal designed for serious investors, researchers, and advisors. Search across 14,800+ schemes, evaluate point-to-point and rolling CAGRs, simulate multi-asset SIP baskets, and audit corporate action split factors.
     </p>
 
     <div class="hero-actions">
       @if (auth.isAuthenticated()) {
-        <a mat-flat-button routerLink="/dashboard">Open Dashboard</a>
+        <a mat-flat-button routerLink="/dashboard" style="height: 38px;">
+          <span class="nav-icon" style="vertical-align: middle; margin-right: 4px;">dashboard</span>
+          Launch Terminal
+        </a>
       } @else {
-        <a mat-flat-button routerLink="/register">Start Researching</a>
-        <a mat-stroked-button routerLink="/login">Login</a>
+        <a mat-flat-button routerLink="/register" style="height: 38px;">
+          Start Researching
+        </a>
+        <a mat-stroked-button routerLink="/login" style="height: 38px;">
+          Sign In
+        </a>
       }
+      <a mat-stroked-button routerLink="/funds" style="height: 38px;">
+        Explore Schemes
+      </a>
     </div>
   </div>
 
   <section class="research-panel" aria-label="Research coverage">
     <div class="panel-header">
-      <h2>Research Coverage</h2>
-      <p>Fund analytics in one authenticated workspace</p>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span class="mono-code" style="font-size: 10.5px;">SYSTEM COVERAGE</span>
+        <span style="font-size: 11px; font-weight: 700; color: #047857;">● 99.9% DATA HEALTH</span>
+      </div>
+      <h2>Mutual Fund Intelligence</h2>
+      <p>Continuous synchronization with Association of Mutual Funds in India (AMFI)</p>
     </div>
 
     <div class="metric-grid">
       <div>
-        <strong>14K+</strong>
-        <span>Funds</span>
+        <strong>14,800+</strong>
+        <span>Tracked Schemes</span>
       </div>
       <div>
-        <strong>30Y</strong>
-        <span>NAV history</span>
+        <strong>30+ YRS</strong>
+        <span>Daily NAV Depth</span>
       </div>
       <div>
-        <strong>Live</strong>
-        <span>AMFI sync</span>
+        <strong>DAILY</strong>
+        <span>AMFI Sync</span>
       </div>
     </div>
 
@@ -47,42 +65,56 @@
       <span></span>
       <span></span>
       <span></span>
+      <span></span>
+      <span></span>
     </div>
 
-    <mat-chip-set>
-      <mat-chip>Rolling returns</mat-chip>
-      <mat-chip>NAV history</mat-chip>
-      <mat-chip>Corporate action checks</mat-chip>
-      <mat-chip>Fund comparison</mat-chip>
-    </mat-chip-set>
+    <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+      <span class="mono-code">Point-to-Point CAGR</span>
+      <span class="mono-code">1Y/3Y/5Y Rolling Spread</span>
+      <span class="mono-code">Split Factor Engine</span>
+      <span class="mono-code">XIRR Ledger</span>
+    </div>
   </section>
 </section>
 
+<!-- ═══════════════════════════════════════════════
+     FEATURES GRID
+═══════════════════════════════════════════════ -->
 <section class="features">
   <mat-card appearance="outlined">
     <mat-card-header>
-      <mat-card-title>Search with context</mat-card-title>
+      <mat-card-title>
+        <span class="mono-code" style="margin-right: 6px;">01</span>
+        Contextual Scheme Screener
+      </mat-card-title>
     </mat-card-header>
     <mat-card-content>
-      <p>Find funds by name, scheme code, AMC, type, and category before opening deeper NAV views.</p>
+      <p>Filter open &amp; close-ended schemes by category, AMC, growth/dividend options, and AMFI codes with sub-second response times.</p>
     </mat-card-content>
   </mat-card>
 
   <mat-card appearance="outlined">
     <mat-card-header>
-      <mat-card-title>Compare performance</mat-card-title>
+      <mat-card-title>
+        <span class="mono-code" style="margin-right: 6px;">02</span>
+        Multi-Fund Alpha Comparator
+      </mat-card-title>
     </mat-card-header>
     <mat-card-content>
-      <p>Review point-to-point and rolling returns side by side so decisions are based on patterns.</p>
+      <p>Overlay normalized growth of ₹10,000 across multiple schemes, compare annualized CAGRs, and visualize rolling return percentiles.</p>
     </mat-card-content>
   </mat-card>
 
   <mat-card appearance="outlined">
     <mat-card-header>
-      <mat-card-title>Trust adjusted data</mat-card-title>
+      <mat-card-title>
+        <span class="mono-code" style="margin-right: 6px;">03</span>
+        Corporate Action Scrubbing
+      </mat-card-title>
     </mat-card-header>
     <mat-card-content>
-      <p>Flag NAV anomalies and account for splits, mergers, bonuses, and discontinuities.</p>
+      <p>Automated anomaly scanner detects NAV artificial jumps, unit splits, bonuses, and data gaps to guarantee uncorrupted return calculations.</p>
     </mat-card-content>
   </mat-card>
 </section>

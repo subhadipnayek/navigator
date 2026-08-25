@@ -147,89 +147,241 @@
   </mat-card>
 }
 
-<mat-card appearance="outlined" class="excel-upload-card">
+<!-- ═══════════════════════════════════════════════
+     MULTI-BROKER TRANSACTION INGESTION & DEDUPLICATION WORKBENCH
+═══════════════════════════════════════════════ -->
+<mat-card appearance="outlined" class="ingestion-workbench-card">
   <mat-card-header>
-    <mat-card-title>Transaction Excel Upload</mat-card-title>
+    <div>
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+        <span class="mono-code" style="background: #0f172a; color: #10b981; border: none; font-size: 10.5px;">INGESTION ENGINE</span>
+        <span style="font-size: 11px; color: #64748b; font-weight: 600;">CAMS · KFINTECH · ZERODHA · CSV</span>
+      </div>
+      <mat-card-title>Import Statement &amp; Deduplicate</mat-card-title>
+    </div>
   </mat-card-header>
   <mat-card-content>
-    <div class="upload-controls">
-      <mat-button-toggle-group
-        [ngModel]="importMode()"
-        (ngModelChange)="importMode.set($event)"
-        aria-label="Import mode"
-      >
-        <mat-button-toggle value="Append">Append</mat-button-toggle>
-        <mat-button-toggle value="Replace">Replace</mat-button-toggle>
-      </mat-button-toggle-group>
-
-      <mat-form-field appearance="outline">
-        <mat-label>Start date</mat-label>
-        <input matInput type="date" [ngModel]="importStartDate()" (ngModelChange)="importStartDate.set($event)" />
-      </mat-form-field>
-
-      <mat-form-field appearance="outline">
-        <mat-label>End date</mat-label>
-        <input matInput type="date" [ngModel]="importEndDate()" (ngModelChange)="importEndDate.set($event)" />
-      </mat-form-field>
-
+    <div
+      class="upload-dropzone"
+      (dragover)="$event.preventDefault()"
+      (drop)="onStatementFileDropped($event)"
+    >
       <input
-        #excelUpload
-        class="file-input"
+        #statementUpload
         type="file"
-        accept=".xlsx"
-        (change)="onExcelFileSelected($event)"
+        class="file-input"
+        accept=".xlsx,.xls,.csv,.tsv"
+        (change)="onStatementFileSelected($event)"
       />
-      <button mat-stroked-button type="button" (click)="excelUpload.click()">
-        {{ selectedExcelFile()?.name ?? 'Choose Excel' }}
-      </button>
-      <button mat-flat-button type="button" [disabled]="!canImportExcel()" (click)="importExcelFile()">
-        {{ importingExcel() ? 'Importing...' : 'Import Excel' }}
-      </button>
-      <button mat-stroked-button type="button" (click)="downloadExcelTemplate()" title="Download a blank template with the required column headers">Download Template</button>
+      <div class="dropzone-content">
+        <span class="dropzone-icon">upload_file</span>
+        <div class="dropzone-text">
+          <strong>Drag &amp; drop your trade statement or CAS file here</strong>
+          <p>Supports CAMS CAS (.xls), KFintech CAS (.xls/.xlsx), Zerodha Coin &amp; Kite (.xlsx), and generic CSVs</p>
+        </div>
+        <button
+          mat-flat-button
+          type="button"
+          [disabled]="previewingFile()"
+          (click)="statementUpload.click()"
+          style="height: 34px;"
+        >
+          {{ previewingFile() ? 'Analyzing Statement...' : 'Select Trade Statement' }}
+        </button>
+        <button mat-stroked-button type="button" (click)="downloadExcelTemplate()" style="height: 34px;">
+          Download Template
+        </button>
+      </div>
     </div>
-
-    @if (importSummary(); as summary) {
-      <div class="import-summary-panel">
-        <div><strong>{{ summary.totalRows }}</strong><span>Total rows in file</span></div>
-        <div><strong>{{ summary.importedCount }}</strong><span>Rows imported</span></div>
-        <div><strong>{{ summary.rowErrors.length + summary.skippedOutOfRangeCount }}</strong><span>Rows skipped</span></div>
-        <div><strong>{{ summary.rowWarnings.length }}</strong><span>Rows to review</span></div>
-        <div><strong>{{ summary.importedDateStart ?? 'None' }}</strong><span>Imported start</span></div>
-        <div><strong>{{ summary.importedDateEnd ?? 'None' }}</strong><span>Imported end</span></div>
-        <div><strong>{{ summary.totalAmountImported | number: '1.2-2' }}</strong><span>Total amount imported</span></div>
-        <div><strong>{{ summary.fundCount }}</strong><span>Funds imported</span></div>
-        <div><strong>{{ summary.replacedCount }}</strong><span>Rows deleted before import</span></div>
-      </div>
-    }
-
-    @if (excelImportMessages().length > 0 || importSummary()?.skippedOutOfRangeCount || importSummary()?.rowWarnings?.length) {
-      <div class="grid-error-panel">
-        @if (importSummary()?.skippedOutOfRangeCount) {
-          <div>
-            <strong>{{ importSummary()?.skippedOutOfRangeCount }} outside range</strong>
-            <p>Rows outside {{ importStartDate() }} to {{ importEndDate() }} were skipped.</p>
-          </div>
-        }
-        @for (message of excelImportMessages(); track message) {
-          <div>
-            <strong>Skipped</strong>
-            <p>{{ message }}</p>
-          </div>
-        }
-        @for (message of importSummary()?.rowWarnings ?? []; track message) {
-          <div>
-            <strong>Review</strong>
-            <p>{{ message }}</p>
-          </div>
-        }
-      </div>
-    }
   </mat-card-content>
 </mat-card>
 
+<!-- ═══════════════════════════════════════════════
+     DRY-RUN INGESTION PREVIEW & STRATEGY MODAL
+═══════════════════════════════════════════════ -->
+@if (dryRunPreview(); as preview) {
+  <div class="dry-run-backdrop" (click)="closeDryRunModal()">
+    <div class="dry-run-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="mono-code" style="background: #0f172a; color: #10b981; border: none; font-size: 10px;">PRE-IMPORT DRY RUN</span>
+            <span class="badge-pos" style="font-size: 11px;">● {{ preview.detectedFormatLabel }}</span>
+          </div>
+          <h2 style="margin: 6px 0 0; font-size: 18px; font-weight: 700;">Statement Ingestion Analysis</h2>
+        </div>
+        <button mat-icon-button type="button" (click)="closeDryRunModal()" aria-label="Close modal">
+          ✕
+        </button>
+      </div>
+
+      <!-- Dry Run Metric Ribbon -->
+      <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr); margin: 14px 0;">
+        <div class="kpi-tile">
+          <span class="kpi-label">TOTAL ROWS</span>
+          <strong class="kpi-value">{{ preview.totalRowsParsed }}</strong>
+          <span class="kpi-sub">{{ preview.validFinancialTrades }} Valid Trades</span>
+        </div>
+        <div class="kpi-tile" style="border-left: 3px solid #10b981;">
+          <span class="kpi-label">🟢 NEW TRADES</span>
+          <strong class="kpi-value" style="color: #047857;">{{ preview.newTradesCount }}</strong>
+          <span class="kpi-sub">Ready to insert</span>
+        </div>
+        <div class="kpi-tile" style="border-left: 3px solid #f59e0b;">
+          <span class="kpi-label">🟡 DUPLICATES</span>
+          <strong class="kpi-value" style="color: #b45309;">{{ preview.duplicateTradesCount }}</strong>
+          <span class="kpi-sub">Skipped in Smart Merge</span>
+        </div>
+        <div class="kpi-tile" style="border-left: 3px solid #64748b;">
+          <span class="kpi-label">⚪ NON-FINANCIAL</span>
+          <strong class="kpi-value" style="color: #475569;">{{ preview.ignoredEventsCount }}</strong>
+          <span class="kpi-sub">KYC/Nominee updates</span>
+        </div>
+        <div class="kpi-tile">
+          <span class="kpi-label">DATE WINDOW</span>
+          <strong class="kpi-value" style="font-size: 12.5px;">{{ preview.earliestTransactionDate ?? 'N/A' }}</strong>
+          <span class="kpi-sub">to {{ preview.latestTransactionDate ?? 'N/A' }}</span>
+        </div>
+      </div>
+
+      <!-- Ingestion Strategy Selector -->
+      <div class="strategy-selector-section">
+        <label style="display: block; font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: #475569; margin-bottom: 8px;">
+          Select Ingestion Strategy
+        </label>
+        <div class="strategy-options-grid">
+          @for (strat of preview.availableStrategies; track strat.key) {
+            <label
+              class="strategy-card"
+              [class.selected]="selectedStrategy() === strat.key"
+            >
+              <input
+                type="radio"
+                name="ingestStrategy"
+                [value]="strat.key"
+                [checked]="selectedStrategy() === strat.key"
+                (change)="selectedStrategy.set(strat.key)"
+              />
+              <div class="strategy-copy">
+                <strong>{{ strat.title }}</strong>
+                <p>{{ strat.description }}</p>
+              </div>
+            </label>
+          }
+        </div>
+      </div>
+
+      <!-- Filter Tabs & Trade Preview Table -->
+      <div class="preview-table-header">
+        <div class="preview-tabs">
+          <button
+            mat-button
+            [class.active-tab]="previewFilterTab() === 'all'"
+            (click)="previewFilterTab.set('all')"
+          >
+            All Parsed ({{ preview.transactions.length }})
+          </button>
+          <button
+            mat-button
+            [class.active-tab]="previewFilterTab() === 'new'"
+            (click)="previewFilterTab.set('new')"
+          >
+            New Trades ({{ preview.newTradesCount }})
+          </button>
+          <button
+            mat-button
+            [class.active-tab]="previewFilterTab() === 'duplicate'"
+            (click)="previewFilterTab.set('duplicate')"
+          >
+            Duplicates ({{ preview.duplicateTradesCount }})
+          </button>
+          <button
+            mat-button
+            [class.active-tab]="previewFilterTab() === 'ignored'"
+            (click)="previewFilterTab.set('ignored')"
+          >
+            Non-Financial ({{ preview.ignoredEventsCount }})
+          </button>
+        </div>
+      </div>
+
+      <div class="preview-table-container">
+        <table class="preview-table">
+          <thead>
+            <tr>
+              <th>Row</th>
+              <th>Status</th>
+              <th>Date</th>
+              <th>Asset / Scheme</th>
+              <th>Type</th>
+              <th style="text-align: right;">Units / Qty</th>
+              <th style="text-align: right;">Price / NAV</th>
+              <th style="text-align: right;">Amount</th>
+              <th>Notes / Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (tx of filteredPreviewTrades(); track tx.fingerprint + tx.sourceRowNumber) {
+              <tr [class.row-ignored]="tx.status === 'Ignored'" [class.row-duplicate]="tx.status === 'Duplicate'">
+                <td class="mono-num">{{ tx.sourceRowNumber }}</td>
+                <td>
+                  @if (tx.status === 'New') {
+                    <span class="badge-pos">● NEW</span>
+                  } @else if (tx.status === 'Duplicate') {
+                    <span class="badge-neg" style="background: #fef3c7; color: #92400e; border-color: #fde68a;">● DUPLICATE</span>
+                  } @else if (tx.status === 'Ignored') {
+                    <span class="mono-code" style="color: #64748b;">IGNORED</span>
+                  } @else {
+                    <span class="badge-neg">● {{ tx.status }}</span>
+                  }
+                </td>
+                <td class="mono-num">{{ tx.transactionDate ? (tx.transactionDate | date: 'dd-MMM-yyyy') : 'N/A' }}</td>
+                <td>
+                  <strong style="display: block; font-size: 12px;">{{ tx.schemeName || tx.symbol || 'Unresolved' }}</strong>
+                  <span class="mono-code" style="font-size: 10px;">{{ tx.isin || ('Code: ' + tx.schemeCode) }}</span>
+                </td>
+                <td>
+                  <span class="mono-code" [style.color]="tx.transactionType === 'Sell' ? '#b91c1c' : '#047857'">
+                    {{ tx.transactionType }}
+                  </span>
+                </td>
+                <td class="mono-num" style="text-align: right;">{{ tx.units | number: '1.2-4' }}</td>
+                <td class="mono-num" style="text-align: right;">{{ tx.price | number: '1.2-4' }}</td>
+                <td class="mono-num" style="text-align: right; font-weight: 700;">₹{{ tx.amount | number: '1.2-2' }}</td>
+                <td style="font-size: 11px; color: #64748b;">{{ tx.statusMessage || tx.notes }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="9" style="text-align: center; padding: 24px; color: #64748b;">
+                  No transactions match the selected filter.
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="modal-footer">
+        <button mat-stroked-button type="button" (click)="closeDryRunModal()">
+          Cancel
+        </button>
+        <button
+          mat-flat-button
+          type="button"
+          [disabled]="committingImport()"
+          (click)="commitIngestion()"
+          style="height: 36px; padding: 0 20px;"
+        >
+          {{ committingImport() ? 'Committing Ingestion...' : ('Commit Ingestion (' + (selectedStrategy() === 'SmartMerge' ? preview.newTradesCount : preview.validFinancialTrades) + ' Trades)') }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
 <section class="transaction-editor-shell">
   <button mat-stroked-button type="button" (click)="showTransactionEditor.set(!showTransactionEditor())">
-    {{ showTransactionEditor() ? 'Hide Transactions' : 'View Transactions' }}
+    {{ showTransactionEditor() ? 'Hide Transaction Ledger' : 'View Transaction Ledger (AG Grid)' }}
   </button>
 </section>
 

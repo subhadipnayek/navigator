@@ -389,3 +389,62 @@ export interface MatchedPortfolioFund {
 export interface MatchPortfolioFundResponse {
   rows: MatchedPortfolioFund[];
 }
+
+// ---------- Modern Multi-Broker Ingestion Models ----------
+
+export type ImportStrategy = 'SmartMerge' | 'Append' | 'WindowReplace' | 'FullOverwrite';
+
+export type IngestionDiffStatus = 'New' | 'Duplicate' | 'Ignored' | 'Unresolved' | 'Invalid';
+
+export interface ProcessedTradeRecord {
+  sourceRowNumber: number;
+  brokerName: string;
+  assetType: 'MutualFund' | 'Stock' | 'ETF';
+  symbol: string;
+  isin: string;
+  schemeCode: number;
+  schemeName: string;
+  transactionDate: string;
+  transactionType: string;
+  units: number;
+  price: number;
+  amount: number;
+  tradeId?: string;
+  folioNumber?: string;
+  notes?: string;
+  status: IngestionDiffStatus;
+  statusMessage?: string;
+  fingerprint: string;
+  isIgnored: boolean;
+  ignoreReason?: string;
+}
+
+export interface ImportStrategyOption {
+  key: ImportStrategy;
+  title: string;
+  description: string;
+  recommended: boolean;
+}
+
+export interface ImportPreviewResult {
+  detectedFormat: string;
+  detectedFormatLabel: string;
+  totalRowsParsed: number;
+  validFinancialTrades: number;
+  newTradesCount: number;
+  duplicateTradesCount: number;
+  ignoredEventsCount: number;
+  unresolvedCount: number;
+  earliestTransactionDate?: string;
+  latestTransactionDate?: string;
+  totalInflow: number;
+  totalOutflow: number;
+  recommendedStrategy: ImportStrategy;
+  transactions: ProcessedTradeRecord[];
+  availableStrategies: ImportStrategyOption[];
+}
+
+export interface ImportCommitRequest {
+  strategy: ImportStrategy;
+  transactions: ProcessedTradeRecord[];
+}

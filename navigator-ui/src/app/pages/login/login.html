@@ -1,32 +1,38 @@
-<mat-card appearance="outlined">
+<mat-card appearance="outlined" style="border-top: 3px solid #0f172a !important;">
   <mat-card-header>
-    <mat-card-title>Login</mat-card-title>
+    <div>
+      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+        <span class="mono-code" style="background: #0f172a; color: #10b981; border: none; font-size: 10px;">AUTH</span>
+        <span style="font-size: 11px; color: #64748b; font-weight: 600;">TERMINAL ACCESS</span>
+      </div>
+      <mat-card-title>Sign In to NAVigator</mat-card-title>
+    </div>
   </mat-card-header>
 
   <mat-card-content>
-    <form [formGroup]="form" (ngSubmit)="submit()">
-      <mat-form-field appearance="outline">
-        <mat-label>Username or email</mat-label>
+    <form [formGroup]="form" (ngSubmit)="submit()" style="display: grid; gap: 10px;">
+      <mat-form-field appearance="outline" style="width: 100%; margin-right: 0;">
+        <mat-label>Username or Email</mat-label>
         <input matInput type="text" formControlName="usernameOrEmail" autocomplete="username" />
       </mat-form-field>
 
-      <mat-form-field appearance="outline">
+      <mat-form-field appearance="outline" style="width: 100%; margin-right: 0;">
         <mat-label>Password</mat-label>
         <input matInput type="password" formControlName="password" autocomplete="current-password" />
       </mat-form-field>
 
       @if (error()) {
-        <mat-card appearance="outlined">{{ error() }}</mat-card>
+        <div class="status-callout danger" style="margin-bottom: 0;">{{ error() }}</div>
       }
 
-      <button mat-flat-button type="submit" [disabled]="submitting()">
-        {{ submitting() ? 'Signing in...' : 'Login' }}
+      <button mat-flat-button type="submit" [disabled]="submitting()" style="height: 36px; margin-top: 4px;">
+        {{ submitting() ? 'Authenticating...' : 'Sign In' }}
       </button>
     </form>
   </mat-card-content>
 
-  <mat-card-actions>
-    <span>New here?</span>
-    <a mat-button routerLink="/register">Create an account</a>
+  <mat-card-actions style="justify-content: space-between; border-top: 1px solid rgba(15,23,42,0.06); margin-top: 8px; padding-top: 10px !important;">
+    <span style="font-size: 12px; color: #64748b;">New to NAVigator?</span>
+    <a mat-button routerLink="/register">Create Account</a>
   </mat-card-actions>
 </mat-card>

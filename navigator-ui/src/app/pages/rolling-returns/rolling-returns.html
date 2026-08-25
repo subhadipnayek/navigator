@@ -1,80 +1,166 @@
+<!-- ═══════════════════════════════════════════════
+     HEADER WORKBAR
+═══════════════════════════════════════════════ -->
+<header class="admin-workbar">
+  <div>
+    <div class="admin-breadcrumb">
+      <a routerLink="/funds">Screener</a>
+      <a [routerLink]="['/funds', schemeCode()]">Scheme {{ schemeCode() }}</a>
+      <strong>Rolling Returns</strong>
+    </div>
+    <h1>Rolling Return Consistency Engine</h1>
+  </div>
+  <nav aria-label="Quick navigation">
+    <a [routerLink]="['/funds', schemeCode()]">Factsheet</a>
+    <a routerLink="/compare">Comparator</a>
+    <a routerLink="/portfolio-lab">Lab</a>
+  </nav>
+</header>
+
+@if (data(); as d) {
+  <!-- ═══════════════════════════════════════════════
+       SCHEME HEADER & PERIOD SELECTOR
+  ═══════════════════════════════════════════════ -->
+  <section class="factsheet-header">
+    <div class="factsheet-title-group">
+      <h1>{{ d.schemeName }}</h1>
+      <div class="factsheet-meta">
+        <span class="mono-code">AMFI {{ d.schemeCode }}</span>
+        @if (d.fundHouse) {
+          <span>·</span>
+          <strong>{{ d.fundHouse }}</strong>
+        }
+        <span>·</span>
+        <span>Rolling Horizon: <strong>{{ selectedPeriod() }} Year{{ selectedPeriod() > 1 ? 's' : '' }}</strong></span>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <mat-button-toggle-group [value]="selectedPeriod()" style="margin: 0;">
+        @for (p of periods; track p) {
+          <mat-button-toggle [value]="p" (click)="selectPeriod(p)">{{ p }}Y</mat-button-toggle>
+        }
+      </mat-button-toggle-group>
+      <a mat-stroked-button [routerLink]="['/funds', schemeCode()]">Factsheet</a>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════
+       5-COLUMN STATISTICAL RIBBON
+  ═══════════════════════════════════════════════ -->
+  <section class="kpi-grid">
+    <div class="kpi-tile">
+      <span class="kpi-label">AVERAGE ROLLING RETURN</span>
+      <strong class="kpi-value" [class]="d.averageReturn !== null && d.averageReturn >= 0 ? 'pos' : 'neg'">
+        {{ formatPercent(d.averageReturn) }}
+      </strong>
+      <span class="kpi-sub">Mean annualized CAGR</span>
+    </div>
+
+    <div class="kpi-tile">
+      <span class="kpi-label">MEDIAN ROLLING RETURN</span>
+      <strong class="kpi-value" [class]="d.medianReturn !== null && d.medianReturn >= 0 ? 'pos' : 'neg'">
+        {{ formatPercent(d.medianReturn) }}
+      </strong>
+      <span class="kpi-sub">50th percentile outcome</span>
+    </div>
+
+    <div class="kpi-tile">
+      <span class="kpi-label">MINIMUM (WORST PERIOD)</span>
+      <strong class="kpi-value" [class]="d.minReturn !== null && d.minReturn >= 0 ? 'pos' : 'neg'">
+        {{ formatPercent(d.minReturn) }}
+      </strong>
+      <span class="kpi-sub">Max drawdown scenario</span>
+    </div>
+
+    <div class="kpi-tile">
+      <span class="kpi-label">MAXIMUM (BEST PERIOD)</span>
+      <strong class="kpi-value" [class]="d.maxReturn !== null && d.maxReturn >= 0 ? 'pos' : 'neg'">
+        {{ formatPercent(d.maxReturn) }}
+      </strong>
+      <span class="kpi-sub">Bull market peak</span>
+    </div>
+
+    <div class="kpi-tile">
+      <span class="kpi-label">SAMPLED WINDOWS</span>
+      <strong class="kpi-value">
+        {{ d.dataPoints | number }}
+      </strong>
+      <span class="kpi-sub font-mono">{{ selectedPeriod() }}Y periods calculated</span>
+    </div>
+  </section>
+}
+
+<!-- ═══════════════════════════════════════════════
+     DATE RANGE CONTROLS & FILTER
+═══════════════════════════════════════════════ -->
 <mat-card appearance="outlined">
   <mat-card-header>
-    <mat-card-title>Rolling Returns</mat-card-title>
-    @if (data(); as d) {
-      <mat-card-subtitle>{{ d.schemeName }}</mat-card-subtitle>
-    }
+    <mat-card-title>Evaluation Range &amp; Horizon Filter</mat-card-title>
+    <mat-card-subtitle>Adjust sample window boundaries to inspect historical market cycles</mat-card-subtitle>
   </mat-card-header>
   <mat-card-content>
-    <mat-button-toggle-group [value]="selectedPeriod()">
-      @for (p of periods; track p) {
-        <mat-button-toggle [value]="p" (click)="selectPeriod(p)">{{ p }}Y</mat-button-toggle>
-      }
-    </mat-button-toggle-group>
+    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <mat-form-field appearance="outline" class="date-field">
+        <mat-label>From Date</mat-label>
+        <input
+          matInput
+          readonly
+          [matDatepicker]="rollingFromPicker"
+          [min]="minSelectableDate()"
+          [max]="maxSelectableDate()"
+          [(ngModel)]="fromDate"
+          (click)="rollingFromPicker.open()"
+        />
+        <mat-datepicker-toggle matIconSuffix [for]="rollingFromPicker" />
+        <mat-datepicker #rollingFromPicker />
+      </mat-form-field>
 
-    <mat-form-field appearance="outline" class="date-field">
-      <mat-label>From</mat-label>
-      <input
-        matInput
-        readonly
-        [matDatepicker]="rollingFromPicker"
-        [min]="minSelectableDate()"
-        [max]="maxSelectableDate()"
-        [(ngModel)]="fromDate"
-        (click)="rollingFromPicker.open()"
-      />
-      <mat-datepicker-toggle matIconSuffix [for]="rollingFromPicker" />
-      <mat-datepicker #rollingFromPicker />
-    </mat-form-field>
-    <mat-form-field appearance="outline" class="date-field">
-      <mat-label>To</mat-label>
-      <input
-        matInput
-        readonly
-        [matDatepicker]="rollingToPicker"
-        [min]="minSelectableDate()"
-        [max]="maxSelectableDate()"
-        [(ngModel)]="toDate"
-        (click)="rollingToPicker.open()"
-      />
-      <mat-datepicker-toggle matIconSuffix [for]="rollingToPicker" />
-      <mat-datepicker #rollingToPicker />
-    </mat-form-field>
-    <button mat-flat-button (click)="loadData()" [disabled]="loading()">Apply</button>
+      <mat-form-field appearance="outline" class="date-field">
+        <mat-label>To Date</mat-label>
+        <input
+          matInput
+          readonly
+          [matDatepicker]="rollingToPicker"
+          [min]="minSelectableDate()"
+          [max]="maxSelectableDate()"
+          [(ngModel)]="toDate"
+          (click)="rollingToPicker.open()"
+        />
+        <mat-datepicker-toggle matIconSuffix [for]="rollingToPicker" />
+        <mat-datepicker #rollingToPicker />
+      </mat-form-field>
+
+      <button mat-flat-button (click)="loadData()" [disabled]="loading()" style="height: 38px;">
+        {{ loading() ? 'Updating...' : 'Apply Horizon' }}
+      </button>
+    </div>
   </mat-card-content>
 </mat-card>
 
 @if (error()) {
-  <mat-card appearance="outlined">{{ error() }}</mat-card>
-} @else if (loading()) {
+  <div class="status-callout danger">{{ error() }}</div>
+}
+
+@if (loading()) {
   <mat-card appearance="outlined">
     <mat-progress-bar mode="indeterminate" />
   </mat-card>
-} @else if (data(); as d) {
+} @else if (chartSeries().length > 0) {
+  <!-- ═══════════════════════════════════════════════
+       ROLLING RETURNS DISTRIBUTION CHART
+  ═══════════════════════════════════════════════ -->
   <mat-card appearance="outlined">
     <mat-card-header>
-      <mat-card-title>Summary</mat-card-title>
+      <mat-card-title>Rolling {{ selectedPeriod() }}-Year Annualized Return (%)</mat-card-title>
+      <mat-card-subtitle>Every point on this chart represents the CAGR achieved over the preceding {{ selectedPeriod() }} years</mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
-      <mat-list>
-        <mat-list-item>Data Points: {{ d.dataPoints.toLocaleString() }}</mat-list-item>
-        <mat-list-item>Min Return: {{ formatPercent(d.minReturn) }}</mat-list-item>
-        <mat-list-item>Max Return: {{ formatPercent(d.maxReturn) }}</mat-list-item>
-        <mat-list-item>Average: {{ formatPercent(d.averageReturn) }}</mat-list-item>
-        <mat-list-item>Median: {{ formatPercent(d.medianReturn) }}</mat-list-item>
-      </mat-list>
+      <app-line-chart
+        [seriesList]="chartSeries()"
+        yAxisLabel="Annualized CAGR (%)"
+        [priceFormat]="percentFormat"
+      />
     </mat-card-content>
   </mat-card>
-
-  @if (chartSeries().length > 0) {
-    <mat-card appearance="outlined">
-      <mat-card-content>
-        <app-line-chart
-          [seriesList]="chartSeries()"
-          yAxisLabel="Annualized Return %"
-          [priceFormat]="percentFormat"
-        />
-      </mat-card-content>
-    </mat-card>
-  }
 }

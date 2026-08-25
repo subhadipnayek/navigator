@@ -26,11 +26,22 @@ services:
     ports:
       - "5038:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: "Production"
-      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=NAVigatorDb_QA;Username=devuser;Password=devpassword;"
+      PORT: "8080"
+      GIN_MODE: "release"
+      DATABASE_URL: "host=db port=5432 user=devuser password=devpassword dbname=NAVigatorDb_QA sslmode=disable"
+      JWT_KEY: "dev-only-change-this-secret-key-before-production-use"
+      JWT_ISSUER: "NAVigator"
+      JWT_AUDIENCE: "NAVigator"
+      JWT_EXPIRES_HOURS: "8"
+      CORS_ORIGINS: "http://localhost:4000,http://localhost:4200,http://localhost:5038,http://localhost:8080"
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   ui:
     build:
@@ -40,11 +51,9 @@ services:
     restart: unless-stopped
     ports:
       - "4000:4000"
-    environment:
-      NODE_ENV: "production"
-      API_URL: "http://api:8080"
     depends_on:
-      - api
+      api:
+        condition: service_started
 
 volumes:
   postgres_data:

@@ -3,4 +3,10 @@ dist
 .angular
 .git
 .github
+.vscode
 *.md
+*.log
+.editorconfig
+Dockerfile
+nginx.conf
+.dockerignore

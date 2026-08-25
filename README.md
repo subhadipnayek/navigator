@@ -11,7 +11,7 @@ navigator is a full-stack financial analytics application designed to track mutu
 ```
                                ┌─────────────────────────┐
                                │   navigator-ui (SPA)    │
-                               │   Angular 19 + SCSS     │
+                               │   Angular 21 + SCSS     │
                                │      (Port 4000)        │
                                └────────────┬────────────┘
                                             │ HTTP / JSON
@@ -89,8 +89,8 @@ The fastest way to launch the entire stack (PostgreSQL 17 Alpine + Go API + Angu
 
 ```bash
 # Clone the repository
-git clone https://github.com/midtierhuman/NAVigator.git
-cd NAVigator
+git clone https://github.com/subhadipnayek/navigator.git
+cd navigator
 
 # Spin up all containers
 docker compose up -d --build

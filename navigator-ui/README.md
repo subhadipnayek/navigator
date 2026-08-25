@@ -1,59 +1,66 @@
-# NAVigator
+# navigator-ui 🧭
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 20.3.9.
+> **Angular 21 Frontend Client for NAVigator Mutual Fund Analytics Terminal**
 
-## Development server
+`navigator-ui` is a high-density, real-time financial workstation and factsheet client built for mutual fund screening, multi-fund alpha comparisons, portfolio backtesting, and transaction ledger management.
 
-To start a local development server, run:
+---
 
-```bash
-ng serve
+## 🛠 Tech Stack
+
+- **Framework**: Angular 21 (Zoneless signals, standalone components)
+- **UI Components**: Angular Material 21 (configured at density `-3` for maximum information density)
+- **Data Visualization**: [Lightweight Charts](https://tradingview.github.io/lightweight-charts/) (TradingView)
+- **Data Tables**: [AG Grid Community](https://www.ag-grid.com/) with Quartz theme
+- **Typography**: [Inter](https://fonts.google.com/specimen/Inter) & [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono) with tabular numeric alignment
+- **Spreadsheets**: XLSX / Excelize data exchange
+
+---
+
+## 📁 Directory Structure
+
+```
+navigator-ui/
+├── src/
+│   ├── app/
+│   │   ├── core/                 # Auth guard, HTTP interceptor, API config
+│   │   ├── models/               # TypeScript interfaces & DTOs
+│   │   ├── pages/                # Route components
+│   │   │   ├── dashboard/        # Command terminal hub & instant lookup
+│   │   │   ├── fund-list/        # High-density fund screener & table
+│   │   │   ├── fund-detail/      # Factsheet & NAV history workbench
+│   │   │   ├── compare/          # Multi-fund CAGR & alpha comparator
+│   │   │   ├── portfolio-lab/    # SIP & lump-sum basket simulation lab
+│   │   │   ├── user-portfolio/   # Personal ledger, AG Grid, & XIRR engine
+│   │   │   ├── rolling-returns/  # Statistical rolling return distribution
+│   │   │   ├── corporate-actions/# Anomaly detection & data hygiene queue
+│   │   │   ├── admin-sync/       # Master sync & fund operations console
+│   │   │   ├── landing/          # Institutional welcome portal
+│   │   │   └── login/register/   # Terminal authentication views
+│   │   ├── services/             # Angular HTTP services
+│   │   └── shared/               # Line charts, stat cards, date utilities
+│   ├── index.html                # Inter & JetBrains Mono font imports
+│   ├── styles.scss               # Global high-density design system
+│   └── main.ts
+├── angular.json
+├── package.json
+└── nginx.conf                    # Production reverse proxy configuration
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+---
 
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+## 🚀 Development & Build Commands
 
 ```bash
-ng generate component component-name
+# Install dependencies
+npm install
+
+# Start development server (http://localhost:4200)
+npm start
+
+# Run unit tests
+npm test -- --watch=false
+
+# Compile production bundle (dist/NAVigator)
+npm run build
 ```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.

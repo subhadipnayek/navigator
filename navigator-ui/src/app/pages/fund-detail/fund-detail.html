@@ -1,163 +1,290 @@
 @if (error()) {
-  <mat-card appearance="outlined">{{ error() }}</mat-card>
+  <mat-card appearance="outlined">
+    <mat-card-content style="padding: 24px !important; text-align: center;">
+      <strong style="color: #dc2626; font-size: 14px;">{{ error() }}</strong>
+      <div style="margin-top: 10px;">
+        <a mat-stroked-button routerLink="/funds">Back to Fund Screener</a>
+      </div>
+    </mat-card-content>
+  </mat-card>
 } @else if (loading()) {
   <mat-card appearance="outlined">
     <mat-progress-bar mode="indeterminate" />
   </mat-card>
 } @else {
   @if (fund(); as f) {
-    <mat-card appearance="outlined">
-      <mat-card-header>
-        <mat-card-title>{{ f.schemeName }}</mat-card-title>
-        <mat-card-subtitle>
-          {{ f.schemeCode }}
+    <!-- ═══════════════════════════════════════════════
+         FACTSHEET HEADER BANNER
+    ═══════════════════════════════════════════════ -->
+    <header class="factsheet-header">
+      <div class="factsheet-title-group">
+        <h1>{{ f.schemeName }}</h1>
+        <div class="factsheet-meta">
+          <span class="mono-code">{{ f.schemeCode }}</span>
           @if (f.fundHouse) {
-            - {{ f.fundHouse }}
+            <span>·</span>
+            <strong>{{ f.fundHouse }}</strong>
           }
           @if (f.schemeCategory) {
-            - {{ f.schemeCategory }}
+            <span>·</span>
+            <span class="mono-code" style="background: #f0fdf4; color: #166534; border-color: #bbf7d0;">
+              {{ f.schemeCategory }}
+            </span>
           }
-        </mat-card-subtitle>
-      </mat-card-header>
-    </mat-card>
+          @if (f.schemeType) {
+            <span>·</span>
+            <span>{{ f.schemeType }}</span>
+          }
+        </div>
+      </div>
 
-    <mat-card appearance="outlined">
-      <mat-card-content>
-        <mat-list>
-          <mat-list-item>
-            Latest NAV:
-            @if (f.latestNav !== null) {
-              {{ f.latestNav | number: '1.2-5' }}
-            } @else {
-              -
-            }
-          </mat-list-item>
-          <mat-list-item>NAV Date: {{ f.latestNavDate ?? '-' }}</mat-list-item>
-          <mat-list-item>Scheme Type: {{ f.schemeType ?? '-' }}</mat-list-item>
+      <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+        <a mat-flat-button [routerLink]="['/funds', f.schemeCode, 'rolling']">
+          <span class="nav-icon" style="vertical-align: middle; margin-right: 4px;">timeline</span>
+          Rolling Returns
+        </a>
+        <a mat-stroked-button routerLink="/compare">
+          <span class="nav-icon" style="vertical-align: middle; margin-right: 4px;">compare_arrows</span>
+          Compare
+        </a>
+        <a mat-stroked-button routerLink="/funds">Screener</a>
+      </div>
+    </header>
+
+    <!-- ═══════════════════════════════════════════════
+         FACTSHEET 5-COLUMN KEY METRIC RIBBON
+    ═══════════════════════════════════════════════ -->
+    <section class="factsheet-ribbon">
+      <div class="ribbon-box">
+        <span>LATEST PUBLISHED NAV</span>
+        <strong>
+          @if (f.latestNav !== null) {
+            ₹{{ f.latestNav | number: '1.2-4' }}
+          } @else {
+            -
+          }
+        </strong>
+        <div style="font-size: 10.5px; color: #64748b; font-family: 'JetBrains Mono', monospace; margin-top: 2px;">
+          {{ f.latestNavDate ?? 'Latest' }}
+        </div>
+      </div>
+
+      <div class="ribbon-box">
+        <span>HISTORICAL DATA POINTS</span>
+        <strong>
           @if (navData(); as nav) {
-            <mat-list-item>Data Points: {{ nav.data.length.toLocaleString() }}</mat-list-item>
-            @if (nav.wasFetchedFromApi) {
-              <mat-list-item>Fresh data</mat-list-item>
-            }
+            {{ nav.data.length | number }}
+          } @else {
+            -
           }
-        </mat-list>
-      </mat-card-content>
-    </mat-card>
+        </strong>
+        <div style="font-size: 10.5px; color: #64748b; margin-top: 2px;">
+          @if (navData()?.navStartDate) {
+            Since {{ navData()?.navStartDate }}
+          } @else {
+            Daily recordings
+          }
+        </div>
+      </div>
 
+      <div class="ribbon-box">
+        <span>CORPORATE ACTIONS</span>
+        <strong style="color: #0f766e;">
+          {{ corporateActions().length }} {{ corporateActions().length === 1 ? 'Action' : 'Actions' }}
+        </strong>
+        <div style="font-size: 10.5px; color: #64748b; margin-top: 2px;">
+          {{ adjusted() ? 'Split-adjusted active' : 'Raw unadjusted' }}
+        </div>
+      </div>
+
+      <div class="ribbon-box">
+        <span>DATA FEED QUALITY</span>
+        <strong style="color: #047857;">VERIFIED LIVE</strong>
+        <div style="font-size: 10.5px; color: #64748b; margin-top: 2px;">AMFI daily synchronized</div>
+      </div>
+
+      <div class="ribbon-box">
+        <span>SCHEME STRUCTURE</span>
+        <strong style="font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          {{ f.schemeType ?? 'Mutual Fund' }}
+        </strong>
+        <div style="font-size: 10.5px; color: #64748b; margin-top: 2px;">{{ f.schemeCategory ?? 'Standard' }}</div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+         NAV HISTORY CHART WORKBENCH
+    ═══════════════════════════════════════════════ -->
     @if (navChartSeries().length > 0) {
       <mat-card appearance="outlined">
         <mat-card-header>
-          <mat-card-title>NAV History</mat-card-title>
+          <div>
+            <mat-card-title>Historical Net Asset Value (NAV)</mat-card-title>
+            <mat-card-subtitle>High-resolution interactive price trajectory and split adjustments</mat-card-subtitle>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <mat-button-toggle-group [value]="selectedInterval()" style="margin: 0;">
+              @for (iv of ['daily', 'weekly', 'monthly']; track iv) {
+                <mat-button-toggle [value]="iv" (click)="setInterval($any(iv))">
+                  {{ iv | titlecase }}
+                </mat-button-toggle>
+              }
+            </mat-button-toggle-group>
+
+            <mat-checkbox [checked]="adjusted()" (change)="toggleAdjusted()" style="font-size: 12px; font-weight: 600;">
+              Split-adjusted
+            </mat-checkbox>
+          </div>
         </mat-card-header>
+
         <mat-card-content>
-          <mat-button-toggle-group [value]="selectedInterval()">
-            @for (iv of ['daily', 'weekly', 'monthly']; track iv) {
-              <mat-button-toggle [value]="iv" (click)="setInterval($any(iv))">
-                {{ iv | titlecase }}
-              </mat-button-toggle>
-            }
-          </mat-button-toggle-group>
-
-          <mat-checkbox [checked]="adjusted()" (change)="toggleAdjusted()">
-            Split-adjusted
-          </mat-checkbox>
-
           <app-line-chart
             [seriesList]="navChartSeries()"
-            yAxisLabel="NAV"
+            yAxisLabel="NAV (₹)"
             [priceFormat]="{ type: 'price', precision: 4, minMove: 0.0001 }"
           />
 
+          <!-- Corporate Actions Audit Log Table -->
           @if (corporateActions().length > 0) {
-            <mat-divider />
-            <mat-list>
-              @for (action of corporateActions(); track action.id) {
-                <mat-list-item>
-                  {{ action.actionType }} on {{ action.actionDate }} - factor
-                  {{ action.adjustmentFactor }}
-                  @if (action.notes) {
-                    - {{ action.notes }}
-                  }
-                </mat-list-item>
-              }
-            </mat-list>
+            <div style="margin-top: 14px; border-top: 1px solid rgba(15, 23, 42, 0.08); padding-top: 10px;">
+              <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; margin-bottom: 6px;">
+                Recorded Corporate Actions &amp; Unit Splits ({{ corporateActions().length }})
+              </span>
+              <table mat-table [dataSource]="corporateActions()" style="width: 100%;">
+                <ng-container matColumnDef="actionDate">
+                  <th mat-header-cell *matHeaderCellDef style="width: 120px;">Date</th>
+                  <td mat-cell *matCellDef="let a" class="font-mono">{{ a.actionDate }}</td>
+                </ng-container>
+                <ng-container matColumnDef="actionType">
+                  <th mat-header-cell *matHeaderCellDef style="width: 140px;">Type</th>
+                  <td mat-cell *matCellDef="let a">
+                    <span class="mono-code" style="background: #e0f2fe; color: #0369a1;">{{ a.actionType }}</span>
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="adjustmentFactor">
+                  <th mat-header-cell *matHeaderCellDef style="width: 130px;">Factor</th>
+                  <td mat-cell *matCellDef="let a" class="font-mono">{{ a.adjustmentFactor }}</td>
+                </ng-container>
+                <ng-container matColumnDef="notes">
+                  <th mat-header-cell *matHeaderCellDef>Notes / Rationale</th>
+                  <td mat-cell *matCellDef="let a" style="color: #64748b;">{{ a.notes ?? '-' }}</td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="['actionDate', 'actionType', 'adjustmentFactor', 'notes']"></tr>
+                <tr mat-row *matRowDef="let row; columns: ['actionDate', 'actionType', 'adjustmentFactor', 'notes']"></tr>
+              </table>
+            </div>
           }
         </mat-card-content>
       </mat-card>
     }
 
+    <!-- ═══════════════════════════════════════════════
+         POINT-TO-POINT RETURN ENGINE
+    ═══════════════════════════════════════════════ -->
     <mat-card appearance="outlined">
       <mat-card-header>
-        <mat-card-title>Point-to-Point Returns</mat-card-title>
+        <div>
+          <mat-card-title>Point-to-Point Returns Engine</mat-card-title>
+          <mat-card-subtitle>Calculate compounded annualized growth rate (CAGR) and total absolute return</mat-card-subtitle>
+        </div>
       </mat-card-header>
+
       <mat-card-content>
-        <mat-form-field appearance="outline" class="date-field">
-          <mat-label>Start Date</mat-label>
-          <input
-            matInput
-            readonly
-            [matDatepicker]="returnsStartPicker"
-            [min]="minSelectableDate()"
-            [max]="maxSelectableDate()"
-            [(ngModel)]="startDate"
-            (click)="returnsStartPicker.open()"
-          />
-          <mat-datepicker-toggle matIconSuffix [for]="returnsStartPicker" />
-          <mat-datepicker #returnsStartPicker />
-        </mat-form-field>
-        <mat-form-field appearance="outline" class="date-field">
-          <mat-label>End Date</mat-label>
-          <input
-            matInput
-            readonly
-            [matDatepicker]="returnsEndPicker"
-            [min]="minSelectableDate()"
-            [max]="maxSelectableDate()"
-            [(ngModel)]="endDate"
-            (click)="returnsEndPicker.open()"
-          />
-          <mat-datepicker-toggle matIconSuffix [for]="returnsEndPicker" />
-          <mat-datepicker #returnsEndPicker />
-        </mat-form-field>
-        <button mat-flat-button (click)="fetchReturns()" [disabled]="returnsLoading()">
-          {{ returnsLoading() ? 'Loading...' : 'Calculate' }}
-        </button>
+        <!-- Date Selector Row & Quick Presets -->
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
+          <mat-form-field appearance="outline" class="date-field">
+            <mat-label>Start Date</mat-label>
+            <input
+              matInput
+              readonly
+              [matDatepicker]="returnsStartPicker"
+              [min]="minSelectableDate()"
+              [max]="maxSelectableDate()"
+              [(ngModel)]="startDate"
+              (click)="returnsStartPicker.open()"
+            />
+            <mat-datepicker-toggle matIconSuffix [for]="returnsStartPicker" />
+            <mat-datepicker #returnsStartPicker />
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="date-field">
+            <mat-label>End Date</mat-label>
+            <input
+              matInput
+              readonly
+              [matDatepicker]="returnsEndPicker"
+              [min]="minSelectableDate()"
+              [max]="maxSelectableDate()"
+              [(ngModel)]="endDate"
+              (click)="returnsEndPicker.open()"
+            />
+            <mat-datepicker-toggle matIconSuffix [for]="returnsEndPicker" />
+            <mat-datepicker #returnsEndPicker />
+          </mat-form-field>
+
+          <button mat-flat-button (click)="fetchReturns()" [disabled]="returnsLoading()">
+            {{ returnsLoading() ? 'Calculating...' : 'Calculate' }}
+          </button>
+
+          <div style="display: flex; gap: 4px; align-items: center; margin-left: auto;">
+            <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Presets:</span>
+            <button mat-stroked-button type="button" (click)="setPresetRange(1)" style="height: 26px !important; padding: 0 6px !important; font-size: 11px !important;">1Y</button>
+            <button mat-stroked-button type="button" (click)="setPresetRange(3)" style="height: 26px !important; padding: 0 6px !important; font-size: 11px !important;">3Y</button>
+            <button mat-stroked-button type="button" (click)="setPresetRange(5)" style="height: 26px !important; padding: 0 6px !important; font-size: 11px !important;">5Y</button>
+            <button mat-stroked-button type="button" (click)="setPresetRange('MAX')" style="height: 26px !important; padding: 0 6px !important; font-size: 11px !important;">MAX</button>
+          </div>
+        </div>
 
         @if (returnsError()) {
-          <mat-card appearance="outlined">{{ returnsError() }}</mat-card>
+          <div class="status-callout danger">{{ returnsError() }}</div>
         }
 
-        @if (returns(); as ret) {
-          @if (ret.hasDiscontinuity) {
-            <mat-card appearance="outlined">
-              Data discontinuity detected. Returns are calculated from {{ ret.startDate }} only.
-            </mat-card>
-          }
-          <mat-list>
-            <mat-list-item>Absolute Return: {{ formatReturn(ret.absoluteReturn) }}</mat-list-item>
-            <mat-list-item>CAGR: {{ formatReturn(ret.cagr) }}</mat-list-item>
-            <mat-list-item>
-              Start NAV:
-              {{ ret.startNav !== null ? (ret.startNav | number: '1.2-4') : 'N/A' }}
-            </mat-list-item>
-            <mat-list-item>
-              End NAV: {{ ret.endNav !== null ? (ret.endNav | number: '1.2-4') : 'N/A' }}
-            </mat-list-item>
-            <mat-list-item>Start Date: {{ ret.startDate ?? 'N/A' }}</mat-list-item>
-            <mat-list-item>End Date: {{ ret.endDate ?? 'N/A' }}</mat-list-item>
-          </mat-list>
-        } @else if (returnsLoading()) {
+        @if (returnsLoading()) {
           <mat-progress-bar mode="indeterminate" />
+        } @else if (returns(); as ret) {
+          @if (ret.hasDiscontinuity) {
+            <div class="status-callout danger" style="margin-bottom: 10px;">
+              <strong>Data Discontinuity Detected:</strong> Returns are calculated from {{ ret.startDate }} to preserve accuracy.
+            </div>
+          }
+
+          <!-- Dense 4-Box Result Ribbon -->
+          <div class="kpi-grid" style="margin-bottom: 0;">
+            <div class="kpi-tile">
+              <span class="kpi-label">COMPOUNDED ANNUALIZED (CAGR)</span>
+              <strong class="kpi-value" [class]="ret.cagr !== null && ret.cagr >= 0 ? 'pos' : 'neg'">
+                {{ formatReturn(ret.cagr) }}
+              </strong>
+              <span class="kpi-sub">Annualized over duration</span>
+            </div>
+
+            <div class="kpi-tile">
+              <span class="kpi-label">TOTAL ABSOLUTE RETURN</span>
+              <strong class="kpi-value" [class]="ret.absoluteReturn !== null && ret.absoluteReturn >= 0 ? 'pos' : 'neg'">
+                {{ formatReturn(ret.absoluteReturn) }}
+              </strong>
+              <span class="kpi-sub">Total point-to-point gain</span>
+            </div>
+
+            <div class="kpi-tile">
+              <span class="kpi-label">STARTING NAV</span>
+              <strong class="kpi-value">
+                {{ ret.startNav !== null ? ('₹' + (ret.startNav | number: '1.2-4')) : 'N/A' }}
+              </strong>
+              <span class="kpi-sub font-mono">{{ ret.startDate ?? 'N/A' }}</span>
+            </div>
+
+            <div class="kpi-tile">
+              <span class="kpi-label">ENDING NAV</span>
+              <strong class="kpi-value">
+                {{ ret.endNav !== null ? ('₹' + (ret.endNav | number: '1.2-4')) : 'N/A' }}
+              </strong>
+              <span class="kpi-sub font-mono">{{ ret.endDate ?? 'N/A' }}</span>
+            </div>
+          </div>
         }
       </mat-card-content>
-    </mat-card>
-
-    <mat-card appearance="outlined">
-      <mat-card-actions>
-        <a mat-flat-button [routerLink]="['/funds', f.schemeCode, 'rolling']">
-          View Rolling Returns
-        </a>
-      </mat-card-actions>
     </mat-card>
   }
 }

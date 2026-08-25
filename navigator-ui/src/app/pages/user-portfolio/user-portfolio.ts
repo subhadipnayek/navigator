@@ -1,4 +1,4 @@
-import { DecimalPipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AgGridAngular } from 'ag-grid-angular';
@@ -28,9 +28,13 @@ import { Fund } from '../../models/fund.model';
 import {
   AllocationSlice,
   ContributionPeriod,
+  ImportCommitRequest,
   ImportPortfolioTransactionsResponse,
+  ImportPreviewResult,
+  ImportStrategy,
   PortfolioBenchmarkResponse,
   PortfolioTransaction,
+  ProcessedTradeRecord,
   UserPortfolioDashboard,
   UserPortfolioSummary,
   YearTransactionSummary,
@@ -51,6 +55,7 @@ interface PersistedGridState {
 @Component({
   selector: 'app-user-portfolio',
   imports: [
+    DatePipe,
     DecimalPipe,
     FormsModule,
     AgGridAngular,
@@ -112,6 +117,24 @@ export class UserPortfolio implements OnInit, OnDestroy {
   readonly benchmarkDurationYears = signal<number | null>(null);
   readonly benchmarkRollingPeriodYears = signal<number>(3);
   readonly excelImportMessages = signal<string[]>([]);
+
+  // Multi-broker Ingestion Workbench Signals
+  readonly dryRunPreview = signal<ImportPreviewResult | null>(null);
+  readonly selectedStrategy = signal<ImportStrategy>('SmartMerge');
+  readonly previewFilterTab = signal<'all' | 'new' | 'duplicate' | 'ignored'>('all');
+  readonly previewingFile = signal<boolean>(false);
+  readonly committingImport = signal<boolean>(false);
+
+  readonly filteredPreviewTrades = computed<ProcessedTradeRecord[]>(() => {
+    const preview = this.dryRunPreview();
+    if (!preview) return [];
+    const tab = this.previewFilterTab();
+    if (tab === 'all') return preview.transactions;
+    if (tab === 'new') return preview.transactions.filter((t) => t.status === 'New');
+    if (tab === 'duplicate') return preview.transactions.filter((t) => t.status === 'Duplicate');
+    if (tab === 'ignored') return preview.transactions.filter((t) => t.status === 'Ignored');
+    return preview.transactions;
+  });
 
   readonly contributionRows = computed<ContributionPeriod[]>(() => {
     const dashboard = this.dashboard();
@@ -375,6 +398,74 @@ export class UserPortfolio implements OnInit, OnDestroy {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Transactions');
     XLSX.writeFile(workbook, 'transaction-template.xlsx');
+  }
+
+  onStatementFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    this.executeDryRunPreview(file);
+  }
+
+  onStatementFileDropped(event: DragEvent): void {
+    event.preventDefault();
+    const file = event.dataTransfer?.files?.[0];
+    if (!file) return;
+    this.executeDryRunPreview(file);
+  }
+
+  executeDryRunPreview(file: File): void {
+    const portfolioId = this.selectedPortfolioId();
+    if (!portfolioId) {
+      this.toast.error('Select a portfolio first.');
+      return;
+    }
+
+    this.previewingFile.set(true);
+    this.portfolioService.importPreview(portfolioId, file).subscribe({
+      next: (res) => {
+        this.dryRunPreview.set(res);
+        this.selectedStrategy.set(res.recommendedStrategy ?? 'SmartMerge');
+        this.previewFilterTab.set('all');
+        this.previewingFile.set(false);
+        this.toast.info(`Parsed ${res.totalRowsParsed} rows via ${res.detectedFormatLabel}`);
+      },
+      error: (err) => {
+        this.previewingFile.set(false);
+        this.toast.error(err.error?.message ?? 'Failed to parse trade statement file.');
+      },
+    });
+  }
+
+  commitIngestion(): void {
+    const portfolioId = this.selectedPortfolioId();
+    const preview = this.dryRunPreview();
+    if (!portfolioId || !preview) return;
+
+    this.committingImport.set(true);
+    const req: ImportCommitRequest = {
+      strategy: this.selectedStrategy(),
+      transactions: preview.transactions,
+    };
+
+    this.portfolioService.importCommit(portfolioId, req, this.selectedFinancialYear()).subscribe({
+      next: (res) => {
+        this.committingImport.set(false);
+        this.toast.success(`Successfully imported ${res.insertedCount} transactions.`);
+        this.dryRunPreview.set(null);
+        this.loadDashboard();
+        this.loadTransactions();
+      },
+      error: (err) => {
+        this.committingImport.set(false);
+        this.toast.error(err.error?.message ?? 'Transaction commit failed.');
+      },
+    });
+  }
+
+  closeDryRunModal(): void {
+    this.dryRunPreview.set(null);
   }
 
   onExcelFileSelected(event: Event): void {

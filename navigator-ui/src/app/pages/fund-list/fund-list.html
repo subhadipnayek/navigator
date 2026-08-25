@@ -1,73 +1,169 @@
+<!-- ═══════════════════════════════════════════════
+     HEADER WORKBAR
+═══════════════════════════════════════════════ -->
+<header class="admin-workbar">
+  <div>
+    <div class="admin-breadcrumb">
+      <a routerLink="/dashboard">Workspace</a>
+      <strong>Fund Screener</strong>
+    </div>
+    <h1>Fund Database &amp; Screener</h1>
+  </div>
+  <nav aria-label="Quick navigation">
+    <a routerLink="/funds" class="active">Screener</a>
+    <a routerLink="/compare">Comparator</a>
+    <a routerLink="/portfolio-lab">Lab</a>
+  </nav>
+</header>
+
+<!-- ═══════════════════════════════════════════════
+     SEARCH & FILTER TOOLBAR
+═══════════════════════════════════════════════ -->
 <mat-card appearance="outlined">
   <mat-card-header>
-    <mat-card-title>Search Funds</mat-card-title>
+    <mat-card-title>Scheme Search Engine</mat-card-title>
+    <mat-card-subtitle>Instant lookup across 14,800+ AMFI mutual fund schemes and ETFs</mat-card-subtitle>
   </mat-card-header>
   <mat-card-content>
-    <mat-form-field appearance="outline">
-      <mat-label>Search by name, fund house, or scheme code</mat-label>
-      <input
-        matInput
-        type="text"
-        [value]="searchQuery()"
-        (input)="onSearchInput($any($event.target).value)"
-        autofocus
-      />
-    </mat-form-field>
+    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <mat-form-field appearance="outline" style="flex: 1; min-width: 280px; margin-right: 0;">
+        <mat-label>Search by scheme name, fund house, category, or AMFI code</mat-label>
+        <input
+          matInput
+          type="text"
+          [value]="searchQuery()"
+          (input)="onSearchInput($any($event.target).value)"
+          placeholder="e.g. Parag Parikh Flexi Cap, SBI Bluechip, 122639..."
+          autofocus
+        />
+      </mat-form-field>
+      @if (searchQuery()) {
+        <button mat-stroked-button type="button" (click)="clearSearch()">Clear</button>
+      }
+    </div>
+
+    <div style="margin-top: 8px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+      <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Filter Presets:</span>
+      @for (preset of filterPresets; track preset) {
+        <button
+          mat-stroked-button
+          type="button"
+          (click)="setFilterPreset(preset)"
+          style="height: 24px !important; padding: 0 8px !important; font-size: 11px !important; border-radius: 4px;"
+        >
+          {{ preset }}
+        </button>
+      }
+    </div>
+
     @if (loading()) {
-      <mat-progress-bar mode="indeterminate" />
+      <mat-progress-bar mode="indeterminate" style="margin-top: 8px;" />
     }
   </mat-card-content>
 </mat-card>
 
+<!-- ═══════════════════════════════════════════════
+     SEARCH RESULTS TABLE
+═══════════════════════════════════════════════ -->
 @if (funds().length > 0) {
   <mat-card appearance="outlined">
     <mat-card-header>
-      <mat-card-title>{{ funds().length }} results</mat-card-title>
+      <mat-card-title>{{ funds().length }} Schemes Match "{{ searchQuery() }}"</mat-card-title>
+      <mat-card-subtitle>Select a scheme to view historical charts, returns, and split factors</mat-card-subtitle>
     </mat-card-header>
-    <mat-card-content>
+    <mat-card-content style="padding: 0 !important;">
       <table mat-table [dataSource]="funds()">
+        <!-- Scheme Code Column -->
         <ng-container matColumnDef="schemeCode">
-          <th mat-header-cell *matHeaderCellDef>Scheme Code</th>
+          <th mat-header-cell *matHeaderCellDef style="width: 100px;">AMFI Code</th>
           <td mat-cell *matCellDef="let fund">
-            <a mat-button [routerLink]="['/funds', fund.schemeCode]">{{ fund.schemeCode }}</a>
+            <a class="mono-code" [routerLink]="['/funds', fund.schemeCode]" style="text-decoration: none;">
+              {{ fund.schemeCode }}
+            </a>
           </td>
         </ng-container>
 
+        <!-- Scheme Name & AMC Column -->
         <ng-container matColumnDef="schemeName">
-          <th mat-header-cell *matHeaderCellDef>Fund Name</th>
+          <th mat-header-cell *matHeaderCellDef>Scheme Name &amp; AMC</th>
           <td mat-cell *matCellDef="let fund">
-            <a mat-button [routerLink]="['/funds', fund.schemeCode]">{{ fund.schemeName }}</a>
+            <a [routerLink]="['/funds', fund.schemeCode]" style="font-weight: 600; color: #0f172a; text-decoration: none;">
+              {{ fund.schemeName }}
+            </a>
+            <div style="font-size: 11px; color: #64748b; margin-top: 1px;">
+              {{ fund.fundHouse ?? 'Unknown AMC' }}
+            </div>
           </td>
         </ng-container>
 
-        <ng-container matColumnDef="fundHouse">
-          <th mat-header-cell *matHeaderCellDef>Fund House</th>
-          <td mat-cell *matCellDef="let fund">{{ fund.fundHouse ?? '-' }}</td>
-        </ng-container>
-
+        <!-- Category & Type Column -->
         <ng-container matColumnDef="category">
-          <th mat-header-cell *matHeaderCellDef>Category</th>
-          <td mat-cell *matCellDef="let fund">{{ fund.schemeCategory ?? '-' }}</td>
-        </ng-container>
-
-        <ng-container matColumnDef="latestNav">
-          <th mat-header-cell *matHeaderCellDef>Latest NAV</th>
+          <th mat-header-cell *matHeaderCellDef>Category &amp; Structure</th>
           <td mat-cell *matCellDef="let fund">
-            @if (fund.latestNav !== null) {
-              {{ fund.latestNav | number: '1.2-4' }}
+            @if (fund.schemeCategory) {
+              <span class="mono-code" style="background: #f0fdf4; color: #166534; border-color: #bbf7d0; font-size: 11px;">
+                {{ fund.schemeCategory }}
+              </span>
             } @else {
-              -
+              <span style="color: #94a3b8;">-</span>
+            }
+            @if (fund.schemeType) {
+              <div style="font-size: 10.5px; color: #64748b; margin-top: 2px;">{{ fund.schemeType }}</div>
             }
           </td>
         </ng-container>
 
-        <tr mat-header-row *matHeaderRowDef="['schemeCode', 'schemeName', 'fundHouse', 'category', 'latestNav']"></tr>
-        <tr mat-row *matRowDef="let row; columns: ['schemeCode', 'schemeName', 'fundHouse', 'category', 'latestNav']"></tr>
+        <!-- Latest NAV Column -->
+        <ng-container matColumnDef="latestNav">
+          <th mat-header-cell *matHeaderCellDef style="text-align: right; width: 140px;">Latest NAV</th>
+          <td mat-cell *matCellDef="let fund" style="text-align: right;">
+            @if (fund.latestNav !== null) {
+              <strong class="mono-val" style="font-size: 13.5px; color: #0f172a;">
+                ₹{{ fund.latestNav | number: '1.2-4' }}
+              </strong>
+              @if (fund.latestNavDate) {
+                <div style="font-size: 10.5px; color: #64748b; font-family: 'JetBrains Mono', monospace;">
+                  {{ fund.latestNavDate }}
+                </div>
+              }
+            } @else {
+              <span style="color: #94a3b8;">-</span>
+            }
+          </td>
+        </ng-container>
+
+        <!-- Quick Actions Column -->
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef style="text-align: right; width: 180px;">Actions</th>
+          <td mat-cell *matCellDef="let fund" style="text-align: right;">
+            <a mat-flat-button [routerLink]="['/funds', fund.schemeCode]" style="height: 26px !important; font-size: 11px !important; padding: 0 8px !important; margin-right: 4px;">
+              Analyze
+            </a>
+            <a mat-stroked-button [routerLink]="['/funds', fund.schemeCode, 'rolling']" style="height: 26px !important; font-size: 11px !important; padding: 0 8px !important;">
+              Rolling
+            </a>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="['schemeCode', 'schemeName', 'category', 'latestNav', 'actions']"></tr>
+        <tr mat-row *matRowDef="let row; columns: ['schemeCode', 'schemeName', 'category', 'latestNav', 'actions']"></tr>
       </table>
     </mat-card-content>
   </mat-card>
 } @else if (!loading() && searchQuery().trim().length > 0) {
-  <mat-card appearance="outlined">No funds found for "{{ searchQuery() }}"</mat-card>
+  <mat-card appearance="outlined">
+    <mat-card-content style="text-align: center; padding: 24px !important;">
+      <p style="margin: 0; color: #64748b; font-size: 13px;">No funds found matching "{{ searchQuery() }}"</p>
+      <small style="color: #94a3b8;">Try searching for a broader term or AMC name (e.g. HDFC, Parag, SBI, Index).</small>
+    </mat-card-content>
+  </mat-card>
 } @else if (!loading()) {
-  <mat-card appearance="outlined">Start typing to search for mutual funds and ETFs.</mat-card>
+  <mat-card appearance="outlined">
+    <mat-card-content style="text-align: center; padding: 28px !important;">
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #64748b; margin-bottom: 6px;">
+        DATABASE READY · 14,800+ SCHEMES INDEXED
+      </div>
+      <strong style="color: #0f172a; font-size: 14px;">Start typing above or click a filter preset to screen funds</strong>
+    </mat-card-content>
+  </mat-card>
 }

@@ -1,50 +1,101 @@
+<!-- ═══════════════════════════════════════════════
+     HEADER WORKBAR
+═══════════════════════════════════════════════ -->
+<header class="admin-workbar">
+  <div>
+    <div class="admin-breadcrumb">
+      <a routerLink="/dashboard">Workspace</a>
+      <strong>Multi-Fund Comparator</strong>
+    </div>
+    <h1>Performance &amp; Rolling Return Comparator</h1>
+  </div>
+  <nav aria-label="Quick navigation">
+    <a routerLink="/funds">Screener</a>
+    <a routerLink="/compare" class="active">Comparator</a>
+    <a routerLink="/portfolio-lab">Lab</a>
+  </nav>
+</header>
+
+<!-- ═══════════════════════════════════════════════
+     FUND SELECTION & PARAMETERS PANEL
+═══════════════════════════════════════════════ -->
 <mat-card appearance="outlined">
   <mat-card-header>
-    <mat-card-title>Compare Funds</mat-card-title>
+    <mat-card-title>Basket Selection &amp; Evaluation Horizon</mat-card-title>
+    <mat-card-subtitle>Search and add 2 to 10 funds to overlay growth trajectories and compute alpha matrices</mat-card-subtitle>
   </mat-card-header>
   <mat-card-content>
-    <mat-form-field appearance="outline">
-      <mat-label>Search and add funds to compare</mat-label>
-      <input
-        matInput
-        type="text"
-        [value]="searchQuery()"
-        (input)="onSearchInput($any($event.target).value)"
-      />
-    </mat-form-field>
-    @if (loading()) {
-      <mat-progress-bar mode="indeterminate" />
+    <!-- Search Input & Live Results Dropdown -->
+    <div style="position: relative; margin-bottom: 10px;">
+      <mat-form-field appearance="outline" style="width: 100%; margin-right: 0;">
+        <mat-label>Search and add fund to comparison basket (e.g. Parag Parikh, HDFC Flexi, Small Cap...)</mat-label>
+        <input
+          matInput
+          type="text"
+          [value]="searchQuery()"
+          (input)="onSearchInput($any($event.target).value)"
+          placeholder="Type scheme name, AMC, or code..."
+        />
+      </mat-form-field>
+
+      @if (loading()) {
+        <mat-progress-bar mode="indeterminate" style="margin-top: -4px; margin-bottom: 6px;" />
+      }
+
+      @if (searchResults().length > 0 && searchQuery().trim().length > 0) {
+        <div style="position: absolute; top: 100%; left: 0; right: 0; z-index: 20; max-height: 220px; overflow-y: auto; background: #ffffff; border: 1px solid rgba(15,23,42,0.15); border-radius: 6px; box-shadow: 0 8px 24px rgba(15,23,42,0.12); padding: 4px;">
+          @for (fund of searchResults(); track fund.schemeCode) {
+            <div
+              (click)="!isAlreadySelected(fund.schemeCode) ? addFund(fund) : null"
+              [style.opacity]="isAlreadySelected(fund.schemeCode) ? '0.5' : '1'"
+              [style.cursor]="isAlreadySelected(fund.schemeCode) ? 'default' : 'pointer'"
+              style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 4px; border-bottom: 1px solid rgba(15,23,42,0.05);"
+              onmouseover="this.style.background='#f8fafc'"
+              onmouseout="this.style.background='transparent'"
+            >
+              <div>
+                <strong style="font-size: 12.5px; color: #0f172a;">{{ fund.schemeName }}</strong>
+                <div style="font-size: 11px; color: #64748b;">
+                  {{ fund.fundHouse ?? 'AMC' }} · <span class="font-mono">{{ fund.schemeCode }}</span>
+                </div>
+              </div>
+              <div>
+                @if (isAlreadySelected(fund.schemeCode)) {
+                  <span class="mono-code" style="background: #e2e8f0; color: #64748b;">Added</span>
+                } @else {
+                  <span class="mono-code" style="background: #ecfdf5; color: #047857;">+ Add</span>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    <!-- Selected Funds Token Strip -->
+    @if (selectedFunds().length > 0) {
+      <div style="margin-bottom: 12px; padding: 8px 10px; background: #f8fafc; border: 1px solid rgba(15,23,42,0.08); border-radius: 6px;">
+        <span style="display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; margin-bottom: 6px;">
+          Selected Comparison Basket ({{ selectedFunds().length }}/10):
+        </span>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+          @for (fund of selectedFunds(); track fund.schemeCode) {
+            <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 4px; background: #ffffff; border: 1px solid rgba(15,23,42,0.12); font-size: 12px; font-weight: 600; color: #0f172a;">
+              <span>{{ fund.schemeName }}</span>
+              <button
+                type="button"
+                (click)="removeFund(fund.schemeCode)"
+                style="border: none; background: transparent; cursor: pointer; color: #94a3b8; font-size: 14px; line-height: 1; padding: 0 2px;"
+                title="Remove fund"
+              >×</button>
+            </span>
+          }
+        </div>
+      </div>
     }
 
-    @if (searchResults().length > 0 && searchQuery().trim().length > 0) {
-      <mat-selection-list>
-        @for (fund of searchResults(); track fund.schemeCode) {
-          <mat-list-item>
-            <button mat-button (click)="addFund(fund)" [disabled]="isAlreadySelected(fund.schemeCode)">
-              {{ fund.schemeName }} - {{ fund.schemeCode }} - {{ fund.fundHouse ?? '' }}
-            </button>
-          </mat-list-item>
-        }
-      </mat-selection-list>
-    }
-  </mat-card-content>
-</mat-card>
-
-@if (selectedFunds().length > 0) {
-  <mat-card appearance="outlined">
-    <mat-card-header>
-      <mat-card-title>Selected Funds</mat-card-title>
-    </mat-card-header>
-    <mat-card-content>
-      <mat-chip-set>
-        @for (fund of selectedFunds(); track fund.schemeCode) {
-          <mat-chip>
-            {{ fund.schemeName }}
-            <button matChipRemove type="button" (click)="removeFund(fund.schemeCode)">x</button>
-          </mat-chip>
-        }
-      </mat-chip-set>
-
+    <!-- Date Range & Action Buttons -->
+    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
       <mat-form-field appearance="outline" class="date-field">
         <mat-label>Start Date</mat-label>
         <input
@@ -74,123 +125,182 @@
         <mat-datepicker-toggle matIconSuffix [for]="compareEndPicker" />
         <mat-datepicker #compareEndPicker />
       </mat-form-field>
-    </mat-card-content>
-    <mat-card-actions>
+
       <button
         mat-flat-button
         (click)="compare()"
         [disabled]="selectedFunds().length < 2 || comparing()"
+        style="height: 38px;"
       >
-        {{ comparing() ? 'Comparing...' : 'Compare (' + selectedFunds().length + ' funds)' }}
+        {{ comparing() ? 'Comparing...' : 'Run Comparison (' + selectedFunds().length + ' funds)' }}
       </button>
-    </mat-card-actions>
-  </mat-card>
-}
+    </div>
+  </mat-card-content>
+</mat-card>
 
 @if (error()) {
-  <mat-card appearance="outlined">{{ error() }}</mat-card>
+  <div class="status-callout danger">{{ error() }}</div>
 }
 
+<!-- ═══════════════════════════════════════════════
+     RETURNS MATRIX TABLE
+═══════════════════════════════════════════════ -->
 @if (returnsResults().length > 0) {
   <mat-card appearance="outlined">
     <mat-card-header>
-      <mat-card-title>Returns Comparison</mat-card-title>
+      <mat-card-title>Point-to-Point Returns Matrix</mat-card-title>
+      <mat-card-subtitle>Compounded Annual Growth Rate (CAGR) and Total Absolute Gains</mat-card-subtitle>
     </mat-card-header>
-    <mat-card-content>
+    <mat-card-content style="padding: 0 !important;">
       <table mat-table [dataSource]="returnsResults()">
         <ng-container matColumnDef="fund">
-          <th mat-header-cell *matHeaderCellDef>Fund</th>
+          <th mat-header-cell *matHeaderCellDef>Scheme &amp; AMC</th>
           <td mat-cell *matCellDef="let fund">
-            {{ fund.schemeName }}
-            <br />
-            <small>{{ fund.fundHouse }}</small>
+            <strong style="color: #0f172a;">{{ fund.schemeName }}</strong>
+            <div style="font-size: 11px; color: #64748b;">{{ fund.fundHouse ?? '-' }}</div>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="cagr">
+          <th mat-header-cell *matHeaderCellDef style="text-align: right; width: 140px;">CAGR (Ann.)</th>
+          <td mat-cell *matCellDef="let fund" style="text-align: right;">
+            <strong class="mono-val" [class]="fund.cagr !== null && fund.cagr >= 0 ? 'badge-pos' : 'badge-neg'" style="font-size: 13.5px;">
+              {{ fund.cagr !== null ? ((fund.cagr >= 0 ? '+' : '') + (fund.cagr | number: '1.2-2') + '%') : 'N/A' }}
+            </strong>
           </td>
         </ng-container>
 
         <ng-container matColumnDef="absoluteReturn">
-          <th mat-header-cell *matHeaderCellDef>Absolute Return</th>
-          <td mat-cell *matCellDef="let fund">{{ formatReturn(fund.absoluteReturn) }}</td>
-        </ng-container>
-
-        <ng-container matColumnDef="cagr">
-          <th mat-header-cell *matHeaderCellDef>CAGR</th>
-          <td mat-cell *matCellDef="let fund">{{ formatReturn(fund.cagr) }}</td>
+          <th mat-header-cell *matHeaderCellDef style="text-align: right; width: 150px;">Absolute Return</th>
+          <td mat-cell *matCellDef="let fund" style="text-align: right;">
+            <strong class="mono-val" [class]="fund.absoluteReturn !== null && fund.absoluteReturn >= 0 ? 'badge-pos' : 'badge-neg'">
+              {{ fund.absoluteReturn !== null ? ((fund.absoluteReturn >= 0 ? '+' : '') + (fund.absoluteReturn | number: '1.2-2') + '%') : 'N/A' }}
+            </strong>
+          </td>
         </ng-container>
 
         <ng-container matColumnDef="startNav">
-          <th mat-header-cell *matHeaderCellDef>Start NAV</th>
-          <td mat-cell *matCellDef="let fund">
-            {{ fund.startNav !== null ? (fund.startNav | number: '1.2-4') : 'N/A' }}
+          <th mat-header-cell *matHeaderCellDef style="text-align: right; width: 130px;">Start NAV</th>
+          <td mat-cell *matCellDef="let fund" class="font-mono" style="text-align: right;">
+            {{ fund.startNav !== null ? ('₹' + (fund.startNav | number: '1.2-4')) : 'N/A' }}
           </td>
         </ng-container>
 
         <ng-container matColumnDef="endNav">
-          <th mat-header-cell *matHeaderCellDef>End NAV</th>
-          <td mat-cell *matCellDef="let fund">
-            {{ fund.endNav !== null ? (fund.endNav | number: '1.2-4') : 'N/A' }}
+          <th mat-header-cell *matHeaderCellDef style="text-align: right; width: 130px;">End NAV</th>
+          <td mat-cell *matCellDef="let fund" class="font-mono" style="text-align: right;">
+            {{ fund.endNav !== null ? ('₹' + (fund.endNav | number: '1.2-4')) : 'N/A' }}
           </td>
         </ng-container>
 
         <ng-container matColumnDef="startDate">
-          <th mat-header-cell *matHeaderCellDef>Start Date</th>
-          <td mat-cell *matCellDef="let fund">{{ fund.startDate ?? 'N/A' }}</td>
+          <th mat-header-cell *matHeaderCellDef style="width: 120px;">Start Date</th>
+          <td mat-cell *matCellDef="let fund" class="font-mono">{{ fund.startDate ?? 'N/A' }}</td>
         </ng-container>
 
         <ng-container matColumnDef="endDate">
-          <th mat-header-cell *matHeaderCellDef>End Date</th>
-          <td mat-cell *matCellDef="let fund">{{ fund.endDate ?? 'N/A' }}</td>
+          <th mat-header-cell *matHeaderCellDef style="width: 120px;">End Date</th>
+          <td mat-cell *matCellDef="let fund" class="font-mono">{{ fund.endDate ?? 'N/A' }}</td>
         </ng-container>
 
-        <tr mat-header-row *matHeaderRowDef="['fund', 'absoluteReturn', 'cagr', 'startNav', 'endNav', 'startDate', 'endDate']"></tr>
-        <tr mat-row *matRowDef="let row; columns: ['fund', 'absoluteReturn', 'cagr', 'startNav', 'endNav', 'startDate', 'endDate']"></tr>
+        <tr mat-header-row *matHeaderRowDef="['fund', 'cagr', 'absoluteReturn', 'startNav', 'endNav', 'startDate', 'endDate']"></tr>
+        <tr mat-row *matRowDef="let row; columns: ['fund', 'cagr', 'absoluteReturn', 'startNav', 'endNav', 'startDate', 'endDate']"></tr>
       </table>
     </mat-card-content>
   </mat-card>
 }
 
+<!-- ═══════════════════════════════════════════════
+     GROWTH OF ₹10,000 CHART
+═══════════════════════════════════════════════ -->
 @if (growthChartSeries().length > 0) {
   <mat-card appearance="outlined">
     <mat-card-header>
-      <mat-card-title>Growth of Rs 10,000</mat-card-title>
+      <mat-card-title>Normalized Growth of ₹10,000</mat-card-title>
+      <mat-card-subtitle>Hypothetical portfolio growth indexed to common inception date</mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
       <app-line-chart
         [seriesList]="growthChartSeries()"
-        yAxisLabel="Value"
+        yAxisLabel="Corpus Value (₹)"
         [priceFormat]="growthPriceFormat"
       />
     </mat-card-content>
   </mat-card>
 }
 
+<!-- ═══════════════════════════════════════════════
+     ROLLING RETURNS COMPARISON
+═══════════════════════════════════════════════ -->
 @if (returnsResults().length > 0) {
   <mat-card appearance="outlined">
     <mat-card-header>
-      <mat-card-title>Rolling Returns Comparison</mat-card-title>
-    </mat-card-header>
-    <mat-card-content>
-      <mat-button-toggle-group [value]="selectedRollingPeriod()">
+      <div>
+        <mat-card-title>Rolling Returns Consistency ({{ selectedRollingPeriod() }}Y Window)</mat-card-title>
+        <mat-card-subtitle>Distribution of annualized returns over rolling investment horizons</mat-card-subtitle>
+      </div>
+      <mat-button-toggle-group [value]="selectedRollingPeriod()" style="margin: 0;">
         @for (p of rollingPeriods; track p) {
           <mat-button-toggle [value]="p" (click)="selectRollingPeriod(p)">{{ p }}Y</mat-button-toggle>
         }
       </mat-button-toggle-group>
-
+    </mat-card-header>
+    <mat-card-content>
+      <!-- Structured Rolling Return Table -->
       @if (rollingResults().length > 0) {
-        <mat-list>
-          @for (f of rollingResults(); track f.schemeCode) {
-            <mat-list-item>
-              {{ f.schemeName }} - Min {{ formatReturn(f.minReturn) }} - Max
-              {{ formatReturn(f.maxReturn) }} - Avg {{ formatReturn(f.averageReturn) }} - Med
-              {{ formatReturn(f.medianReturn) }}
-            </mat-list-item>
-          }
-        </mat-list>
+        <table mat-table [dataSource]="rollingResults()" style="width: 100%; margin-bottom: 12px;">
+          <ng-container matColumnDef="schemeName">
+            <th mat-header-cell *matHeaderCellDef>Scheme</th>
+            <td mat-cell *matCellDef="let r">
+              <strong>{{ r.schemeName }}</strong>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="minReturn">
+            <th mat-header-cell *matHeaderCellDef style="text-align: right; width: 120px;">Min</th>
+            <td mat-cell *matCellDef="let r" style="text-align: right;" class="font-mono" [class]="r.minReturn !== null && r.minReturn >= 0 ? 'pos' : 'neg'">
+              {{ formatReturn(r.minReturn) }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="maxReturn">
+            <th mat-header-cell *matHeaderCellDef style="text-align: right; width: 120px;">Max</th>
+            <td mat-cell *matCellDef="let r" style="text-align: right;" class="font-mono" [class]="r.maxReturn !== null && r.maxReturn >= 0 ? 'pos' : 'neg'">
+              {{ formatReturn(r.maxReturn) }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="averageReturn">
+            <th mat-header-cell *matHeaderCellDef style="text-align: right; width: 120px;">Average</th>
+            <td mat-cell *matCellDef="let r" style="text-align: right;" class="font-mono" [class]="r.averageReturn !== null && r.averageReturn >= 0 ? 'pos' : 'neg'">
+              <strong>{{ formatReturn(r.averageReturn) }}</strong>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="medianReturn">
+            <th mat-header-cell *matHeaderCellDef style="text-align: right; width: 120px;">Median</th>
+            <td mat-cell *matCellDef="let r" style="text-align: right;" class="font-mono" [class]="r.medianReturn !== null && r.medianReturn >= 0 ? 'pos' : 'neg'">
+              {{ formatReturn(r.medianReturn) }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="dataPoints">
+            <th mat-header-cell *matHeaderCellDef style="text-align: right; width: 110px;">Windows</th>
+            <td mat-cell *matCellDef="let r" style="text-align: right;" class="font-mono">
+              {{ r.dataPoints | number }}
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="['schemeName', 'minReturn', 'maxReturn', 'averageReturn', 'medianReturn', 'dataPoints']"></tr>
+          <tr mat-row *matRowDef="let row; columns: ['schemeName', 'minReturn', 'maxReturn', 'averageReturn', 'medianReturn', 'dataPoints']"></tr>
+        </table>
       }
 
+      <!-- Rolling Chart -->
       @if (rollingChartSeries().length > 0) {
         <app-line-chart
           [seriesList]="rollingChartSeries()"
-          yAxisLabel="Annualized Return %"
+          yAxisLabel="Annualized Return (%)"
           [priceFormat]="percentFormat"
         />
       }

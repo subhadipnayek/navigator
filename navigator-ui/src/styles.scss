@@ -2,29 +2,65 @@
 @import 'ag-grid-community/styles/ag-grid.css';
 @import 'ag-grid-community/styles/ag-theme-quartz.css';
 
+// ── Angular Material Theme (Density -3 for Pro Terminal Data Density) ──
 html {
   color-scheme: light;
   @include mat.theme(
     (
       color: mat.$azure-palette,
-      typography: Roboto,
-      density: 0,
+      typography: Inter,
+      density: -3,
     )
   );
+}
+
+// ── Base Reset & High-Precision Typography ──
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 html,
 body {
   min-height: 100%;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-feature-settings: 'cv02' 1, 'cv03' 1, 'cv04' 1, 'cv11' 1, 'tnum' 1;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   margin: 0;
-  font-family: Roboto, Arial, sans-serif;
-  background: #f4f6f8;
+  background: #f1f4f8;
   color: #0f172a;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
+// ── Monospace Utilities ──
+.font-mono,
+.mono-val,
+.mono-code,
+.mono-num {
+  font-family: 'JetBrains Mono', 'Roboto Mono', 'SF Mono', Consolas, Menlo, monospace;
+  font-feature-settings: 'tnum' 1, 'zero' 1;
+  letter-spacing: -0.02em;
+}
+
+.mono-code {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #334155;
+}
+
+// ── Page Workspace Grid & Wide Container ──
 app-dashboard,
 app-fund-list,
 app-fund-detail,
@@ -35,227 +71,371 @@ app-rolling-returns,
 app-admin-sync,
 app-corporate-actions {
   display: grid;
-  gap: 20px;
-  width: min(1180px, calc(100% - 48px));
+  gap: 14px;
+  width: min(1520px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 32px 0 72px;
+  padding: 18px 0 54px;
 }
 
 app-login,
 app-register {
   display: grid;
-  width: min(440px, calc(100% - 32px));
+  width: min(420px, calc(100% - 24px));
   margin: 0 auto;
-  padding: 56px 0;
+  padding: 48px 0;
 }
 
+// ── High-Density Material Cards ──
 .mat-mdc-card {
-  border-radius: 8px !important;
-  border-color: rgba(15, 23, 42, 0.1) !important;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045) !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(15, 23, 42, 0.09) !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03), 0 1px 2px rgba(15, 23, 42, 0.02) !important;
 }
 
 .mat-mdc-card-header {
-  padding: 20px 22px 8px !important;
+  padding: 10px 14px 4px !important;
+  min-height: unset !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
 }
 
 .mat-mdc-card-content {
-  padding: 16px 22px 22px !important;
+  padding: 10px 14px 12px !important;
   overflow-x: auto;
 }
 
 .mat-mdc-card-actions {
-  gap: 12px;
-  padding: 8px 22px 22px !important;
+  gap: 8px !important;
+  padding: 6px 14px 10px !important;
+  min-height: unset !important;
 }
 
 .mat-mdc-card-title {
-  color: #0f172a;
-  font-size: 22px !important;
+  color: #0f172a !important;
+  font-size: 14px !important;
   font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  line-height: 1.3 !important;
+  margin: 0 !important;
 }
 
 .mat-mdc-card-subtitle {
-  color: #64748b;
+  color: #64748b !important;
+  font-size: 11.5px !important;
+  line-height: 1.35 !important;
+  margin: 2px 0 0 !important;
 }
 
+// ── Compact Form Controls & Date Pickers ──
 .mat-mdc-form-field {
-  width: min(100%, 520px);
-  margin-right: 12px;
+  width: min(100%, 420px);
+  margin-right: 8px;
   vertical-align: top;
+  font-size: 12.5px;
 }
 
 .mat-mdc-form-field.date-field {
-  width: min(100%, 260px);
+  width: min(100%, 200px);
 }
 
+.mat-mdc-form-field-subscript-wrapper {
+  display: none !important;
+}
+
+.mat-mdc-text-field-wrapper {
+  padding-inline: 10px !important;
+}
+
+// ── High-Density Data Tables ──
 table.mat-mdc-table {
   width: 100%;
-  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 12.5px;
 }
 
 .mat-mdc-header-row {
-  background: #eef4f1;
+  height: 32px !important;
+  min-height: 32px !important;
+  background: #f8fafc !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.1) !important;
 }
 
 .mat-mdc-header-cell {
-  color: #315246;
-  font-weight: 700;
+  color: #475569 !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  padding: 4px 10px !important;
+  white-space: nowrap;
 }
 
-.mat-mdc-cell,
-.mat-mdc-header-cell {
-  padding-inline: 14px !important;
+.mat-mdc-row {
+  height: 36px !important;
+  min-height: 36px !important;
+  transition: background-color 0.12s ease;
+
+  &:hover {
+    background: #f8fafc !important;
+  }
+}
+
+.mat-mdc-cell {
+  padding: 5px 10px !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06) !important;
+  color: #1e293b;
+  font-size: 12.5px;
 }
 
 .mat-mdc-list-item {
-  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.05);
+  font-size: 12.5px;
+  padding-block: 4px !important;
+  min-height: 32px !important;
 }
 
+// ── Button Toggle Groups (Compact Segmented Controls) ──
 .mat-button-toggle-group {
-  margin: 0 16px 16px 0;
+  height: 28px !important;
+  border-radius: 5px !important;
+  border-color: rgba(15, 23, 42, 0.14) !important;
+  margin: 0 10px 10px 0;
   vertical-align: middle;
 }
 
-app-line-chart {
-  display: block;
-  min-width: 640px;
-  margin-top: 18px;
+.mat-button-toggle {
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  line-height: 26px !important;
+  padding-inline: 8px !important;
 }
 
+.mat-button-toggle-checked {
+  background: #0f172a !important;
+  color: #ffffff !important;
+}
+
+// ── Compact Buttons ──
+.mat-mdc-button,
+.mat-mdc-outlined-button,
+.mat-mdc-unelevated-button,
+.mat-mdc-flat-button {
+  height: 30px !important;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  border-radius: 5px !important;
+  letter-spacing: 0.01em !important;
+}
+
+.mat-mdc-unelevated-button:not(:disabled),
+.mat-mdc-flat-button:not(:disabled) {
+  background-color: #0f766e !important;
+  color: #ffffff !important;
+}
+
+.mat-mdc-outlined-button:not(:disabled),
+.mat-mdc-button:not(:disabled) {
+  color: #0f513f;
+  border-color: rgba(15, 23, 42, 0.14) !important;
+}
+
+// ── Micro Chips & Badges ──
 mat-chip-set {
-  display: block;
-  margin-bottom: 12px;
-}
-
-.dashboard-hero {
-  background: #ffffff;
-}
-
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.1fr);
-  gap: 20px;
-}
-
-.stat-card strong {
-  display: block;
-  margin-bottom: 6px;
-  color: #0f172a;
-  font-size: 42px;
-  line-height: 1;
-}
-
-.stat-card span {
-  color: #64748b;
-}
-
-.workflow-card .mat-mdc-card-actions {
-  align-items: center;
-  min-height: 84px;
-}
-
-.anomaly-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 12px;
-}
-
-.anomaly-summary .mat-mdc-card {
-  min-height: 92px;
-  display: grid;
-  align-content: center;
-  padding: 18px;
-}
-
-.anomaly-summary strong {
-  display: block;
-  color: #0f172a;
-  font-size: 30px;
-  line-height: 1;
-}
-
-.anomaly-summary span,
-.suggestion-cell small,
-td small,
-.table-footnote {
-  color: #64748b;
-}
-
-.suggestion-cell {
-  max-width: 340px;
-}
-
-.suggestion-cell div {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  gap: 8px;
-  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 6px;
 }
 
-.suggestion-cell span {
-  color: #0f766e;
+mat-chip,
+.mat-mdc-chip {
+  min-height: 22px !important;
+  padding: 1px 7px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  border-radius: 4px !important;
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #334155 !important;
+}
+
+// ── Performance Badges ──
+.badge-pos,
+.pos {
+  color: #059669 !important;
   font-weight: 600;
 }
 
-.status-callout {
-  margin-bottom: 16px;
-  padding: 12px 14px;
+.badge-neg,
+.neg {
+  color: #dc2626 !important;
+  font-weight: 600;
+}
+
+.chip-return-pos {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+  border-color: rgba(16, 185, 129, 0.25) !important;
+}
+
+.chip-return-neg {
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+  border-color: rgba(239, 68, 68, 0.25) !important;
+}
+
+// ── Line Chart Host ──
+app-line-chart {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+}
+
+// ── Financial Metric Grid & KPI Tiles ──
+.kpi-grid,
+.metric-grid,
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.kpi-tile,
+.stat-tile,
+.stat-card-compact {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
+}
+
+.kpi-label,
+.stat-label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.kpi-value,
+.stat-val {
+  display: block;
+  font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #0f172a;
+  font-feature-settings: 'tnum' 1;
+}
+
+.kpi-sub {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+// ── Factsheet Top Ribbon (for fund details) ──
+.factsheet-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 6px;
+  background: #ffffff;
   border: 1px solid rgba(15, 23, 42, 0.1);
-  border-radius: 8px;
-  background: #f8faf9;
-  color: #334155;
 }
 
-.status-callout.success {
-  border-color: rgba(15, 118, 110, 0.25);
-  background: #ecfdf5;
-  color: #0f513f;
+.factsheet-title-group h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
 }
 
-.status-callout.danger {
-  border-color: rgba(185, 28, 28, 0.25);
-  background: #fef2f2;
-  color: #991b1b;
+.factsheet-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
 }
 
-.priority-high {
-  background: #fef3c7 !important;
+.factsheet-ribbon {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
 }
 
-.priority-medium {
-  background: #e8f2ef !important;
+.factsheet-ribbon .ribbon-box {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
+.factsheet-ribbon .ribbon-box strong {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.factsheet-ribbon .ribbon-box span {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+// ── Anomaly & Admin Workbars ──
 .admin-workbar {
   position: sticky;
-  top: 64px;
+  top: 50px;
   z-index: 5;
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
-  padding: 10px 14px;
+  padding: 8px 12px;
   border: 1px solid rgba(15, 23, 42, 0.1);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(14px);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(12px);
 }
 
 .admin-workbar h1 {
-  margin: 2px 0 0;
+  margin: 0;
   color: #0f172a;
-  font-size: 20px;
-  line-height: 1.15;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .admin-breadcrumb {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .admin-breadcrumb a {
@@ -266,37 +446,37 @@ td small,
 .admin-breadcrumb a::after,
 .admin-breadcrumb span::after {
   content: '/';
-  margin-left: 6px;
+  margin-left: 4px;
   color: #94a3b8;
 }
 
 .admin-breadcrumb strong {
-  color: #0f513f;
+  color: #0f766e;
   font-weight: 700;
 }
 
 .admin-workbar nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
 }
 
 .admin-workbar a {
-  padding: 7px 10px;
-  border-radius: 7px;
-  color: #0f513f;
-  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  color: #0f766e;
+  font-size: 12px;
   font-weight: 600;
   text-decoration: none;
-}
 
-.admin-workbar a:hover {
-  background: #e8f2ef;
-}
+  &:hover {
+    background: #e8f2ef;
+  }
 
-.admin-workbar a.active {
-  background: #e8f2ef;
-  color: #0f513f;
+  &.active {
+    background: #0f766e;
+    color: #ffffff;
+  }
 }
 
 .admin-metrics {
@@ -306,60 +486,56 @@ td small,
 }
 
 .admin-metrics div {
-  min-width: 0;
-  padding: 12px 14px;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  border-radius: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 6px;
   background: #ffffff;
 }
 
 .admin-metrics strong {
   display: block;
-  overflow: hidden;
+  font-family: 'JetBrains Mono', monospace;
   color: #0f172a;
-  font-size: 24px;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 18px;
+  line-height: 1.1;
 }
 
 .admin-metrics span {
   display: block;
-  margin-top: 5px;
+  margin-top: 2px;
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.03em;
 }
 
 .admin-action-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
 }
 
 .admin-compact-card .mat-mdc-card-header {
-  padding: 14px 16px 4px !important;
+  padding: 8px 12px 2px !important;
 }
 
 .admin-compact-card .mat-mdc-card-title {
-  font-size: 18px !important;
-}
-
-.admin-compact-card .mat-mdc-card-subtitle {
-  font-size: 13px;
+  font-size: 14px !important;
 }
 
 .admin-compact-card .mat-mdc-card-content {
-  padding: 10px 16px 14px !important;
+  padding: 8px 12px 10px !important;
 }
 
 .admin-compact-card .mat-mdc-card-actions {
-  padding: 6px 16px 14px !important;
+  padding: 4px 12px 8px !important;
 }
 
 .admin-filter-row {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 190px 120px;
-  gap: 10px;
+  grid-template-columns: minmax(220px, 1fr) 180px 110px auto;
+  gap: 8px;
   align-items: start;
 }
 
@@ -368,75 +544,84 @@ td small,
   margin-right: 0;
 }
 
-.admin-anomalies {
-  scroll-margin-top: 136px;
-}
-
-.admin-anomalies app-corporate-actions {
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  gap: 12px;
-}
-
-.admin-anomalies app-corporate-actions > .mat-mdc-card .mat-mdc-card-header,
-.admin-anomalies app-corporate-actions > .mat-mdc-card .mat-mdc-card-content,
-.admin-anomalies app-corporate-actions > .mat-mdc-card .mat-mdc-card-actions {
-  padding-inline: 16px !important;
-}
-
-.admin-anomalies app-corporate-actions .anomaly-summary {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+.anomaly-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 8px;
 }
 
-.admin-anomalies app-corporate-actions .anomaly-summary .mat-mdc-card {
-  min-height: 72px;
-  padding: 12px;
+.anomaly-summary .mat-mdc-card {
+  padding: 8px 10px !important;
 }
 
-.admin-anomalies app-corporate-actions .anomaly-summary strong {
-  font-size: 24px;
+.anomaly-summary strong {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  color: #0f172a;
+  font-size: 18px;
+  line-height: 1.1;
 }
 
-.admin-fund-table .mat-mdc-card-content {
-  max-height: 560px;
-  overflow: auto;
+.anomaly-summary span {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
 }
 
-.admin-fund-table table.mat-mdc-table {
-  min-width: 900px;
+.status-callout {
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12.5px;
+
+  &.success {
+    border-color: rgba(16, 185, 129, 0.3);
+    background: #ecfdf5;
+    color: #065f46;
+  }
+
+  &.danger {
+    border-color: rgba(239, 68, 68, 0.3);
+    background: #fef2f2;
+    color: #991b1b;
+  }
 }
 
-.admin-fund-table .mat-mdc-cell,
-.admin-fund-table .mat-mdc-header-cell,
-.admin-anomalies .mat-mdc-cell,
-.admin-anomalies .mat-mdc-header-cell {
-  padding-block: 6px !important;
-  font-size: 13px;
+.priority-high {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+  border-color: #fde68a !important;
 }
 
-.admin-fund-table mat-chip-set,
-.admin-anomalies mat-chip-set {
-  margin-bottom: 0;
+.priority-medium {
+  background: #e0f2fe !important;
+  color: #075985 !important;
+  border-color: #bae6fd !important;
 }
 
-.admin-fund-table .mat-mdc-row,
-.admin-anomalies .mat-mdc-row {
-  min-height: 44px;
+// ── AG Grid Professional Theme Overrides ──
+.ag-theme-quartz {
+  --ag-font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --ag-font-size: 12px;
+  --ag-grid-size: 5px;
+  --ag-header-height: 32px;
+  --ag-row-height: 32px;
+  --ag-border-color: rgba(15, 23, 42, 0.1);
+  --ag-header-background-color: #f8fafc;
+  --ag-header-foreground-color: #475569;
+  --ag-odd-row-background-color: #ffffff;
+  --ag-row-hover-color: #f1f5f9;
+  --ag-selected-row-background-color: #e0f2fe;
 }
 
-.mat-mdc-unelevated-button:not(:disabled) {
-  background-color: #0f766e !important;
-  color: #ffffff !important;
-}
-
-.mat-mdc-outlined-button:not(:disabled),
-.mat-mdc-button:not(:disabled) {
-  color: #0f513f;
-}
-
-@media (max-width: 760px) {
+// ── Responsive Layout Overrides ──
+@media (max-width: 900px) {
   app-dashboard,
   app-fund-list,
   app-fund-detail,
@@ -446,53 +631,24 @@ td small,
   app-rolling-returns,
   app-admin-sync,
   app-corporate-actions {
-    width: min(100% - 24px, 1180px);
-    padding-top: 20px;
-  }
-
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .anomaly-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: calc(100% - 16px);
+    padding: 12px 0 40px;
+    gap: 10px;
   }
 
   .admin-workbar {
     top: 0;
-    align-items: flex-start;
     flex-direction: column;
+    align-items: flex-start;
   }
 
   .admin-metrics,
-  .admin-action-grid,
-  .admin-filter-row,
-  .admin-anomalies app-corporate-actions .anomaly-summary {
+  .admin-filter-row {
     grid-template-columns: 1fr;
   }
 
-  .mat-mdc-card-header {
-    padding: 18px 18px 6px !important;
-  }
-
-  .mat-mdc-card-content {
-    padding: 14px 18px 20px !important;
-  }
-
-  .mat-mdc-card-actions {
-    padding: 6px 18px 20px !important;
-  }
-
-  .mat-mdc-card-title {
-    font-size: 21px !important;
-  }
-
-  .mat-mdc-form-field {
-    width: 100%;
-    margin-right: 0;
-  }
-
-  .mat-mdc-form-field.date-field {
-    width: 100%;
+  .factsheet-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

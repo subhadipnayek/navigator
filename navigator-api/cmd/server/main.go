@@ -113,6 +113,8 @@ func main() {
 			userPort.GET("/:portfolioId/dashboard", middleware.AuthRequired(cfg), userPortHandler.GetDashboard)
 			userPort.GET("/:portfolioId/transactions", middleware.AuthRequired(cfg), userPortHandler.GetTransactions)
 			userPort.PUT("/:portfolioId/transactions", middleware.AuthRequired(cfg), userPortHandler.SaveTransactions)
+			userPort.POST("/:portfolioId/transactions/import-preview", middleware.AuthRequired(cfg), userPortHandler.ImportPreview)
+			userPort.POST("/:portfolioId/transactions/import-commit", middleware.AuthRequired(cfg), userPortHandler.ImportCommit)
 			userPort.POST("/:portfolioId/transactions/import-excel", middleware.AuthRequired(cfg), userPortHandler.ImportTransactions)
 			userPort.GET("/:portfolioId/transactions/import-delete-preview", middleware.AuthRequired(cfg), userPortHandler.GetImportDeletePreview)
 			userPort.POST("/:portfolioId/benchmark", middleware.AuthRequired(cfg), userPortHandler.CompareBenchmark)

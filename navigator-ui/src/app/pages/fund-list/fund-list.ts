@@ -1,5 +1,5 @@
 import { Component, inject, signal, OnInit, OnDestroy } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { Subject, debounceTime, distinctUntilChanged, switchMap, of, takeUntil } from 'rxjs';
 import { FundService } from '../../services/fund.service';
@@ -11,6 +11,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTableModule } from '@angular/material/table';
+import { MatChipsModule } from '@angular/material/chips';
 
 @Component({
   selector: 'app-fund-list',
@@ -24,11 +25,13 @@ import { MatTableModule } from '@angular/material/table';
     MatInputModule,
     MatProgressBarModule,
     MatTableModule,
+    MatChipsModule,
   ],
   templateUrl: './fund-list.html',
 })
 export class FundList implements OnInit, OnDestroy {
   private readonly fundService = inject(FundService);
+  private readonly route = inject(ActivatedRoute);
   private readonly destroy$ = new Subject<void>();
   private readonly searchSubject = new Subject<string>();
 
@@ -36,10 +39,21 @@ export class FundList implements OnInit, OnDestroy {
   readonly loading = signal(false);
   readonly searchQuery = signal('');
 
+  readonly filterPresets = [
+    'Flexi Cap',
+    'Large Cap',
+    'Mid Cap',
+    'Small Cap',
+    'Index',
+    'Corporate Bond',
+    'Liquid',
+    'ELSS',
+  ];
+
   ngOnInit(): void {
     this.searchSubject
       .pipe(
-        debounceTime(400),
+        debounceTime(350),
         distinctUntilChanged(),
         switchMap((query) => {
           if (query.trim().length === 0) {
@@ -57,11 +71,26 @@ export class FundList implements OnInit, OnDestroy {
         },
         error: () => this.loading.set(false),
       });
+
+    this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe((params) => {
+      const q = params['q'];
+      if (q && typeof q === 'string') {
+        this.onSearchInput(q);
+      }
+    });
   }
 
   onSearchInput(query: string): void {
     this.searchQuery.set(query);
     this.searchSubject.next(query);
+  }
+
+  setFilterPreset(preset: string): void {
+    this.onSearchInput(preset);
+  }
+
+  clearSearch(): void {
+    this.onSearchInput('');
   }
 
   ngOnDestroy(): void {

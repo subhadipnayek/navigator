@@ -23,6 +23,7 @@ import { MatListModule } from '@angular/material/list';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatTableModule } from '@angular/material/table';
 
 @Component({
   selector: 'app-fund-detail',
@@ -43,6 +44,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
     MatListModule,
     MatNativeDateModule,
     MatProgressBarModule,
+    MatTableModule,
   ],
   templateUrl: './fund-detail.html',
 })
@@ -107,10 +109,6 @@ export class FundDetail implements OnInit {
       },
     });
 
-    // Load NAV history first, clamp dates, then request returns.
-    // This avoids duplicate backend sync work (getReturns also calls
-    // getNavHistory internally) and ensures dates are clamped before
-    // returns are computed.
     this.navService
       .getNavHistory(code, { adjusted: this.adjusted(), interval: this.selectedInterval() })
       .subscribe({
@@ -146,6 +144,20 @@ export class FundDetail implements OnInit {
     this.reloadNav();
   }
 
+  setPresetRange(years: number | 'MAX'): void {
+    const today = new Date();
+    this.endDate = today;
+    if (years === 'MAX') {
+      this.startDate = this.minSelectableDate() ?? new Date(2000, 0, 1);
+    } else {
+      const past = new Date();
+      past.setFullYear(today.getFullYear() - years);
+      const min = this.minSelectableDate();
+      this.startDate = min && past < min ? min : past;
+    }
+    this.fetchReturns();
+  }
+
   fetchReturns(): void {
     const startDate = this.toApiDate(this.startDate);
     const endDate = this.toApiDate(this.endDate);
@@ -167,17 +179,12 @@ export class FundDetail implements OnInit {
 
   formatReturn(value: number | null): string {
     if (value === null) return 'N/A';
-    return value.toFixed(2) + '%';
+    return (value >= 0 ? '+' : '') + value.toFixed(2) + '%';
   }
 
   returnClass(value: number | null): string {
     if (value === null) return '';
-    return value >= 0 ? 'positive' : 'negative';
-  }
-
-  returnVariant(value: number | null): 'default' | 'positive' | 'negative' {
-    if (value === null) return 'default';
-    return value >= 0 ? 'positive' : 'negative';
+    return value >= 0 ? 'badge-pos' : 'badge-neg';
   }
 
   private toApiDate(d: Date | null): string {

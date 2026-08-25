@@ -1,35 +1,217 @@
-<mat-card appearance="outlined" class="dashboard-hero">
+<!-- ═══════════════════════════════════════════════
+     HEADER & TERMINAL STATUS RIBBON
+═══════════════════════════════════════════════ -->
+<section class="factsheet-header">
+  <div class="factsheet-title-group">
+    <h1>RESEARCH & ANALYTICS TERMINAL</h1>
+    <div class="factsheet-meta">
+      <span class="mono-code">INSTITUTIONAL WORKSPACE</span>
+      <span>·</span>
+      <span>Direct AMFI Data Feeds</span>
+      <span>·</span>
+      <span>Corporate Action Adjusted</span>
+      <span>·</span>
+      <span class="pos">● System Active</span>
+    </div>
+  </div>
+
+  <div class="factsheet-actions">
+    <a mat-flat-button routerLink="/funds">
+      <span class="nav-icon" style="vertical-align: middle; margin-right: 4px;">search</span>
+      Find Funds
+    </a>
+    <a mat-stroked-button routerLink="/compare">
+      <span class="nav-icon" style="vertical-align: middle; margin-right: 4px;">compare_arrows</span>
+      Compare
+    </a>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     TERMINAL METRICS RIBBON
+═══════════════════════════════════════════════ -->
+<section class="kpi-grid">
+  <div class="kpi-tile">
+    <span class="kpi-label">DATABASE COVERAGE</span>
+    @if (loading()) {
+      <mat-progress-bar mode="indeterminate" />
+    } @else {
+      <strong class="kpi-value">{{ fundCount() !== null ? (fundCount() | number) : '14,800+' }}</strong>
+    }
+    <span class="kpi-sub">Total mutual fund &amp; ETF schemes</span>
+  </div>
+
+  <div class="kpi-tile">
+    <span class="kpi-label">DATA FEED FREQUENCY</span>
+    <strong class="kpi-value" style="color: #0d9488;">AMFI DAILY</strong>
+    <span class="kpi-sub">Automated end-of-day NAV sync</span>
+  </div>
+
+  <div class="kpi-tile">
+    <span class="kpi-label">HISTORICAL DEPTH</span>
+    <strong class="kpi-value">30+ YEARS</strong>
+    <span class="kpi-sub">Point-to-point &amp; rolling datasets</span>
+  </div>
+
+  <div class="kpi-tile">
+    <span class="kpi-label">DATA HYGIENE ENGINE</span>
+    <strong class="kpi-value" style="color: #2563eb;">SPLIT-ADJUSTED</strong>
+    <span class="kpi-sub">Automatic anomaly &amp; gap verification</span>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     QUICK SEARCH TERMINAL BAR
+═══════════════════════════════════════════════ -->
+<mat-card appearance="outlined">
   <mat-card-header>
-    <mat-card-title>Research Dashboard</mat-card-title>
-    <mat-card-subtitle>Start with fund discovery, then compare performance and audit data quality.</mat-card-subtitle>
+    <mat-card-title>Instant Scheme Lookup</mat-card-title>
+    <mat-card-subtitle>Search by scheme name, ISIN, AMC, or 6-digit AMFI code</mat-card-subtitle>
   </mat-card-header>
+  <mat-card-content>
+    <form (ngSubmit)="onSearch()" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <mat-form-field appearance="outline" style="flex: 1; min-width: 280px; margin-right: 0;">
+        <mat-label>Enter fund name, AMC, or code (e.g. Parag Parikh, HDFC Flexi, 122639)</mat-label>
+        <input
+          matInput
+          type="text"
+          [(ngModel)]="searchKeyword"
+          name="searchKeyword"
+          placeholder="Type to search database..."
+        />
+      </mat-form-field>
+      <button mat-flat-button type="submit" style="height: 38px;">Search Terminal</button>
+    </form>
+
+    <div style="margin-top: 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+      <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Quick Presets:</span>
+      @for (cat of quickCategories; track cat.label) {
+        <button
+          mat-stroked-button
+          type="button"
+          (click)="searchCategory(cat.query)"
+          style="height: 24px !important; padding: 0 8px !important; font-size: 11px !important; border-radius: 4px;"
+        >
+          {{ cat.label }}
+        </button>
+      }
+    </div>
+  </mat-card-content>
 </mat-card>
 
-<section class="dashboard-grid">
-  <mat-card appearance="outlined" class="stat-card">
+<!-- ═══════════════════════════════════════════════
+     PRO WORKSPACES GRID
+═══════════════════════════════════════════════ -->
+<section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px;">
+  <!-- Card 1: Fund Screener -->
+  <mat-card appearance="outlined">
     <mat-card-header>
-      <mat-card-title>Funds in Database</mat-card-title>
+      <mat-card-title>
+        <span class="mono-code" style="margin-right: 6px; background: #e0f2fe; color: #0369a1;">01</span>
+        Fund Screener &amp; Factsheets
+      </mat-card-title>
+      <mat-card-subtitle>Single-scheme discovery with full NAV history</mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
-      @if (loading()) {
-        <mat-progress-bar mode="indeterminate" />
-      } @else if (fundCount() !== null) {
-        <strong>{{ fundCount()!.toLocaleString() }}</strong>
-        <span>schemes available for search and comparison</span>
-      }
+      <p style="margin: 0 0 10px; font-size: 12px; color: #475569; line-height: 1.5;">
+        Explore all active &amp; historical schemes. Inspect daily/weekly/monthly NAV charts, compute custom date CAGR &amp; absolute returns, and audit split adjustments.
+      </p>
+      <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+        <span class="mono-code">NAV Charts</span>
+        <span class="mono-code">CAGR Calculator</span>
+        <span class="mono-code">Split Factors</span>
+      </div>
     </mat-card-content>
+    <mat-card-actions>
+      <a mat-flat-button routerLink="/funds">Open Screener</a>
+    </mat-card-actions>
   </mat-card>
 
-  <mat-card appearance="outlined" class="workflow-card">
+  <!-- Card 2: Multi-Fund Comparator -->
+  <mat-card appearance="outlined">
     <mat-card-header>
-      <mat-card-title>Research Workflows</mat-card-title>
+      <mat-card-title>
+        <span class="mono-code" style="margin-right: 6px; background: #ecfdf5; color: #047857;">02</span>
+        Multi-Fund Comparator
+      </mat-card-title>
+      <mat-card-subtitle>Side-by-side performance &amp; rolling returns</mat-card-subtitle>
     </mat-card-header>
+    <mat-card-content>
+      <p style="margin: 0 0 10px; font-size: 12px; color: #475569; line-height: 1.5;">
+        Overlay multiple funds across arbitrary time horizons. Compare normalized ₹10,000 wealth growth, CAGR return matrices, and 1Y/3Y/5Y rolling return statistics.
+      </p>
+      <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+        <span class="mono-code">₹10K Growth</span>
+        <span class="mono-code">Alpha Matrix</span>
+        <span class="mono-code">Rolling Spread</span>
+      </div>
+    </mat-card-content>
     <mat-card-actions>
-      <a mat-flat-button routerLink="/funds">Search Funds</a>
-      <a mat-button routerLink="/compare">Compare Funds</a>
-      @if (auth.isAdmin()) {
-        <a mat-button routerLink="/admin/sync">Sync Data</a>
-      }
+      <a mat-flat-button routerLink="/compare">Launch Comparator</a>
+    </mat-card-actions>
+  </mat-card>
+
+  <!-- Card 3: Portfolio Lab -->
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>
+        <span class="mono-code" style="margin-right: 6px; background: #fef3c7; color: #92400e;">03</span>
+        Portfolio Backtest Lab
+      </mat-card-title>
+      <mat-card-subtitle>SIP simulation &amp; strategy modeling</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <p style="margin: 0 0 10px; font-size: 12px; color: #475569; line-height: 1.5;">
+        Construct custom fund baskets with weights, run monthly SIP vs. lump-sum simulations, test periodic rebalancing, and execute what-if capital stress tests.
+      </p>
+      <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+        <span class="mono-code">SIP Backtesting</span>
+        <span class="mono-code">Rebalancing</span>
+        <span class="mono-code">Max Drawdown</span>
+      </div>
+    </mat-card-content>
+    <mat-card-actions>
+      <a mat-flat-button routerLink="/portfolio-lab">Open Strategy Lab</a>
+    </mat-card-actions>
+  </mat-card>
+
+  <!-- Card 4: User Portfolio & Ledger -->
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>
+        <span class="mono-code" style="margin-right: 6px; background: #f3e8ff; color: #6b21a8;">04</span>
+        User Portfolio &amp; Excel Ledger
+      </mat-card-title>
+      <mat-card-subtitle>Live holdings, true XIRR &amp; benchmark alpha</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <p style="margin: 0 0 10px; font-size: 12px; color: #475569; line-height: 1.5;">
+        Import trades from CAS Excel files or Google Sheets into AG Grid. Monitor live valuation, asset breakdown, SIP discipline consistency, and benchmark excess return.
+      </p>
+      <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+        <span class="mono-code">XIRR Analytics</span>
+        <span class="mono-code">Excel CAS Import</span>
+        <span class="mono-code">Benchmark Alpha</span>
+      </div>
+    </mat-card-content>
+    <mat-card-actions>
+      <a mat-flat-button routerLink="/portfolio">View Portfolio</a>
     </mat-card-actions>
   </mat-card>
 </section>
+
+<!-- ═══════════════════════════════════════════════
+     ADMIN OPERATIONS BAR (IF PRIVILEGED)
+═══════════════════════════════════════════════ -->
+@if (auth.isAdmin()) {
+  <mat-card appearance="outlined" style="border-left: 3px solid #0f766e !important;">
+    <mat-card-header>
+      <mat-card-title>Data Operations &amp; Administration Console</mat-card-title>
+      <mat-card-subtitle>Sync AMFI master records, review corporate action anomalies, and repair historical NAV gaps</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-actions>
+      <a mat-flat-button routerLink="/admin/sync">AMFI Sync Master</a>
+      <a mat-stroked-button routerLink="/admin/anomalies">Review Anomaly Queue</a>
+    </mat-card-actions>
+  </mat-card>
+}

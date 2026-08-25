@@ -18,6 +18,10 @@ import {
   PortfolioBenchmarkResponse,
   ImportDeletePreviewResponse,
   ImportPortfolioTransactionsResponse,
+  ImportCommitRequest,
+  ImportPreviewResult,
+  ImportStrategy,
+  YearTransactionSummary,
   UserGridPreference,
   MatchPortfolioFundRow,
   MatchPortfolioFundResponse,
@@ -89,6 +93,35 @@ export class PortfolioService {
       this.userPortfolioUrl(`${portfolioId}/transactions`),
       { financialYear, transactions },
     );
+  }
+
+  importPreview(portfolioId: number, file: File): Observable<ImportPreviewResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<ImportPreviewResult>(
+      this.userPortfolioUrl(`${portfolioId}/transactions/import-preview`),
+      formData,
+    );
+  }
+
+  importCommit(
+    portfolioId: number,
+    request: ImportCommitRequest,
+    financialYear?: string,
+  ): Observable<{
+    insertedCount: number;
+    strategy: ImportStrategy;
+    transactions: PortfolioTransaction[];
+    summary: YearTransactionSummary;
+  }> {
+    return this.http.post<{
+      insertedCount: number;
+      strategy: ImportStrategy;
+      transactions: PortfolioTransaction[];
+      summary: YearTransactionSummary;
+    }>(this.userPortfolioUrl(`${portfolioId}/transactions/import-commit`), request, {
+      params: financialYear ? { financialYear } : {},
+    });
   }
 
   importUserPortfolioTransactions(
