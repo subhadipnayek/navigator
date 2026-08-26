@@ -18,7 +18,7 @@ NAVigator/
 │   ├── go.sum
 │   └── README.md                   # API service route & testing documentation
 │
-├── navigator-ui/                    # Angular 21 Frontend Client
+├── navigator-ui/                    # Angular 22 Frontend Client
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── core/               # Auth guards, HTTP interceptors, API config

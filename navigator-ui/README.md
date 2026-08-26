@@ -1,6 +1,6 @@
 # navigator-ui 🧭
 
-> **Angular 21 Frontend Client for NAVigator Mutual Fund Analytics Terminal**
+> **Angular 22 Frontend Client for NAVigator Mutual Fund Analytics Terminal**
 
 `navigator-ui` is a high-density, real-time financial workstation and factsheet client built for mutual fund screening, multi-fund alpha comparisons, portfolio backtesting, and transaction ledger management.
 
@@ -8,12 +8,12 @@
 
 ## 🛠 Tech Stack
 
-- **Framework**: Angular 21 (Zoneless signals, standalone components)
-- **UI Components**: Angular Material 21 (configured at density `-3` for maximum information density)
+- **Framework**: Angular 22 (Zoneless signals, standalone components)
+- **UI Components**: Angular Material 22 (configured at density `-3` for maximum information density)
 - **Data Visualization**: [Lightweight Charts](https://tradingview.github.io/lightweight-charts/) (TradingView)
 - **Data Tables**: [AG Grid Community](https://www.ag-grid.com/) with Quartz theme
 - **Typography**: [Inter](https://fonts.google.com/specimen/Inter) & [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono) with tabular numeric alignment
-- **Spreadsheets**: XLSX / Excelize data exchange
+- **Spreadsheets**: ExcelJS / Excelize data exchange
 
 ---
 

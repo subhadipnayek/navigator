@@ -11,7 +11,7 @@ navigator is a full-stack financial analytics application designed to track mutu
 ```
                                ┌─────────────────────────┐
                                │   navigator-ui (SPA)    │
-                               │   Angular 21 + SCSS     │
+                               │   Angular 22 + SCSS     │
                                │      (Port 4000)        │
                                └────────────┬────────────┘
                                             │ HTTP / JSON

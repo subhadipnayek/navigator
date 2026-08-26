@@ -2,7 +2,7 @@
 
 ## 📌 Project Overview
 NAVigator (🧭) is a high-performance mutual fund analytics, NAV intelligence, and portfolio backtesting terminal built on a decoupled polyglot architecture:
-- **`navigator-ui`**: Angular 21 (Zoneless signals, Angular Material density -3, Lightweight Charts, AG Grid, tabular JetBrains Mono / Inter typography, Port `4000` / `4200` dev).
+- **`navigator-ui`**: Angular 22 (Zoneless signals, Angular Material density -3, Lightweight Charts, AG Grid, tabular JetBrains Mono / Inter typography, Port `4000` / `4200` dev).
 - **`navigator-api`**: Go 1.26 (Gin REST framework, GORM ORM, PostgreSQL driver, Excelize spreadsheet engine, PBKDF2 password hashing, JWT auth, XIRR solver, AMFI scraper & sync worker, Port `5038` / `8080` dev).
 - **`PostgreSQL 17 Alpine`**: Relational persistence on Port `5432` (`5433` on host in Docker Compose), storing fund master metadata, 30+ year daily NAV histories, user portfolios, transactions, corporate actions, and audit logs.
 - **`AMFI Integration & Sync Worker`**: Automated background worker and on-demand scraper fetching live and historical NAV data directly from the Association of Mutual Funds in India (AMFI).

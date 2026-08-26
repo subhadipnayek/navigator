@@ -26,7 +26,8 @@
                 "input": "public"
               }
             ],
-            "styles": ["src/styles.scss"]
+            "styles": ["src/styles.scss"],
+            "allowedCommonJsDependencies": ["exceljs"]
           },
           "configurations": {
             "production": {
@@ -84,7 +85,8 @@
                 "input": "public"
               }
             ],
-            "styles": ["src/styles.scss"]
+            "styles": ["src/styles.scss"],
+            "browsers": "ChromeHeadless"
           }
         }
       }

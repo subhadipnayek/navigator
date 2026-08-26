@@ -2,7 +2,7 @@ import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, OnDestroy, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AgGridAngular } from 'ag-grid-angular';
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import {
   AllCommunityModule,
   CellValueChangedEvent,
@@ -362,49 +362,51 @@ export class UserPortfolio implements OnInit, OnDestroy {
     this.scheduleTransactionAutosave();
   }
 
-  downloadExcelTemplate(): void {
-    const headers = [
-      'TradeDate',
-      'TradeType',
-      'Price',
-      'Quantity',
-      'SchemeCode',
-      'ISIN',
-      'SchemeName',
-      'Notes',
-    ];
-    const sampleRows = [
-      {
-        TradeDate: '2024-04-01',
-        TradeType: 'Buy',
-        Price: 25.34,
-        Quantity: 100,
-        SchemeCode: '120503',
-        ISIN: 'INF209K01UN8',
-        SchemeName: 'Axis Bluechip Fund - Direct Growth',
-        Notes: 'SIP April',
-      },
-      {
-        TradeDate: '2024-09-15',
-        TradeType: 'Sell',
-        Price: 31.20,
-        Quantity: 50,
-        SchemeCode: '120503',
-        ISIN: 'INF209K01UN8',
-        SchemeName: 'Axis Bluechip Fund - Direct Growth',
-        Notes: '',
-      },
+  async downloadExcelTemplate(): Promise<void> {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Transactions');
+    worksheet.columns = [
+      { header: 'TradeDate', key: 'TradeDate', width: 14 },
+      { header: 'TradeType', key: 'TradeType', width: 12 },
+      { header: 'Price', key: 'Price', width: 10 },
+      { header: 'Quantity', key: 'Quantity', width: 10 },
+      { header: 'SchemeCode', key: 'SchemeCode', width: 14 },
+      { header: 'ISIN', key: 'ISIN', width: 16 },
+      { header: 'SchemeName', key: 'SchemeName', width: 45 },
+      { header: 'Notes', key: 'Notes', width: 20 },
     ];
 
-    const worksheet = XLSX.utils.json_to_sheet(sampleRows, { header: headers });
+    worksheet.addRow({
+      TradeDate: '2024-04-01',
+      TradeType: 'Buy',
+      Price: 25.34,
+      Quantity: 100,
+      SchemeCode: '120503',
+      ISIN: 'INF209K01UN8',
+      SchemeName: 'Axis Bluechip Fund - Direct Growth',
+      Notes: 'SIP April',
+    });
+    worksheet.addRow({
+      TradeDate: '2024-09-15',
+      TradeType: 'Sell',
+      Price: 31.20,
+      Quantity: 50,
+      SchemeCode: '120503',
+      ISIN: 'INF209K01UN8',
+      SchemeName: 'Axis Bluechip Fund - Direct Growth',
+      Notes: '',
+    });
 
-    // Style the header row with a wider column width for readability
-    const columnWidths = [14, 12, 10, 10, 14, 16, 45, 20];
-    worksheet['!cols'] = columnWidths.map((wch) => ({ wch }));
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Transactions');
-    XLSX.writeFile(workbook, 'transaction-template.xlsx');
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'transaction-template.xlsx';
+    anchor.click();
+    window.URL.revokeObjectURL(url);
   }
 
   onStatementFileSelected(event: Event): void {
