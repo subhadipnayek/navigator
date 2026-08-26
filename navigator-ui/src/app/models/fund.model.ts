@@ -21,8 +21,10 @@ export interface Fund {
 export interface FundSyncResult {
   totalParsed: number;
   added: number;
+  inserted?: number;
   updated: number;
   unchanged: number;
+  total?: number;
   duration: string; // TimeSpan e.g. "00:00:12.3456789"
 }
 

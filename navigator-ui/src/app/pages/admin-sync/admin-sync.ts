@@ -116,13 +116,15 @@ export class AdminSync implements OnInit {
       next: (res) => {
         this.result.set(res);
         this.syncing.set(false);
-        this.toast.success(`Sync complete - ${res.added} added, ${res.updated} updated`);
+        const added = res.added ?? res.inserted ?? 0;
+        const updated = res.updated ?? 0;
+        this.toast.success(`Sync complete - ${added} added, ${updated} updated`);
         this.refreshAdminData();
       },
       error: (err) => {
         this.error.set(err.error?.message ?? 'Sync failed');
         this.syncing.set(false);
-        this.toast.error('Sync failed');
+        this.toast.error(err.error?.message ?? 'Sync failed');
       },
     });
   }
@@ -135,8 +137,9 @@ export class AdminSync implements OnInit {
     this.fundService.syncFundNavHistory(fund.schemeCode).subscribe({
       next: (res) => {
         this.actionBusy.set(null);
+        const count = res.data?.length ?? 0;
         this.toast.success(
-          `NAV synced - ${res.data.length.toLocaleString()} stored rows available`,
+          `NAV synced - ${count.toLocaleString()} stored rows available`,
         );
         this.refreshAdminData();
       },

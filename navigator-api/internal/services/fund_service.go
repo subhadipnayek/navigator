@@ -6,6 +6,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"navigator-api/internal/models"
 
@@ -82,6 +83,7 @@ func (s *FundService) GetFundCount(ctx context.Context) (int64, error) {
 }
 
 func (s *FundService) SyncFundMasterList(ctx context.Context) (*models.FundSyncResultDto, error) {
+	startTime := time.Now()
 	log.Println("Starting AMFI Fund Master sync...")
 	funds, err := s.amfiService.FetchFundMasterList(ctx)
 	if err != nil {
@@ -89,7 +91,11 @@ func (s *FundService) SyncFundMasterList(ctx context.Context) (*models.FundSyncR
 	}
 
 	if len(funds) == 0 {
-		return &models.FundSyncResultDto{Total: 0}, nil
+		return &models.FundSyncResultDto{
+			TotalParsed: 0,
+			Total:       0,
+			Duration:    time.Since(startTime).String(),
+		}, nil
 	}
 
 	batchSize := 1000
@@ -124,11 +130,16 @@ func (s *FundService) SyncFundMasterList(ctx context.Context) (*models.FundSyncR
 		inserted += len(batch)
 	}
 
-	log.Printf("AMFI Fund Master sync complete: processed %d funds", len(funds))
+	durationStr := time.Since(startTime).String()
+	log.Printf("AMFI Fund Master sync complete: processed %d funds in %s", len(funds), durationStr)
 	return &models.FundSyncResultDto{
-		Total:    len(funds),
-		Inserted: inserted,
-		Updated:  updated,
+		TotalParsed: len(funds),
+		Added:       inserted,
+		Inserted:    inserted,
+		Updated:     updated,
+		Unchanged:   len(funds) - inserted - updated,
+		Total:       len(funds),
+		Duration:    durationStr,
 	}, nil
 }
 

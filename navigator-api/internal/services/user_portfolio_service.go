@@ -172,7 +172,27 @@ func (s *UserPortfolioService) GetDashboard(
 			}
 		}
 		if fundName == "" {
+			for _, tx := range txList {
+				displayName := resolveTransactionDisplayName(&tx)
+				if !strings.HasPrefix(displayName, "Scheme ") && !strings.HasPrefix(displayName, "Fund ") {
+					fundName = displayName
+					break
+				}
+			}
+		}
+		if fundName == "" {
 			fundName = fmt.Sprintf("Fund %d", sc)
+		}
+		if sc >= 900000 {
+			if fundHouse == "" {
+				fundHouse = "Direct Equity / ETF"
+			}
+			if category == "" {
+				category = "Equity"
+			}
+			if assetClass == "" {
+				assetClass = "Equity"
+			}
 		}
 		if assetClass == "" {
 			assetClass = "Equity"
@@ -337,6 +357,40 @@ func (s *UserPortfolioService) GetDashboard(
 	}, nil
 }
 
+func resolveTransactionDisplayName(tx *models.PortfolioTransaction) string {
+	if tx.Fund != nil && tx.Fund.SchemeName != "" {
+		return tx.Fund.SchemeName
+	}
+	if tx.Notes != nil && *tx.Notes != "" {
+		notes := *tx.Notes
+		if strings.Contains(notes, "Symbol: ") {
+			parts := strings.Split(notes, "Symbol: ")
+			if len(parts) > 1 {
+				sym := strings.TrimSpace(strings.Split(parts[1], "|")[0])
+				if sym != "" {
+					return sym
+				}
+			}
+		}
+		if strings.Contains(notes, "Folio: ") && strings.Contains(notes, "CAMS") {
+			parts := strings.Split(notes, "| CAMS")
+			if len(parts) > 0 {
+				folio := strings.TrimPrefix(parts[0], "Folio: ")
+				if trimmed := strings.TrimSpace(folio); trimmed != "" {
+					return fmt.Sprintf("Mutual Fund (Folio %s)", trimmed)
+				}
+			}
+		}
+	}
+	if tx.Isin != nil && *tx.Isin != "" {
+		return *tx.Isin
+	}
+	if tx.SchemeCode >= 900000 {
+		return fmt.Sprintf("Direct Equity (%d)", tx.SchemeCode)
+	}
+	return fmt.Sprintf("Scheme %d", tx.SchemeCode)
+}
+
 func (s *UserPortfolioService) GetTransactions(ctx context.Context, userId int, portfolioId int64, financialYear string) ([]models.PortfolioTransactionDto, *models.PortfolioTransactionsSummaryDto, error) {
 	var portfolio models.UserPortfolio
 	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", portfolioId, userId).First(&portfolio).Error; err != nil {
@@ -369,13 +423,7 @@ func (s *UserPortfolioService) GetTransactions(ctx context.Context, userId int, 
 	totalRedemptions := 0.0
 
 	for _, tx := range rows {
-		name := ""
-		if tx.Fund != nil {
-			name = tx.Fund.SchemeName
-		}
-		if name == "" {
-			name = fmt.Sprintf("Scheme %d", tx.SchemeCode)
-		}
+		name := resolveTransactionDisplayName(&tx)
 
 		dtos = append(dtos, models.PortfolioTransactionDto{
 			Id:              tx.Id,

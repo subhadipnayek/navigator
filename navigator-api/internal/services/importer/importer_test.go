@@ -132,6 +132,13 @@ func TestDeduplicationFingerprintsAndOccurrences(t *testing.T) {
 	if classified[1].Status != importer.StatusNew {
 		t.Errorf("Expected 2nd occurrence to be New (genuine 2nd order), got %s", classified[1].Status)
 	}
+
+	// 5. Cross-broker deduplication: SIP and Buy on same date for same fund at same units/nav produce identical base signature
+	sigSIP := dedup.ComputeSignature(101, 120503, "2023-05-15", "SIP", 50.0, 100.0)
+	sigBuy := dedup.ComputeSignature(101, 120503, "2023-05-15", "Buy", 50.0, 100.0)
+	if sigSIP != sigBuy {
+		t.Errorf("Expected matching signatures for SIP and Buy, got %s != %s", sigSIP, sigBuy)
+	}
 }
 
 func TestCamsParserSchemeEnrichmentAndNoiseStripping(t *testing.T) {

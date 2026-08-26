@@ -54,6 +54,12 @@ export class AuthService {
   }
 
   private setAuth(response: AuthResponse): void {
+    if (!response.expiresAtUtc && response.token) {
+      const expMs = this.getJwtExpiryMs(response.token);
+      if (!isNaN(expMs)) {
+        response.expiresAtUtc = new Date(expMs).toISOString();
+      }
+    }
     this.state.set(response);
     if (isPlatformBrowser(this.platformId)) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(response));
@@ -61,24 +67,47 @@ export class AuthService {
   }
 
   /**
-   * REPAIRED: Logic wrapped in untracked()
+   * REPAIRED: Logic wrapped in untracked() with JWT decode fallback
    */
   private currentAuth(): AuthResponse | null {
     const auth = this.state();
+    if (!auth) return null;
 
-    // Check if auth exists and if it is expired
-    const isExpired = auth && new Date(auth.expiresAtUtc).getTime() <= Date.now();
+    let expiresAtMs = auth.expiresAtUtc ? new Date(auth.expiresAtUtc).getTime() : NaN;
+    if (isNaN(expiresAtMs) && auth.token) {
+      expiresAtMs = this.getJwtExpiryMs(auth.token);
+    }
 
-    if (!auth || isExpired) {
-      if (auth) {
-        // untracked allows us to call logout (which modifies state)
-        // without crashing the computed signal chain.
-        untracked(() => this.logout());
-      }
+    const isExpired = !isNaN(expiresAtMs) && expiresAtMs <= Date.now();
+
+    if (isExpired) {
+      untracked(() => this.logout());
       return null;
     }
 
     return auth;
+  }
+
+  private getJwtExpiryMs(token: string): number {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return NaN;
+      const base64Url = parts[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      const payload = JSON.parse(jsonPayload);
+      if (payload && typeof payload.exp === 'number') {
+        return payload.exp * 1000;
+      }
+    } catch {
+      // Ignore decoding errors
+    }
+    return NaN;
   }
 
   private readStoredAuth(): AuthResponse | null {

@@ -16,8 +16,9 @@ type LoginRequest struct {
 }
 
 type AuthResponse struct {
-	Token string      `json:"token"`
-	User  AuthUserDto `json:"user"`
+	Token        string      `json:"token"`
+	ExpiresAtUtc time.Time   `json:"expiresAtUtc"`
+	User         AuthUserDto `json:"user"`
 }
 
 type AuthUserDto struct {
@@ -49,9 +50,13 @@ type FundDto struct {
 }
 
 type FundSyncResultDto struct {
-	Inserted int `json:"inserted"`
-	Updated  int `json:"updated"`
-	Total    int `json:"total"`
+	TotalParsed int    `json:"totalParsed"`
+	Added       int    `json:"added"`
+	Inserted    int    `json:"inserted"`
+	Updated     int    `json:"updated"`
+	Unchanged   int    `json:"unchanged"`
+	Total       int    `json:"total"`
+	Duration    string `json:"duration"`
 }
 
 // ─── NAV DTOs ───

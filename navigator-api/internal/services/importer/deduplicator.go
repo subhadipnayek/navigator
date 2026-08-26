@@ -15,9 +15,21 @@ func NewDeduplicationEngine() *DeduplicationEngine {
 	return &DeduplicationEngine{}
 }
 
+func normalizeActionForDedup(txType string) string {
+	lower := strings.ToLower(strings.TrimSpace(txType))
+	switch {
+	case strings.Contains(lower, "sell") || strings.Contains(lower, "redemption") || strings.Contains(lower, "switch out") || strings.Contains(lower, "redeem"):
+		return "sell"
+	case strings.Contains(lower, "dividend") && strings.Contains(lower, "reinvest"):
+		return "div_reinvest"
+	default:
+		return "buy"
+	}
+}
+
 // ComputeSignature creates a normalized base key for grouping non-TradeID transactions.
 func (d *DeduplicationEngine) ComputeSignature(portfolioID int64, schemeCode int, dateStr string, txType string, units float64, price float64) string {
-	normType := strings.ToLower(strings.TrimSpace(txType))
+	normType := normalizeActionForDedup(txType)
 	return fmt.Sprintf("%d|%d|%s|%s|%.4f|%.4f",
 		portfolioID,
 		schemeCode,

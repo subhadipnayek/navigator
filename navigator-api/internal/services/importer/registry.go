@@ -16,8 +16,8 @@ func NewBrokerRegistry() *BrokerRegistry {
 	// Register default standard institutional parsers in priority order
 	r.Register(NewCamsParser())
 	r.Register(NewKFintechParser())
-	r.Register(NewZerodhaMFParser())
 	r.Register(NewZerodhaEquityParser())
+	r.Register(NewZerodhaMFParser())
 	r.Register(NewGenericParser())
 	return r
 }

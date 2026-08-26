@@ -94,7 +94,7 @@ func (h *AdminHandler) GetFunds(c *gin.Context) {
 	offset := (page - 1) * pageSize
 	_ = query.Order("scheme_name asc").Offset(offset).Limit(pageSize).Find(&funds).Error
 
-	var items []models.AdminFundStorageDto
+	items := make([]models.AdminFundStorageDto, 0)
 	for _, f := range funds {
 		item := models.AdminFundStorageDto{
 			SchemeCode:     f.SchemeCode,

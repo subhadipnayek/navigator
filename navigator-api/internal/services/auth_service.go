@@ -74,7 +74,8 @@ func (s *AuthService) VerifyPassword(password, storedHash string) bool {
 	return subtle.ConstantTimeCompare(actualHash, expectedHash) == 1
 }
 
-func (s *AuthService) GenerateToken(user *models.AppUser) (string, error) {
+func (s *AuthService) GenerateToken(user *models.AppUser) (string, time.Time, error) {
+	expiresAt := time.Now().UTC().Add(s.cfg.JwtExpiryDuration())
 	claims := jwt.MapClaims{
 		"sub":   strconv.Itoa(user.Id),
 		"name":  user.Username,
@@ -82,12 +83,13 @@ func (s *AuthService) GenerateToken(user *models.AppUser) (string, error) {
 		"role":  user.Role,
 		"iss":   s.cfg.JwtIssuer,
 		"aud":   s.cfg.JwtAudience,
-		"exp":   time.Now().Add(s.cfg.JwtExpiryDuration()).Unix(),
+		"exp":   expiresAt.Unix(),
 		"iat":   time.Now().Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(s.cfg.JwtSecret))
+	tokenStr, err := token.SignedString([]byte(s.cfg.JwtSecret))
+	return tokenStr, expiresAt, err
 }
 
 func (s *AuthService) Register(req *models.RegisterRequest) (*models.AuthResponse, error) {
@@ -127,13 +129,14 @@ func (s *AuthService) Register(req *models.RegisterRequest) (*models.AuthRespons
 		return nil, err
 	}
 
-	token, err := s.GenerateToken(&user)
+	token, expiresAt, err := s.GenerateToken(&user)
 	if err != nil {
 		return nil, err
 	}
 
 	return &models.AuthResponse{
-		Token: token,
+		Token:        token,
+		ExpiresAtUtc: expiresAt,
 		User: models.AuthUserDto{
 			Id:       user.Id,
 			Username: user.Username,
@@ -156,13 +159,14 @@ func (s *AuthService) Login(req *models.LoginRequest) (*models.AuthResponse, err
 		return nil, errors.New("invalid username/email or password")
 	}
 
-	token, err := s.GenerateToken(&user)
+	token, expiresAt, err := s.GenerateToken(&user)
 	if err != nil {
 		return nil, err
 	}
 
 	return &models.AuthResponse{
-		Token: token,
+		Token:        token,
+		ExpiresAtUtc: expiresAt,
 		User: models.AuthUserDto{
 			Id:       user.Id,
 			Username: user.Username,

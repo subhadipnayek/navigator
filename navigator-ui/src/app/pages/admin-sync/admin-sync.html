@@ -167,7 +167,7 @@
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
-      <table mat-table [dataSource]="pageData.items">
+      <table mat-table [dataSource]="pageData.items || []">
         <ng-container matColumnDef="scheme">
           <th mat-header-cell *matHeaderCellDef>Scheme</th>
           <td mat-cell *matCellDef="let fund">
@@ -270,7 +270,7 @@
         Next
       </button>
       <span class="table-footnote">
-        Showing {{ pageData.items.length | number }} of {{ pageData.totalItems | number }}
+        Showing {{ (pageData.items ? pageData.items.length : 0) | number }} of {{ pageData.totalItems | number }}
       </span>
     </mat-card-actions>
   </mat-card>

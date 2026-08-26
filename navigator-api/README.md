@@ -43,8 +43,11 @@ navigator-api/
 ## 📡 REST API Routes
 
 ### Authentication (`/api/auth`)
-- `POST /api/auth/register`: Create a new user account.
+- `POST /api/auth/register`: Create a new user account (automatically promotes the first registered user to `Admin`/root).
 - `POST /api/auth/login`: Authenticate and receive JWT access token.
+- `GET /api/auth/me`: Get current authenticated user profile and role (`Admin` or `User`).
+- `GET /api/auth/users`: List registered users (Admin only).
+- `PUT /api/auth/users/:userId/role`: Modify user role permissions (Admin only).
 
 ### Funds (`/api/funds`)
 - `GET /api/funds`: List mutual fund schemes (paginated).

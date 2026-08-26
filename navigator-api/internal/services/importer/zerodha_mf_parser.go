@@ -21,19 +21,26 @@ func (p *ZerodhaMFParser) DisplayName() string {
 }
 
 func (p *ZerodhaMFParser) Match(rows [][]string) bool {
-	// Look for Zerodha MF tradebook headers
 	headerIdx, hMap := FindHeaderRow(rows, 25, "symbol", "tradedate", "tradetype", "quantity", "price")
 	if headerIdx < 0 {
 		return false
 	}
-	// Check for MF segment or ISIN INF prefix
-	if _, ok := hMap["isin"]; ok {
-		// Check sample rows below header
-		for r := headerIdx + 1; r < len(rows) && r < headerIdx+5; r++ {
-			rowStr := strings.Join(rows[r], " ")
-			if strings.Contains(rowStr, "INF") || strings.Contains(strings.ToUpper(rowStr), "MUTUAL FUND") || strings.Contains(strings.ToUpper(rowStr), "DIRECT PLAN") {
+	// Check if segment is explicitly MF
+	if _, ok := hMap["segment"]; ok {
+		for r := headerIdx + 1; r < len(rows) && r < headerIdx+10; r++ {
+			seg := strings.ToUpper(GetCell(rows[r], hMap, "segment"))
+			if seg == "MF" {
 				return true
 			}
+		}
+	}
+	// Check for Mutual Fund tradebook characteristics in Symbol/Name column
+	for r := headerIdx + 1; r < len(rows) && r < headerIdx+15; r++ {
+		sym := strings.ToUpper(GetCell(rows[r], hMap, "symbol"))
+		isin := strings.ToUpper(GetCell(rows[r], hMap, "isin"))
+		if strings.Contains(sym, "DIRECT PLAN") || strings.Contains(sym, "REGULAR PLAN") || strings.Contains(sym, "MUTUAL FUND") ||
+			(strings.HasPrefix(isin, "INF") && !strings.HasSuffix(sym, "BEES") && !strings.HasSuffix(sym, "ETF") && !strings.Contains(sym, "GOLD") && !strings.Contains(sym, "SILVER")) {
+			return true
 		}
 	}
 	return false
@@ -77,7 +84,15 @@ func (p *ZerodhaMFParser) Parse(rows [][]string) ([]RawTradeDraft, error) {
 
 		canonicalType := CanonicalTransactionType(typeRaw)
 
-		notes := fmt.Sprintf("Zerodha Coin | Trade ID: %s", tradeID)
+		assetType := AssetMutualFund
+		upperSym := strings.ToUpper(symbol)
+		if strings.HasPrefix(isin, "INE") {
+			assetType = AssetStock
+		} else if strings.HasSuffix(upperSym, "BEES") || strings.HasSuffix(upperSym, "ETF") {
+			assetType = AssetETF
+		}
+
+		notes := fmt.Sprintf("Symbol: %s | Zerodha Coin | Trade ID: %s", symbol, tradeID)
 		if orderID != "" && orderID != tradeID {
 			notes += fmt.Sprintf(" | Order ID: %s", orderID)
 		}
@@ -85,7 +100,7 @@ func (p *ZerodhaMFParser) Parse(rows [][]string) ([]RawTradeDraft, error) {
 		drafts = append(drafts, RawTradeDraft{
 			SourceRowNumber: rIdx + 1,
 			BrokerName:      p.DisplayName(),
-			AssetType:       AssetMutualFund,
+			AssetType:       assetType,
 			Symbol:          symbol,
 			ISIN:            isin,
 			SchemeName:      symbol,

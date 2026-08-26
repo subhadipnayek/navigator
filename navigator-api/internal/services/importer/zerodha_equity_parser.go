@@ -25,12 +25,22 @@ func (p *ZerodhaEquityParser) Match(rows [][]string) bool {
 	if headerIdx < 0 {
 		return false
 	}
-	if _, ok := hMap["isin"]; ok {
-		for r := headerIdx + 1; r < len(rows) && r < headerIdx+5; r++ {
-			rowStr := strings.Join(rows[r], " ")
-			if strings.Contains(rowStr, "INE") || strings.Contains(rowStr, "EQ") {
-				return true
+	// Reject if segment is explicitly MF
+	if _, ok := hMap["segment"]; ok {
+		for r := headerIdx + 1; r < len(rows) && r < headerIdx+10; r++ {
+			seg := strings.ToUpper(GetCell(rows[r], hMap, "segment"))
+			if seg == "MF" {
+				return false
 			}
+		}
+	}
+	// Check for equity signatures across data rows: Exchange is NSE/BSE, Segment is EQ, or ISIN is INE...
+	for r := headerIdx + 1; r < len(rows) && r < headerIdx+15; r++ {
+		ex := strings.ToUpper(GetCell(rows[r], hMap, "exchange"))
+		seg := strings.ToUpper(GetCell(rows[r], hMap, "segment"))
+		isin := strings.ToUpper(GetCell(rows[r], hMap, "isin"))
+		if ex == "NSE" || ex == "BSE" || seg == "EQ" || strings.HasPrefix(isin, "INE") {
+			return true
 		}
 	}
 	return false
@@ -77,11 +87,13 @@ func (p *ZerodhaEquityParser) Parse(rows [][]string) ([]RawTradeDraft, error) {
 
 		assetType := AssetStock
 		upperSym := strings.ToUpper(symbol)
-		if strings.HasSuffix(upperSym, "BEES") || strings.HasSuffix(upperSym, "ETF") || strings.Contains(upperSym, "GOLD") || strings.Contains(upperSym, "SILVER") {
+		if strings.HasSuffix(upperSym, "BEES") || strings.HasSuffix(upperSym, "ETF") || strings.Contains(upperSym, "GOLD") || strings.Contains(upperSym, "SILVER") || strings.Contains(upperSym, "LIQUID") {
 			assetType = AssetETF
+		} else if strings.HasPrefix(isin, "INF") && (strings.Contains(upperSym, "DIRECT") || strings.Contains(upperSym, "GROWTH") || strings.Contains(upperSym, "PLAN") || strings.Contains(upperSym, "FUND")) {
+			assetType = AssetMutualFund
 		}
 
-		notes := fmt.Sprintf("Zerodha Kite | %s | Trade ID: %s", exchange, tradeID)
+		notes := fmt.Sprintf("Symbol: %s | Zerodha Kite | %s | Trade ID: %s", symbol, exchange, tradeID)
 		if orderID != "" && orderID != tradeID {
 			notes += fmt.Sprintf(" | Order ID: %s", orderID)
 		}
