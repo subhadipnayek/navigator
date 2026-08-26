@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -39,11 +40,31 @@ func NewAmfiService(integrationSvc ...*IntegrationService) *AmfiService {
 	}
 }
 
+type AmfiNavHistoryRecord struct {
+	Date              string      `json:"date"`
+	Nav               interface{} `json:"nav"`
+	UploadTime        string      `json:"upload_time"`
+	UploadTimeDisplay string      `json:"upload_time_display"`
+	Repurchase        interface{} `json:"repurchase"`
+	Reissue           interface{} `json:"reissue"`
+}
+
+type AmfiNavGroup struct {
+	NavName           string                 `json:"nav_name"`
+	HistoricalRecords []AmfiNavHistoryRecord `json:"historical_records"`
+}
+
+type AmfiNavHistoryData struct {
+	MfName     string         `json:"mf_name"`
+	SchemeName string         `json:"scheme_name"`
+	DateRange  string         `json:"date_range"`
+	NavGroups  []AmfiNavGroup `json:"nav_groups"`
+}
+
 type AmfiNavHistoryApiResponse struct {
-	Data []struct {
-		Date string `json:"date"`
-		Nav  string `json:"nav"`
-	} `json:"data"`
+	Data    *AmfiNavHistoryData `json:"data"`
+	Message string              `json:"message"`
+	Error   string              `json:"error"`
 }
 
 type LatestNavSnapshot struct {
@@ -262,15 +283,74 @@ func ParseLatestNavAll(r io.Reader) ([]LatestNavSnapshot, error) {
 	return snapshots, scanner.Err()
 }
 
+// FetchNavHistory fetches historical NAV data for a scheme across any arbitrary time window (from days to 30+ years)
+// by automatically partitioning the window into <= 4-year chunks compliant with AMFI upstream limits.
 func (s *AmfiService) FetchNavHistory(ctx context.Context, schemeCode int, from, to time.Time) ([]models.NavHistory, error) {
+	if schemeCode <= 0 {
+		return nil, fmt.Errorf("invalid scheme code %d", schemeCode)
+	}
+
+	if to.IsZero() {
+		to = IndiaToday()
+	}
+	if from.IsZero() {
+		from = to.AddDate(-30, 0, 0)
+	}
+	if from.After(to) {
+		from, to = to, from
+	}
+
+	// Partition date range into <= 4-year sliding intervals to satisfy AMFI's < 5-year limit
+	var chunks [][2]time.Time
+	currFrom := from
+	for !currFrom.After(to) {
+		currTo := currFrom.AddDate(4, 0, 0)
+		if currTo.After(to) {
+			currTo = to
+		}
+		chunks = append(chunks, [2]time.Time{currFrom, currTo})
+		currFrom = currTo.AddDate(0, 0, 1)
+	}
+
+	recordMap := make(map[string]models.NavHistory)
+
+	for _, chunk := range chunks {
+		chunkFrom, chunkTo := chunk[0], chunk[1]
+		chunkRecords, err := s.fetchNavHistoryChunk(ctx, schemeCode, chunkFrom, chunkTo)
+		if err != nil {
+			continue
+		}
+		for _, r := range chunkRecords {
+			dateKey := r.Date.Format(DateFormatYYYYMMDD)
+			recordMap[dateKey] = r
+		}
+	}
+
+	if len(recordMap) == 0 {
+		return nil, nil
+	}
+
+	result := make([]models.NavHistory, 0, len(recordMap))
+	for _, r := range recordMap {
+		result = append(result, r)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Date.Before(result[j].Date)
+	})
+
+	return result, nil
+}
+
+func (s *AmfiService) fetchNavHistoryChunk(ctx context.Context, schemeCode int, from, to time.Time) ([]models.NavHistory, error) {
 	baseUrl := AmfiNavHistoryURL
 	if s.integrationService != nil {
 		baseUrl = s.integrationService.GetActiveUrl(ctx, "AMFI_NAV_HISTORY_URL", AmfiNavHistoryURL)
 	}
 
-	// Query AMFI history chunk
-	url := fmt.Sprintf("%s?schemeCode=%d&fromDate=%s&toDate=%s",
-		baseUrl, schemeCode, FormatDateDDMMYYYY(from), FormatDateDDMMYYYY(to))
+	// Query AMFI modern history endpoint
+	url := fmt.Sprintf("%s?query_type=historical_period&from_date=%s&to_date=%s&sd_id=%d",
+		baseUrl, FormatDateYYYYMMDD(from), FormatDateYYYYMMDD(to), schemeCode)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -280,7 +360,6 @@ func (s *AmfiService) FetchNavHistory(ctx context.Context, schemeCode int, from,
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		// Fallback or empty
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -294,26 +373,65 @@ func (s *AmfiService) FetchNavHistory(ctx context.Context, schemeCode int, from,
 		return nil, err
 	}
 
+	return ParseAmfiNavHistoryJson(body, schemeCode)
+}
+
+// ParseAmfiNavHistoryJson parses the modern AMFI historical NAV JSON response payload.
+func ParseAmfiNavHistoryJson(body []byte, schemeCode int) ([]models.NavHistory, error) {
 	var apiResp AmfiNavHistoryApiResponse
-	if err := json.Unmarshal(body, &apiResp); err == nil && len(apiResp.Data) > 0 {
-		var list []models.NavHistory
-		for _, item := range apiResp.Data {
-			d, err := ParseDate(item.Date)
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		return nil, err
+	}
+
+	if apiResp.Data == nil || len(apiResp.Data.NavGroups) == 0 {
+		return nil, nil
+	}
+
+	var list []models.NavHistory
+	for _, grp := range apiResp.Data.NavGroups {
+		for _, rec := range grp.HistoricalRecords {
+			d, err := ParseDate(rec.Date)
 			if err != nil {
 				continue
 			}
-			val, err := strconv.ParseFloat(item.Nav, 64)
-			if err != nil || val <= 0 {
+
+			var val float64
+			switch v := rec.Nav.(type) {
+			case float64:
+				val = v
+			case float32:
+				val = float64(v)
+			case int:
+				val = float64(v)
+			case int64:
+				val = float64(v)
+			case string:
+				parsed, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+				if err != nil {
+					continue
+				}
+				val = parsed
+			case json.Number:
+				parsed, err := v.Float64()
+				if err != nil {
+					continue
+				}
+				val = parsed
+			default:
 				continue
 			}
+
+			if val <= 0 {
+				continue
+			}
+
 			list = append(list, models.NavHistory{
 				SchemeCode: schemeCode,
 				Date:       d,
 				Nav:        val,
 			})
 		}
-		return list, nil
 	}
-
-	return nil, nil
+	return list, nil
 }
+

@@ -57,11 +57,11 @@ navigator-api/
 - `POST /api/funds/sync`: Trigger on-demand sync with AMFI master.
 
 ### NAV History & Returns (`/api/nav`)
-- `GET /api/nav/:code`: Fetch NAV historical points (with interval & split-adjustment options).
-- `GET /api/nav/:code/returns`: Calculate point-to-point CAGR and absolute returns.
-- `GET /api/nav/:code/rolling-returns`: Compute rolling return series and statistics.
+- `GET /api/nav/:code`: Fetch NAV historical points (with interval & split-adjustment options; automatically lazy-loads deep 30+ year history on-demand in real-time from AMFI if not present in DB).
+- `GET /api/nav/:code/returns`: Calculate point-to-point CAGR and absolute returns (with on-demand lazy-loading fallback).
+- `GET /api/nav/:code/rolling-returns`: Compute rolling return series and statistics (with on-demand lazy-loading fallback).
 - `GET /api/nav/:code/gaps`: Detect missing NAV dates.
-- `POST /api/nav/:code/repair-gaps`: Automatically backfill verified data gaps.
+- `POST /api/nav/:code/repair-gaps`: Automatically backfill verified data gaps via multi-chunk AMFI time-series queries.
 
 ### Portfolio Backtesting & Lab (`/api/portfolio`)
 - `POST /api/portfolio/simulate`: Simulate custom multi-asset basket with SIP/Lump-sum.

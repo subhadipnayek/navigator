@@ -59,6 +59,13 @@ func FormatDateDDMMYYYY(t time.Time) string {
 	return t.Format(DateFormatDDMMYYYY)
 }
 
+func FormatDateYYYYMMDD(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(DateFormatYYYYMMDD)
+}
+
 func FormatDatePtr(t *time.Time) *string {
 	if t == nil || t.IsZero() {
 		return nil

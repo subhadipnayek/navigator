@@ -47,14 +47,39 @@ func (s *NavService) GetNavHistory(
 		return nil, err
 	}
 
-	// If no records in DB, try fetching on-demand from AMFI
+	// If no records in DB for this scheme, lazy-load deep historical NAVs from AMFI in real-time
 	if len(navs) == 0 {
-		now := IndiaToday()
-		fiveYearsAgo := now.AddDate(-5, 0, 0)
-		fetched, err := s.amfiService.FetchNavHistory(ctx, schemeCode, fiveYearsAgo, now)
-		if err == nil && len(fetched) > 0 {
-			_ = s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&fetched).Error
-			navs = fetched
+		var totalRecords int64
+		_ = s.db.WithContext(ctx).Model(&models.NavHistory{}).Where("scheme_code = ?", schemeCode).Count(&totalRecords).Error
+		if totalRecords == 0 {
+			now := IndiaToday()
+			fetchFrom := now.AddDate(-30, 0, 0)
+			if from != nil && !from.IsZero() && from.Before(fetchFrom) {
+				fetchFrom = *from
+			}
+			fetched, err := s.amfiService.FetchNavHistory(ctx, schemeCode, fetchFrom, now)
+			if err == nil && len(fetched) > 0 {
+				const batchSize = 1000
+				for i := 0; i < len(fetched); i += batchSize {
+					end := i + batchSize
+					if end > len(fetched) {
+						end = len(fetched)
+					}
+					_ = s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(fetched[i:end]).Error
+				}
+
+				s.updateNavSyncTracker(ctx, schemeCode, fetched)
+
+				for _, f := range fetched {
+					if from != nil && f.Date.Before(*from) {
+						continue
+					}
+					if to != nil && f.Date.After(*to) {
+						continue
+					}
+					navs = append(navs, f)
+				}
+			}
 		}
 	}
 
@@ -105,6 +130,11 @@ func (s *NavService) GetReturns(ctx context.Context, schemeCode int, startDate, 
 
 	var navs []models.NavHistory
 	if err := s.db.WithContext(ctx).Where("scheme_code = ? AND date >= ? AND date <= ?", schemeCode, startDate.AddDate(0, 0, -10), endDate.AddDate(0, 0, 10)).Order("date asc").Find(&navs).Error; err != nil || len(navs) == 0 {
+		_, _ = s.GetNavHistory(ctx, schemeCode, nil, nil, "daily", false)
+		_ = s.db.WithContext(ctx).Where("scheme_code = ? AND date >= ? AND date <= ?", schemeCode, startDate.AddDate(0, 0, -10), endDate.AddDate(0, 0, 10)).Order("date asc").Find(&navs).Error
+	}
+
+	if len(navs) == 0 {
 		return nil, fmt.Errorf("no NAV history available for scheme %d", schemeCode)
 	}
 
@@ -151,6 +181,10 @@ func (s *NavService) GetRollingReturns(
 	var navs []models.NavHistory
 	query := s.db.WithContext(ctx).Where("scheme_code = ?", schemeCode)
 	if err := query.Order("date asc").Find(&navs).Error; err != nil || len(navs) < 20 {
+		_, _ = s.GetNavHistory(ctx, schemeCode, nil, nil, "daily", false)
+		_ = s.db.WithContext(ctx).Where("scheme_code = ?", schemeCode).Order("date asc").Find(&navs).Error
+	}
+	if len(navs) < 20 {
 		return nil, fmt.Errorf("insufficient NAV data for rolling returns")
 	}
 
@@ -296,6 +330,7 @@ func (s *NavService) EnsureNavHistories(ctx context.Context, schemeCodes []int, 
 			fetched, err := s.amfiService.FetchNavHistory(ctx, sc, start, end)
 			if err == nil && len(fetched) > 0 {
 				_ = s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&fetched).Error
+				s.updateNavSyncTracker(ctx, sc, fetched)
 				navs = fetched
 			}
 		}
@@ -303,3 +338,40 @@ func (s *NavService) EnsureNavHistories(ctx context.Context, schemeCodes []int, 
 	}
 	return res, nil
 }
+
+func (s *NavService) updateNavSyncTracker(ctx context.Context, schemeCode int, navs []models.NavHistory) {
+	if len(navs) == 0 {
+		return
+	}
+	minDate := navs[0].Date
+	maxDate := navs[len(navs)-1].Date
+	latestNav := navs[len(navs)-1].Nav
+	nowIst := IndiaNow()
+	nowUtc := time.Now().UTC()
+	count := len(navs)
+
+	tracker := models.NavSyncTracker{
+		SchemeCode:              schemeCode,
+		NavStartDate:            &minDate,
+		NavEndDate:              &maxDate,
+		LatestNav:               &latestNav,
+		LatestNavDate:           &maxDate,
+		NavHistoryCount:         count,
+		LastLatestNavCheckAtIst: &nowIst,
+		UpdatedAtUtc:            nowUtc,
+	}
+
+	_ = s.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "scheme_code"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"nav_start_date",
+			"nav_end_date",
+			"latest_nav",
+			"latest_nav_date",
+			"nav_history_count",
+			"last_latest_nav_check_at_ist",
+			"updated_at",
+		}),
+	}).Create(&tracker).Error
+}
+

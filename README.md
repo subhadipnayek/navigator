@@ -32,7 +32,7 @@ navigator is a full-stack financial analytics application designed to track mutu
 
 ### Key Modules & Capabilities
 
-- **AMFI Integration & Sync Engine**: Automated background sync worker and on-demand synchronization for mutual fund schemes, daily NAVs, and historical data.
+- **AMFI Integration & Modern NAV Timeseries Engine**: Automated background sync worker, real-time lazy-loaded historical backfills, and multi-chunk sliding window retrieval ($\le 4$ years per chunk) for full 30+ year daily NAV histories from `amfiindia.com/api/nav-history`.
 - **Portfolio Lab & Simulation**: Backtest SIP and lump-sum investments across custom asset allocation baskets, calculate CAGR/XIRR, drawdowns, and side-by-side fund comparisons.
 - **Rolling Returns Engine**: Compute rolling return windows (1Y, 3Y, 5Y) with median, min, max, standard deviation, and quartile breakdowns.
 - **User Portfolios & Transaction Ledger**: Track real user portfolios, parse CAMS/KFintech Excel statements, track historical valuations, and compute realized/unrealized PnL.

@@ -2,6 +2,7 @@ package database
 
 import (
 	"log"
+	"strings"
 	"time"
 
 	"navigator-api/internal/config"
@@ -95,24 +96,24 @@ func seedDefaultEndpointConfigs(db *gorm.DB) {
 		{
 			Key:             "AMFI_NAV_HISTORY_URL",
 			Name:            "AMFI Historical NAV API",
-			Description:     "Historical time-series endpoint for fetching 30+ year daily NAV records by scheme code.",
+			Description:     "AMFI official historical time-series endpoint for fetching 30+ year daily NAV records by scheme code (supports multi-chunk sliding windows).",
 			Url:             "https://www.amfiindia.com/api/nav-history",
 			DefaultUrl:      "https://www.amfiindia.com/api/nav-history",
 			Method:          "GET",
 			HeadersJson:     `{"User-Agent": "NAVigator/2.0"}`,
-			PayloadTemplate: "schemeCode={{schemeCode}}&fromDate={{fromDate}}&toDate={{toDate}}",
+			PayloadTemplate: "query_type=historical_period&from_date={{fromDate}}&to_date={{toDate}}&sd_id={{schemeCode}}",
 			IsActive:        true,
 		},
 		{
 			Key:             "AMFI_PORTAL_NAV_REPORT_URL",
-			Name:            "AMFI Portal NAV History Report (Fallback)",
-			Description:     "Official AMFI portal download report for historical NAV data.",
+			Name:            "AMFI Portal NAV History Report (Deprecated)",
+			Description:     "[Expired/Deprecated] Legacy AMFI portal download report endpoint no longer maintained upstream.",
 			Url:             "https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx",
 			DefaultUrl:      "https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx",
 			Method:          "GET",
 			HeadersJson:     `{"User-Agent": "NAVigator/2.0"}`,
 			PayloadTemplate: "mf=0&tp=1&frmdt={{fromDate}}&todt={{toDate}}",
-			IsActive:        true,
+			IsActive:        false,
 		},
 	}
 
@@ -124,6 +125,23 @@ func seedDefaultEndpointConfigs(db *gorm.DB) {
 			d.UpdatedAtUtc = now
 			d.LastHealthStatus = "Unknown"
 			_ = db.Create(&d).Error
+		} else {
+			// Ensure template and active status reflect updated defaults
+			if d.Key == "AMFI_NAV_HISTORY_URL" && strings.Contains(existing.PayloadTemplate, "schemeCode=") {
+				_ = db.Model(&existing).Updates(map[string]interface{}{
+					"payload_template": d.PayloadTemplate,
+					"description":      d.Description,
+					"updated_at":       time.Now().UTC(),
+				}).Error
+			}
+			if d.Key == "AMFI_PORTAL_NAV_REPORT_URL" && existing.IsActive {
+				_ = db.Model(&existing).Updates(map[string]interface{}{
+					"is_active":   false,
+					"name":        d.Name,
+					"description": d.Description,
+					"updated_at":  time.Now().UTC(),
+				}).Error
+			}
 		}
 	}
 }
