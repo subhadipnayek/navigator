@@ -272,7 +272,7 @@
       </div>
 
       <!-- Dry Run Metric Ribbon -->
-      <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr); margin: 14px 0;">
+      <div class="kpi-grid" [style.grid-template-columns]="preview.unresolvedCount > 0 ? 'repeat(6, 1fr)' : 'repeat(5, 1fr)'" style="margin: 14px 0;">
         <div class="kpi-tile">
           <span class="kpi-label">TOTAL ROWS</span>
           <strong class="kpi-value">{{ preview.totalRowsParsed }}</strong>
@@ -288,6 +288,13 @@
           <strong class="kpi-value" style="color: #b45309;">{{ preview.duplicateTradesCount }}</strong>
           <span class="kpi-sub">Skipped in Smart Merge</span>
         </div>
+        @if (preview.unresolvedCount > 0) {
+          <div class="kpi-tile" style="border-left: 3px solid #ef4444;">
+            <span class="kpi-label">⚠️ UNRESOLVED</span>
+            <strong class="kpi-value" style="color: #dc2626;">{{ preview.unresolvedCount }}</strong>
+            <span class="kpi-sub">Auto-fallback assigned</span>
+          </div>
+        }
         <div class="kpi-tile" style="border-left: 3px solid #64748b;">
           <span class="kpi-label">⚪ NON-FINANCIAL</span>
           <strong class="kpi-value" style="color: #475569;">{{ preview.ignoredEventsCount }}</strong>
@@ -351,6 +358,16 @@
           >
             Duplicates ({{ preview.duplicateTradesCount }})
           </button>
+          @if (preview.unresolvedCount > 0) {
+            <button
+              mat-button
+              [class.active-tab]="previewFilterTab() === 'unresolved'"
+              (click)="previewFilterTab.set('unresolved')"
+              style="color: #dc2626;"
+            >
+              ⚠️ Unresolved ({{ preview.unresolvedCount }})
+            </button>
+          }
           <button
             mat-button
             [class.active-tab]="previewFilterTab() === 'ignored'"

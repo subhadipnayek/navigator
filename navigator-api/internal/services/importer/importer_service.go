@@ -200,8 +200,36 @@ func (s *ImporterService) Commit(
 			continue
 		}
 
+		// Re-resolve on the fly if SchemeCode is missing
 		if rec.SchemeCode <= 0 {
-			continue
+			s.resolver.Resolve(ctx, &rec.RawTradeDraft)
+		}
+
+		// If still missing, check for synthetic code or fallback
+		if rec.SchemeCode <= 0 {
+			if rec.Symbol != "" || rec.ISIN != "" {
+				rec.SchemeCode = generateSyntheticEquityCode(rec.Symbol, rec.ISIN)
+			} else if rec.SchemeName != "" {
+				rec.SchemeCode = generateSyntheticMutualFundCode(rec.SchemeName, rec.FolioNumber)
+			} else {
+				continue
+			}
+		}
+
+		if rec.Fingerprint == "" {
+			dateStr := rec.TransactionDate.Format("2006-01-02")
+			rec.Fingerprint = s.deduplicator.ComputeFingerprint(
+				portfolioId,
+				rec.SchemeCode,
+				rec.Symbol,
+				dateStr,
+				rec.TransactionType,
+				rec.Units,
+				rec.Price,
+				rec.TradeID,
+				rec.FolioNumber,
+				rec.SourceRowNumber,
+			)
 		}
 
 		if !rec.TransactionDate.IsZero() {

@@ -31,6 +31,7 @@ navigator-api/
 │   ├── middleware/              # Auth & CORS middleware
 │   ├── models/                  # GORM database entities & API contracts
 │   ├── services/                # Analytics engine (XIRR, AMFI scraper, CAGR)
+│   │   └── importer/            # Multi-broker parser (CAMS, KFintech, Zerodha), fuzzy asset resolver & deduplication
 │   └── worker/                  # Background daily AMFI NAV sync worker
 ├── Dockerfile                   # Multi-stage lightweight Alpine container (~20MB)
 ├── go.mod

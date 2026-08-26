@@ -105,13 +105,21 @@ func (s *AuthService) Register(req *models.RegisterRequest) (*models.AuthRespons
 		return nil, err
 	}
 
+	var userCount int64
+	_ = s.db.Model(&models.AppUser{}).Count(&userCount).Error
+
+	role := "User"
+	if userCount == 0 {
+		role = "Admin"
+	}
+
 	user := models.AppUser{
 		Username:           strings.TrimSpace(req.Username),
 		NormalizedUsername: normUsername,
 		Email:              strings.TrimSpace(req.Email),
 		NormalizedEmail:    normEmail,
 		PasswordHash:       hash,
-		Role:               "User",
+		Role:               role,
 		CreatedAtUtc:       time.Now().UTC(),
 	}
 

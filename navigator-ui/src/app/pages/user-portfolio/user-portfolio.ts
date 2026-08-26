@@ -125,7 +125,7 @@ export class UserPortfolio implements OnInit, OnDestroy {
   readonly newPortfolioNameInput = signal('');
   readonly dryRunPreview = signal<ImportPreviewResult | null>(null);
   readonly selectedStrategy = signal<ImportStrategy>('SmartMerge');
-  readonly previewFilterTab = signal<'all' | 'new' | 'duplicate' | 'ignored'>('all');
+  readonly previewFilterTab = signal<'all' | 'new' | 'duplicate' | 'ignored' | 'unresolved'>('all');
   readonly previewingFile = signal<boolean>(false);
   readonly committingImport = signal<boolean>(false);
 
@@ -137,6 +137,7 @@ export class UserPortfolio implements OnInit, OnDestroy {
     if (tab === 'new') return preview.transactions.filter((t) => t.status === 'New');
     if (tab === 'duplicate') return preview.transactions.filter((t) => t.status === 'Duplicate');
     if (tab === 'ignored') return preview.transactions.filter((t) => t.status === 'Ignored');
+    if (tab === 'unresolved') return preview.transactions.filter((t) => t.status === 'Unresolved');
     return preview.transactions;
   });
 

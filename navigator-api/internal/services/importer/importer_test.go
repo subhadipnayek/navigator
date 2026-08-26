@@ -133,3 +133,109 @@ func TestDeduplicationFingerprintsAndOccurrences(t *testing.T) {
 		t.Errorf("Expected 2nd occurrence to be New (genuine 2nd order), got %s", classified[1].Status)
 	}
 }
+
+func TestCamsParserSchemeEnrichmentAndNoiseStripping(t *testing.T) {
+	parser := importer.NewCamsParser()
+	rows := [][]string{
+		{"MF_NAME", "FOLIO_NUMBER", "PRODUCT_CODE", "SCHEME_NAME", "TRADE_DATE", "TRANSACTION_TYPE", "AMOUNT", "UNITS", "PRICE"},
+		{
+			"PPFAS Mutual Fund", "13513468", "PP001ZGU",
+			"Parag Parikh Flexi Cap - Dir Plan Growth-(formerly Parag Parikh Long Term Value Fund)",
+			"02-JUN-2023", "Purchase", "5000", "78.12", "64.004",
+		},
+		{
+			"DSP Mutual Fund", "8419486", "D887",
+			"Nifty Midcap 150 Q50 Index Fund - Dir - G",
+			"01-JUN-2023", "Purchase", "3000", "200.0", "15.0",
+		},
+	}
+
+	drafts, err := parser.Parse(rows)
+	if err != nil {
+		t.Fatalf("Parser failed: %v", err)
+	}
+
+	if len(drafts) != 2 {
+		t.Fatalf("Expected 2 drafts, got %d", len(drafts))
+	}
+
+	// 1. PPFAS should have former name stripped and AMC prepended
+	if drafts[0].SchemeName != "PPFAS Mutual Fund - Parag Parikh Flexi Cap - Dir Plan Growth" {
+		t.Errorf("Expected cleaned and AMC-prepended scheme name, got '%s'", drafts[0].SchemeName)
+	}
+
+	// 2. DSP should have AMC prepended
+	if drafts[1].SchemeName != "DSP Mutual Fund - Nifty Midcap 150 Q50 Index Fund - Dir - G" {
+		t.Errorf("Expected DSP AMC prepended scheme name, got '%s'", drafts[1].SchemeName)
+	}
+}
+
+func TestAuditAllSampleFiles(t *testing.T) {
+	dir := "/home/subhadipnayek/git_repos/navigator/sample transaction files"
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir failed: %v", err)
+	}
+
+	reader := importer.NewTabularReader()
+	registry := importer.NewBrokerRegistry()
+
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		f, err := os.Open(path)
+		if err != nil {
+			t.Errorf("[%s] Open error: %v", e.Name(), err)
+			continue
+		}
+
+		rows, err := reader.Read(f, e.Name())
+		f.Close()
+		if err != nil {
+			t.Errorf("[%s] Read error: %v", e.Name(), err)
+			continue
+		}
+
+		parser, drafts, err := registry.DetectAndParse(rows)
+		if err != nil {
+			t.Errorf("[%s] Detect/Parse error: %v", e.Name(), err)
+			continue
+		}
+
+		validCount := 0
+		ignoredCount := 0
+		typeCounts := make(map[string]int)
+		var minDate, maxDate time.Time
+		totalAmount := 0.0
+
+		for _, d := range drafts {
+			if d.IsIgnored {
+				ignoredCount++
+			} else {
+				validCount++
+				totalAmount += d.Amount
+				if !d.TransactionDate.IsZero() {
+					if minDate.IsZero() || d.TransactionDate.Before(minDate) {
+						minDate = d.TransactionDate
+					}
+					if maxDate.IsZero() || d.TransactionDate.After(maxDate) {
+						maxDate = d.TransactionDate
+					}
+				}
+			}
+			typeCounts[d.TransactionType]++
+		}
+
+		t.Logf("=== AUDIT FILE: %s ===", e.Name())
+		t.Logf("  Rows: %d | Detected Parser: [%s] %s", len(rows), parser.ID(), parser.DisplayName())
+		t.Logf("  Drafts: Total=%d | Valid=%d | Ignored=%d", len(drafts), validCount, ignoredCount)
+		t.Logf("  Date Span: %s to %s | Total Ingestion Value: %.2f", minDate.Format("2006-01-02"), maxDate.Format("2006-01-02"), totalAmount)
+		t.Logf("  Transaction Types Breakdown: %v", typeCounts)
+		if len(drafts) > 0 {
+			t.Logf("  First Draft: Scheme='%s' | ISIN='%s' | Code=%d | Date=%s | Type=%s | Units=%.4f | Price=%.4f | TradeID='%s'",
+				drafts[0].SchemeName, drafts[0].ISIN, drafts[0].SchemeCode, drafts[0].TransactionDate.Format("2006-01-02"), drafts[0].TransactionType, drafts[0].Units, drafts[0].Price, drafts[0].TradeID)
+		}
+	}
+}
