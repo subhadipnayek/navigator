@@ -35,6 +35,7 @@ navigator-ui/
 │   │   │   ├── rolling-returns/  # Statistical rolling return distribution
 │   │   │   ├── corporate-actions/# Anomaly detection & data hygiene queue
 │   │   │   ├── admin-sync/       # Master sync & fund operations console
+│   │   │   ├── admin-integrations/# Upstream third-party API control center & health checker
 │   │   │   ├── landing/          # Institutional welcome portal
 │   │   │   └── login/register/   # Terminal authentication views
 │   │   ├── services/             # Angular HTTP services

@@ -22,14 +22,20 @@ const (
 )
 
 type AmfiService struct {
-	httpClient *http.Client
+	httpClient         *http.Client
+	integrationService *IntegrationService
 }
 
-func NewAmfiService() *AmfiService {
+func NewAmfiService(integrationSvc ...*IntegrationService) *AmfiService {
+	var intSvc *IntegrationService
+	if len(integrationSvc) > 0 {
+		intSvc = integrationSvc[0]
+	}
 	return &AmfiService{
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
+		integrationService: intSvc,
 	}
 }
 
@@ -47,7 +53,12 @@ type LatestNavSnapshot struct {
 }
 
 func (s *AmfiService) FetchFundMasterList(ctx context.Context) ([]models.Fund, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, AmfiMasterURL, nil)
+	url := AmfiMasterURL
+	if s.integrationService != nil {
+		url = s.integrationService.GetActiveUrl(ctx, "AMFI_MASTER_URL", AmfiMasterURL)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -62,10 +73,10 @@ func (s *AmfiService) FetchFundMasterList(ctx context.Context) ([]models.Fund, e
 		return nil, fmt.Errorf("AMFI returned status %d", resp.StatusCode)
 	}
 
-	return parseAmfiMasterData(resp.Body)
+	return ParseAmfiMasterData(resp.Body)
 }
 
-func parseAmfiMasterData(r io.Reader) ([]models.Fund, error) {
+func ParseAmfiMasterData(r io.Reader) ([]models.Fund, error) {
 	reader := csv.NewReader(r)
 	reader.FieldsPerRecord = -1
 	reader.TrimLeadingSpace = true
@@ -177,7 +188,12 @@ func parseAmfiMasterData(r io.Reader) ([]models.Fund, error) {
 }
 
 func (s *AmfiService) FetchLatestNavSnapshots(ctx context.Context) ([]LatestNavSnapshot, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, AmfiLatestNavURL, nil)
+	url := AmfiLatestNavURL
+	if s.integrationService != nil {
+		url = s.integrationService.GetActiveUrl(ctx, "AMFI_LATEST_NAV_URL", AmfiLatestNavURL)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -192,10 +208,10 @@ func (s *AmfiService) FetchLatestNavSnapshots(ctx context.Context) ([]LatestNavS
 		return nil, fmt.Errorf("AMFI returned status %d", resp.StatusCode)
 	}
 
-	return parseLatestNavAll(resp.Body)
+	return ParseLatestNavAll(resp.Body)
 }
 
-func parseLatestNavAll(r io.Reader) ([]LatestNavSnapshot, error) {
+func ParseLatestNavAll(r io.Reader) ([]LatestNavSnapshot, error) {
 	var snapshots []LatestNavSnapshot
 	scanner := bufio.NewScanner(r)
 
@@ -247,9 +263,14 @@ func parseLatestNavAll(r io.Reader) ([]LatestNavSnapshot, error) {
 }
 
 func (s *AmfiService) FetchNavHistory(ctx context.Context, schemeCode int, from, to time.Time) ([]models.NavHistory, error) {
+	baseUrl := AmfiNavHistoryURL
+	if s.integrationService != nil {
+		baseUrl = s.integrationService.GetActiveUrl(ctx, "AMFI_NAV_HISTORY_URL", AmfiNavHistoryURL)
+	}
+
 	// Query AMFI history chunk
 	url := fmt.Sprintf("%s?schemeCode=%d&fromDate=%s&toDate=%s",
-		AmfiNavHistoryURL, schemeCode, FormatDateDDMMYYYY(from), FormatDateDDMMYYYY(to))
+		baseUrl, schemeCode, FormatDateDDMMYYYY(from), FormatDateDDMMYYYY(to))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

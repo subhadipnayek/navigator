@@ -1,0 +1,153 @@
+<header class="admin-workbar">
+  <div>
+    <div class="admin-breadcrumb">
+      <a routerLink="/admin/funds">Admin</a>
+      <strong>Integrations</strong>
+    </div>
+    <h1>Upstream API Health & Diagnostics</h1>
+  </div>
+  <nav aria-label="Admin sections">
+    <a routerLink="/admin/anomalies" routerLinkActive="active">Anomalies</a>
+    <a routerLink="/admin/funds" routerLinkActive="active">Funds</a>
+    <a routerLink="/admin/integrations" routerLinkActive="active">API Integrations</a>
+  </nav>
+</header>
+
+@if (loading() || testingAll()) {
+  <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+}
+
+@if (summary(); as s) {
+  <section class="admin-metrics">
+    <div>
+      <strong>{{ s.totalEndpoints | number }}</strong>
+      <span>Endpoints</span>
+    </div>
+    <div>
+      <strong style="color: #16a34a">{{ s.healthyCount | number }}</strong>
+      <span>Healthy</span>
+    </div>
+    <div>
+      <strong style="color: #ca8a04">{{ s.degradedCount | number }}</strong>
+      <span>Degraded</span>
+    </div>
+    <div>
+      <strong style="color: #dc2626">{{ s.downCount | number }}</strong>
+      <span>Down</span>
+    </div>
+    <div>
+      <strong class="font-mono">{{ s.avgLatencyMs | number }} ms</strong>
+      <span>Avg Latency</span>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: flex-end;">
+      <button mat-flat-button color="primary" (click)="pingAll()" [disabled]="loading() || testingAll()">
+        {{ testingAll() ? 'Pinging All...' : '⚡ Ping All Endpoints' }}
+      </button>
+    </div>
+  </section>
+}
+
+@if (testResult(); as tr) {
+  <mat-card appearance="outlined" class="admin-compact-card" style="border-left: 4px solid {{ tr.success ? '#16a34a' : '#dc2626' }} !important; margin-bottom: 16px;">
+    <mat-card-header>
+      <mat-card-title style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <span>{{ tr.success ? '🟢 Health Check Succeeded' : '🔴 Health Check Failed' }}</span>
+        <mat-chip-set>
+          <mat-chip class="font-mono">HTTP {{ tr.statusCode }}</mat-chip>
+          <mat-chip class="font-mono">{{ tr.latencyMs }} ms</mat-chip>
+          <mat-chip>{{ tr.healthStatus }}</mat-chip>
+        </mat-chip-set>
+      </mat-card-title>
+      <mat-card-subtitle class="font-mono" style="word-break: break-all;">
+        {{ tr.method }} {{ tr.url }}
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      @if (tr.errorMessage) {
+        <p style="color: #dc2626; font-weight: 500; margin: 4px 0 8px;">{{ tr.errorMessage }}</p>
+      }
+      @if (tr.responseSnippet) {
+        <div style="margin-top: 6px;">
+          <small style="color: #64748b; font-weight: 600; text-transform: uppercase; font-size: 10px;">Response Body Preview (First 500 chars):</small>
+          <pre class="font-mono" style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 4px; font-size: 11.5px; max-height: 140px; overflow: auto; white-space: pre-wrap; margin-top: 4px;">{{ tr.responseSnippet }}</pre>
+        </div>
+      }
+    </mat-card-content>
+    <mat-card-actions>
+      <button mat-button (click)="dismissTestResult()">Dismiss</button>
+    </mat-card-actions>
+  </mat-card>
+}
+
+<div style="display: grid; gap: 14px;">
+  @for (ep of summary()?.endpoints || []; track ep.key) {
+    <mat-card appearance="outlined" class="admin-compact-card">
+      <mat-card-header style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <mat-card-title style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span>{{ ep.name }}</span>
+            <span class="mono-code">{{ ep.key }}</span>
+            <mat-chip-set>
+              <mat-chip [style.backgroundColor]="ep.method === 'GET' ? '#eff6ff' : '#f0fdf4'" [style.color]="ep.method === 'GET' ? '#1d4ed8' : '#15803d'" class="font-mono">
+                {{ ep.method }}
+              </mat-chip>
+              @switch (ep.lastHealthStatus) {
+                @case ('Healthy') {
+                  <mat-chip style="background-color: #dcfce7; color: #166534;">
+                    🟢 Healthy ({{ ep.lastStatusCode }}, {{ ep.lastLatencyMs }}ms)
+                  </mat-chip>
+                }
+                @case ('Degraded') {
+                  <mat-chip style="background-color: #fef9c3; color: #854d0e;">
+                    🟡 Degraded ({{ ep.lastLatencyMs }}ms)
+                  </mat-chip>
+                }
+                @case ('Down') {
+                  <mat-chip style="background-color: #fee2e2; color: #991b1b;">
+                    🔴 Down
+                  </mat-chip>
+                }
+                @default {
+                  <mat-chip style="background-color: #f1f5f9; color: #475569;">
+                    ⚪ Not Tested
+                  </mat-chip>
+                }
+              }
+            </mat-chip-set>
+          </mat-card-title>
+          <mat-card-subtitle>{{ ep.description }}</mat-card-subtitle>
+        </div>
+      </mat-card-header>
+
+      <mat-card-content style="margin-top: 8px;">
+        <div style="display: grid; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: #64748b; font-size: 11.5px; font-weight: 600; min-width: 90px;">Upstream URL:</span>
+            <code class="font-mono" style="font-size: 12px; color: #0f172a; word-break: break-all;">{{ ep.url }}</code>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+            <span style="color: #64748b; font-size: 11.5px; font-weight: 600; min-width: 90px;">Last Checked:</span>
+            <span style="color: #475569; font-size: 12px;">
+              {{ ep.lastHealthCheckAtUtc ? (ep.lastHealthCheckAtUtc | date: 'dd-MMM-yyyy HH:mm:ss') : 'Never' }}
+            </span>
+            @if (ep.lastErrorMessage) {
+              <span style="color: #dc2626; font-size: 11.5px;">— {{ ep.lastErrorMessage }}</span>
+            }
+          </div>
+        </div>
+      </mat-card-content>
+
+      <mat-card-actions style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button
+          mat-stroked-button
+          color="primary"
+          (click)="testConnection(ep.key)"
+          [disabled]="testingKey() === ep.key || loading()"
+        >
+          {{ testingKey() === ep.key ? 'Testing...' : '⚡ Test Connection' }}
+        </button>
+      </mat-card-actions>
+    </mat-card>
+  }
+</div>

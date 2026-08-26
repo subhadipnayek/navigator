@@ -32,6 +32,55 @@ type UpdateUserRoleRequest struct {
 	Role string `json:"role" binding:"required"`
 }
 
+// ─── API Integration DTOs ───
+
+type ApiEndpointConfigDto struct {
+	Key                  string  `json:"key"`
+	Name                 string  `json:"name"`
+	Description          string  `json:"description"`
+	Url                  string  `json:"url"`
+	DefaultUrl           string  `json:"defaultUrl"`
+	Method               string  `json:"method"`
+	HeadersJson          string  `json:"headersJson"`
+	PayloadTemplate      string  `json:"payloadTemplate"`
+	IsActive             bool    `json:"isActive"`
+	LastHealthCheckAtUtc *string `json:"lastHealthCheckAtUtc"`
+	LastHealthStatus     string  `json:"lastHealthStatus"`
+	LastStatusCode       int     `json:"lastStatusCode"`
+	LastLatencyMs        int64   `json:"lastLatencyMs"`
+	LastErrorMessage     *string `json:"lastErrorMessage"`
+	UpdatedAtUtc         string  `json:"updatedAtUtc"`
+}
+
+type UpdateApiEndpointConfigRequest struct {
+	Url             string `json:"url" binding:"required"`
+	Method          string `json:"method"`
+	HeadersJson     string `json:"headersJson"`
+	PayloadTemplate string `json:"payloadTemplate"`
+	IsActive        *bool  `json:"isActive"`
+}
+
+type ApiEndpointTestResultDto struct {
+	Key             string `json:"key"`
+	Url             string `json:"url"`
+	Method          string `json:"method"`
+	StatusCode      int    `json:"statusCode"`
+	LatencyMs       int64  `json:"latencyMs"`
+	HealthStatus    string `json:"healthStatus"` // Healthy, Degraded, Down
+	ResponseSnippet string `json:"responseSnippet"`
+	ErrorMessage    string `json:"errorMessage,omitempty"`
+	Success         bool   `json:"success"`
+}
+
+type ApiEndpointsSummaryDto struct {
+	TotalEndpoints int                    `json:"totalEndpoints"`
+	HealthyCount   int                    `json:"healthyCount"`
+	DegradedCount  int                    `json:"degradedCount"`
+	DownCount      int                    `json:"downCount"`
+	AvgLatencyMs   int64                  `json:"avgLatencyMs"`
+	Endpoints      []ApiEndpointConfigDto `json:"endpoints"`
+}
+
 // ─── Fund DTOs ───
 
 type FundDto struct {

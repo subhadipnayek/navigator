@@ -159,3 +159,27 @@ type UserPortfolioDashboardCache struct {
 func (UserPortfolioDashboardCache) TableName() string {
 	return "UserPortfolioDashboardCaches"
 }
+
+// ApiEndpointConfig persists configurable URLs, methods, headers, and health status for upstream third-party APIs.
+type ApiEndpointConfig struct {
+	Key                  string     `gorm:"column:key;primaryKey;size:100" json:"key"`
+	Name                 string     `gorm:"column:name;size:200;not null" json:"name"`
+	Description          string     `gorm:"column:description;size:500;not null" json:"description"`
+	Url                  string     `gorm:"column:url;size:1000;not null" json:"url"`
+	DefaultUrl           string     `gorm:"column:default_url;size:1000;not null" json:"defaultUrl"`
+	Method               string     `gorm:"column:method;size:10;not null;default:'GET'" json:"method"`
+	HeadersJson          string     `gorm:"column:headers_json;type:text;not null;default:'{}'" json:"headersJson"`
+	PayloadTemplate      string     `gorm:"column:payload_template;type:text;not null;default:''" json:"payloadTemplate"`
+	IsActive             bool       `gorm:"column:is_active;not null;default:true" json:"isActive"`
+	LastHealthCheckAtUtc *time.Time `gorm:"column:last_health_check_at_utc" json:"lastHealthCheckAtUtc"`
+	LastHealthStatus     string     `gorm:"column:last_health_status;size:50;not null;default:'Unknown'" json:"lastHealthStatus"` // Healthy, Degraded, Down, Unknown
+	LastStatusCode       int        `gorm:"column:last_status_code;not null;default:0" json:"lastStatusCode"`
+	LastLatencyMs        int64      `gorm:"column:last_latency_ms;not null;default:0" json:"lastLatencyMs"`
+	LastErrorMessage     *string    `gorm:"column:last_error_message;size:1000" json:"lastErrorMessage"`
+	CreatedAtUtc         time.Time  `gorm:"column:created_at_utc;not null;autoCreateTime" json:"createdAtUtc"`
+	UpdatedAtUtc         time.Time  `gorm:"column:updated_at_utc;not null;autoUpdateTime" json:"updatedAtUtc"`
+}
+
+func (ApiEndpointConfig) TableName() string {
+	return "ApiEndpointConfigs"
+}

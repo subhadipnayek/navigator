@@ -28,7 +28,8 @@ func main() {
 	}
 
 	// 3. Initialize Services
-	amfiSvc := services.NewAmfiService()
+	intSvc := services.NewIntegrationService(db)
+	amfiSvc := services.NewAmfiService(intSvc)
 	authSvc := services.NewAuthService(db, cfg)
 	fundSvc := services.NewFundService(db, amfiSvc)
 	caSvc := services.NewCorporateActionService(db)
@@ -44,6 +45,7 @@ func main() {
 	userPortHandler := handlers.NewUserPortfolioHandler(userPortSvc, db)
 	caHandler := handlers.NewCorporateActionHandler(caSvc)
 	adminHandler := handlers.NewAdminHandler(db, fundSvc, navSvc)
+	intHandler := handlers.NewIntegrationHandler(intSvc)
 
 	// 5. Start background NAV sync worker
 	navWorker := worker.NewNavSyncWorker(db, amfiSvc, 6*time.Hour)
@@ -145,6 +147,13 @@ func main() {
 			admin.DELETE("/funds/:schemeCode/nav-history", adminHandler.DeleteFundNavHistory)
 			admin.DELETE("/funds/:schemeCode", adminHandler.DeleteFund)
 			admin.DELETE("/funds/all", adminHandler.DeleteAllFunds)
+
+			// Integrations & Health Center
+			admin.GET("/integrations", intHandler.GetEndpoints)
+			admin.PUT("/integrations/:key", intHandler.UpdateEndpoint)
+			admin.POST("/integrations/:key/reset", intHandler.ResetEndpoint)
+			admin.POST("/integrations/:key/test", intHandler.TestEndpoint)
+			admin.POST("/integrations/health-all", intHandler.HealthCheckAll)
 		}
 	}
 

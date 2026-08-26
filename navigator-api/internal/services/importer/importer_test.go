@@ -3,10 +3,12 @@ package importer_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"navigator-api/internal/models"
+	"navigator-api/internal/services"
 	"navigator-api/internal/services/importer"
 )
 
@@ -244,5 +246,72 @@ func TestAuditAllSampleFiles(t *testing.T) {
 			t.Logf("  First Draft: Scheme='%s' | ISIN='%s' | Code=%d | Date=%s | Type=%s | Units=%.4f | Price=%.4f | TradeID='%s'",
 				drafts[0].SchemeName, drafts[0].ISIN, drafts[0].SchemeCode, drafts[0].TransactionDate.Format("2006-01-02"), drafts[0].TransactionType, drafts[0].Units, drafts[0].Price, drafts[0].TradeID)
 		}
+	}
+}
+
+func TestParseAmfiMasterData(t *testing.T) {
+	sampleCsv := `AMC,Code,Scheme Name,Scheme Type,Scheme Category,Scheme NAV Name,Scheme Minimum Amount,Launch Date, Closure Date,ISIN Div Payout/ ISIN GrowthISIN Div Reinvestment
+Aditya Birla Sun Life AMC Limited,100033,Aditya Birla Sun Life Large & Mid Cap Fund,Open Ended,Equity Scheme - Large & Mid Cap Fund,Aditya Birla Sun Life Large & Mid Cap Fund - Regular Growth,5000,24-Feb-1995,24-Feb-1995,INF209K01165
+Aditya Birla Sun Life AMC Limited,100034,Aditya Birla Sun Life Large & Mid Cap Fund,Open Ended,Equity Scheme - Large & Mid Cap Fund,Aditya Birla Sun Life Large & Mid Cap Fund -Regular - IDCW,5000,24-Feb-1995,24-Feb-1995,INF209K01157INF209K01CE5
+HDFC Asset Management Company Limited,119436,HDFC Large and Mid Cap Fund,Open Ended,Equity Scheme - Large & Mid Cap Fund,HDFC Large and Mid Cap Fund - Growth - Direct Plan,5000,24-Feb-1995,24-Feb-1995,INF179K01VH8
+`
+
+	funds, err := services.ParseAmfiMasterData(strings.NewReader(sampleCsv))
+	if err != nil {
+		t.Fatalf("Unexpected error parsing AMFI master CSV: %v", err)
+	}
+
+	if len(funds) != 3 {
+		t.Fatalf("Expected 3 parsed funds, got %d", len(funds))
+	}
+
+	f1 := funds[0]
+	if f1.SchemeCode != 100033 {
+		t.Errorf("Expected SchemeCode 100033, got %d", f1.SchemeCode)
+	}
+	if f1.SchemeName != "Aditya Birla Sun Life Large & Mid Cap Fund - Regular Growth" {
+		t.Errorf("Expected Scheme NAV Name, got %s", f1.SchemeName)
+	}
+	if f1.FundHouse == nil || *f1.FundHouse != "Aditya Birla Sun Life AMC Limited" {
+		t.Errorf("Expected fund house 'Aditya Birla Sun Life AMC Limited', got %v", f1.FundHouse)
+	}
+	if f1.IsinGrowth == nil || *f1.IsinGrowth != "INF209K01165" {
+		t.Errorf("Expected ISIN INF209K01165, got %v", f1.IsinGrowth)
+	}
+
+	f2 := funds[1]
+	if f2.IsinGrowth == nil || *f2.IsinGrowth != "INF209K01157" {
+		t.Errorf("Expected growth ISIN INF209K01157, got %v", f2.IsinGrowth)
+	}
+	if f2.IsinDivReinvestment == nil || *f2.IsinDivReinvestment != "INF209K01CE5" {
+		t.Errorf("Expected div reinvestment ISIN INF209K01CE5, got %v", f2.IsinDivReinvestment)
+	}
+}
+
+func TestParseLatestNavAll(t *testing.T) {
+	sampleNavAll := `Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date
+ 
+Open Ended Schemes(Debt Scheme - Banking and PSU Fund)
+ 
+Aditya Birla Sun Life Mutual Fund
+ 
+119551;INF209KA12Z1;INF209KA13Z9;Aditya Birla Sun Life Banking & PSU Debt Fund;Direct Plan;IDCW-Re-investment;106.9419;25-Aug-2026
+119550;INF209K01YN0;-;Aditya Birla Sun Life Banking & PSU Debt Fund;Direct Plan;GROWTH;403.8751;25-Aug-2026
+`
+
+	snapshots, err := services.ParseLatestNavAll(strings.NewReader(sampleNavAll))
+	if err != nil {
+		t.Fatalf("Unexpected error parsing NAVAll: %v", err)
+	}
+
+	if len(snapshots) != 2 {
+		t.Fatalf("Expected 2 snapshots, got %d", len(snapshots))
+	}
+
+	if snapshots[0].SchemeCode != 119551 || snapshots[0].Nav != 106.9419 {
+		t.Errorf("Expected SchemeCode 119551 with Nav 106.9419, got code %d nav %f", snapshots[0].SchemeCode, snapshots[0].Nav)
+	}
+	if snapshots[1].SchemeCode != 119550 || snapshots[1].Nav != 403.8751 {
+		t.Errorf("Expected SchemeCode 119550 with Nav 403.8751, got code %d nav %f", snapshots[1].SchemeCode, snapshots[1].Nav)
 	}
 }

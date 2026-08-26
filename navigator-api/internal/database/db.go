@@ -48,6 +48,7 @@ func InitDB(cfg *config.Config) (*gorm.DB, error) {
 		&models.PortfolioTransaction{},
 		&models.UserGridPreference{},
 		&models.UserPortfolioDashboardCache{},
+		&models.ApiEndpointConfig{},
 	)
 	if err != nil {
 		log.Printf("AutoMigrate warning: %v", err)
@@ -60,7 +61,69 @@ func InitDB(cfg *config.Config) (*gorm.DB, error) {
 	// Create unique constraint on (portfolio_id, fingerprint)
 	_ = db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_portfolio_transactions_port_fp ON "PortfolioTransactions" (portfolio_id, fingerprint) WHERE fingerprint != '';`).Error
 
+	seedDefaultEndpointConfigs(db)
+
 	DB = db
 	log.Println("Database connection established and schema verified.")
 	return db, nil
+}
+
+func seedDefaultEndpointConfigs(db *gorm.DB) {
+	defaults := []models.ApiEndpointConfig{
+		{
+			Key:             "AMFI_MASTER_URL",
+			Name:            "AMFI Scheme Master Directory",
+			Description:     "Master CSV containing all 16,000+ registered mutual fund schemes with AMCs, categories, and ISINs.",
+			Url:             "https://portal.amfiindia.com/DownloadSchemeData_Po.aspx?mf=0",
+			DefaultUrl:      "https://portal.amfiindia.com/DownloadSchemeData_Po.aspx?mf=0",
+			Method:          "GET",
+			HeadersJson:     `{"User-Agent": "NAVigator/2.0"}`,
+			PayloadTemplate: "",
+			IsActive:        true,
+		},
+		{
+			Key:             "AMFI_LATEST_NAV_URL",
+			Name:            "AMFI Daily NAV Snapshot (NAVAll.txt)",
+			Description:     "Daily updated NAV text file covering latest published NAV values for all mutual funds.",
+			Url:             "https://portal.amfiindia.com/spages/NAVAll.txt",
+			DefaultUrl:      "https://portal.amfiindia.com/spages/NAVAll.txt",
+			Method:          "GET",
+			HeadersJson:     `{"User-Agent": "NAVigator/2.0"}`,
+			PayloadTemplate: "",
+			IsActive:        true,
+		},
+		{
+			Key:             "AMFI_NAV_HISTORY_URL",
+			Name:            "AMFI Historical NAV API",
+			Description:     "Historical time-series endpoint for fetching 30+ year daily NAV records by scheme code.",
+			Url:             "https://www.amfiindia.com/api/nav-history",
+			DefaultUrl:      "https://www.amfiindia.com/api/nav-history",
+			Method:          "GET",
+			HeadersJson:     `{"User-Agent": "NAVigator/2.0"}`,
+			PayloadTemplate: "schemeCode={{schemeCode}}&fromDate={{fromDate}}&toDate={{toDate}}",
+			IsActive:        true,
+		},
+		{
+			Key:             "AMFI_PORTAL_NAV_REPORT_URL",
+			Name:            "AMFI Portal NAV History Report (Fallback)",
+			Description:     "Official AMFI portal download report for historical NAV data.",
+			Url:             "https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx",
+			DefaultUrl:      "https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx",
+			Method:          "GET",
+			HeadersJson:     `{"User-Agent": "NAVigator/2.0"}`,
+			PayloadTemplate: "mf=0&tp=1&frmdt={{fromDate}}&todt={{toDate}}",
+			IsActive:        true,
+		},
+	}
+
+	for _, d := range defaults {
+		var existing models.ApiEndpointConfig
+		if err := db.Where("key = ?", d.Key).First(&existing).Error; err != nil {
+			now := time.Now().UTC()
+			d.CreatedAtUtc = now
+			d.UpdatedAtUtc = now
+			d.LastHealthStatus = "Unknown"
+			_ = db.Create(&d).Error
+		}
+	}
 }

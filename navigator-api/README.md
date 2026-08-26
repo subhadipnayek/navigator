@@ -91,6 +91,11 @@ navigator-api/
 - `GET /api/admin/funds`: Paginated fund maintenance table.
 - `POST /api/admin/funds/sync`: Master sync trigger.
 - `POST /api/admin/funds/:code/nav-history/sync`: Scrape full 30+ year NAV history for a single fund.
+- `GET /api/admin/integrations`: List upstream API configurations and live health metrics.
+- `PUT /api/admin/integrations/:key`: Update URL, HTTP method, headers, and payload template.
+- `POST /api/admin/integrations/:key/test`: Live test / diagnostic health check of target endpoint.
+- `POST /api/admin/integrations/:key/reset`: Restore factory default endpoint URL.
+- `POST /api/admin/integrations/health-all`: Batch health check all upstream integrations.
 
 ---
 

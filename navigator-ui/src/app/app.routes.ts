@@ -79,6 +79,11 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/corporate-actions/corporate-actions').then((m) => m.CorporateActions),
       },
+      {
+        path: 'integrations',
+        loadComponent: () =>
+          import('./pages/admin-integrations/admin-integrations').then((m) => m.AdminIntegrations),
+      },
     ],
   },
 

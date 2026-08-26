@@ -164,7 +164,7 @@ Navigate to `http://localhost:4200/`. The app will automatically reload on code 
 | `/api/portfolio`         | Run SIP/Lump-sum simulation backtests, benchmark comparisons                     |
 | `/api/user-portfolios`   | Manage personal portfolios, upload transaction Excel files, view holdings & XIRR |
 | `/api/corporate-actions` | Query and track corporate actions (dividends, splits, mergers)                   |
-| `/api/admin`             | Trigger manual AMFI sync, monitor worker status                                  |
+| `/api/admin`             | Trigger AMFI sync, manage third-party API configurations & live health checks    |
 
 ---
 

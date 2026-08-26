@@ -40,6 +40,12 @@ func ParseDate(s string) (time.Time, error) {
 	if t, err := time.Parse(DateFormatDDMMYYYY, s); err == nil {
 		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
 	}
+	if t, err := time.Parse("02-Jan-2006", s); err == nil {
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
+	}
+	if t, err := time.Parse("02-Jan-06", s); err == nil {
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
+	}
 	if t, err := time.Parse(DateFormatYYYYMMDD, s); err == nil {
 		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
 	}
