@@ -3,6 +3,7 @@ package services
 import (
 	"bufio"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -65,63 +66,100 @@ func (s *AmfiService) FetchFundMasterList(ctx context.Context) ([]models.Fund, e
 }
 
 func parseAmfiMasterData(r io.Reader) ([]models.Fund, error) {
+	reader := csv.NewReader(r)
+	reader.FieldsPerRecord = -1
+	reader.TrimLeadingSpace = true
+	reader.LazyQuotes = true
+
+	records, err := reader.ReadAll()
+	if err != nil && len(records) == 0 {
+		return nil, err
+	}
+
 	var funds []models.Fund
-	scanner := bufio.NewScanner(r)
+	now := time.Now().UTC()
 
-	// Format: Scheme Code,Scheme Name,ISIN Div Payout/ ISIN Growth,ISIN Div Reinvestment,Fund House,Scheme Type,Scheme Category
-	isFirstLine := true
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-
-		if isFirstLine {
-			isFirstLine = false
-			if strings.HasPrefix(strings.ToLower(line), "scheme code") {
-				continue
-			}
-		}
-
-		parts := strings.Split(line, ",")
+	for i, parts := range records {
 		if len(parts) < 2 {
 			continue
 		}
 
-		schemeCode, err := strconv.Atoi(strings.TrimSpace(parts[0]))
-		if err != nil || schemeCode <= 0 {
+		// Skip header line
+		if i == 0 && (strings.EqualFold(parts[0], "amc") || strings.EqualFold(parts[0], "scheme code") || strings.Contains(strings.ToLower(parts[1]), "code")) {
 			continue
 		}
 
-		schemeName := strings.TrimSpace(parts[1])
-		if schemeName == "" {
+		schemeCode := 0
+		var fundHouse, schemeType, schemeCategory *string
+		schemeName := ""
+		var isinGrowth, isinDivReinvest *string
+
+		if code, err := strconv.Atoi(strings.TrimSpace(parts[1])); err == nil && code > 0 {
+			// AMFI Standard: AMC,Code,Scheme Name,Scheme Type,Scheme Category,Scheme NAV Name,Scheme Minimum Amount,Launch Date,Closure Date,ISIN
+			schemeCode = code
+			if strings.TrimSpace(parts[0]) != "" && strings.TrimSpace(parts[0]) != "-" {
+				v := strings.TrimSpace(parts[0])
+				fundHouse = &v
+			}
+			// Prefer Scheme NAV Name (column 5) if available, else Scheme Name (column 2)
+			if len(parts) > 5 && strings.TrimSpace(parts[5]) != "" {
+				schemeName = strings.TrimSpace(parts[5])
+			} else if len(parts) > 2 && strings.TrimSpace(parts[2]) != "" {
+				schemeName = strings.TrimSpace(parts[2])
+			}
+			if len(parts) > 3 && strings.TrimSpace(parts[3]) != "" && strings.TrimSpace(parts[3]) != "-" {
+				v := strings.TrimSpace(parts[3])
+				schemeType = &v
+			}
+			if len(parts) > 4 && strings.TrimSpace(parts[4]) != "" && strings.TrimSpace(parts[4]) != "-" {
+				v := strings.TrimSpace(parts[4])
+				schemeCategory = &v
+			}
+			if len(parts) > 9 {
+				isinRaw := strings.TrimSpace(parts[9])
+				if len(isinRaw) == 12 {
+					isinGrowth = &isinRaw
+				} else if len(isinRaw) >= 24 {
+					g := isinRaw[0:12]
+					d := isinRaw[12:24]
+					isinGrowth = &g
+					isinDivReinvest = &d
+				}
+			}
+		} else if code, err := strconv.Atoi(strings.TrimSpace(parts[0])); err == nil && code > 0 {
+			// Legacy fallback: Code,Scheme Name,ISIN Growth,ISIN Div Reinvest,Fund House,Scheme Type,Scheme Category
+			schemeCode = code
+			if len(parts) > 1 {
+				schemeName = strings.TrimSpace(parts[1])
+			}
+			if len(parts) > 2 && strings.TrimSpace(parts[2]) != "" && strings.TrimSpace(parts[2]) != "-" {
+				v := strings.TrimSpace(parts[2])
+				isinGrowth = &v
+			}
+			if len(parts) > 3 && strings.TrimSpace(parts[3]) != "" && strings.TrimSpace(parts[3]) != "-" {
+				v := strings.TrimSpace(parts[3])
+				isinDivReinvest = &v
+			}
+			if len(parts) > 4 && strings.TrimSpace(parts[4]) != "" && strings.TrimSpace(parts[4]) != "-" {
+				v := strings.TrimSpace(parts[4])
+				fundHouse = &v
+			}
+			if len(parts) > 5 && strings.TrimSpace(parts[5]) != "" && strings.TrimSpace(parts[5]) != "-" {
+				v := strings.TrimSpace(parts[5])
+				schemeType = &v
+			}
+			if len(parts) > 6 && strings.TrimSpace(parts[6]) != "" && strings.TrimSpace(parts[6]) != "-" {
+				v := strings.TrimSpace(parts[6])
+				schemeCategory = &v
+			}
+		} else {
 			continue
 		}
 
-		var isinGrowth, isinDivReinvest, fundHouse, schemeType, schemeCategory *string
-
-		if len(parts) > 2 && strings.TrimSpace(parts[2]) != "" && strings.TrimSpace(parts[2]) != "-" {
-			v := strings.TrimSpace(parts[2])
-			isinGrowth = &v
-		}
-		if len(parts) > 3 && strings.TrimSpace(parts[3]) != "" && strings.TrimSpace(parts[3]) != "-" {
-			v := strings.TrimSpace(parts[3])
-			isinDivReinvest = &v
-		}
-		if len(parts) > 4 && strings.TrimSpace(parts[4]) != "" && strings.TrimSpace(parts[4]) != "-" {
-			v := strings.TrimSpace(parts[4])
-			fundHouse = &v
-		}
-		if len(parts) > 5 && strings.TrimSpace(parts[5]) != "" && strings.TrimSpace(parts[5]) != "-" {
-			v := strings.TrimSpace(parts[5])
-			schemeType = &v
-		}
-		if len(parts) > 6 && strings.TrimSpace(parts[6]) != "" && strings.TrimSpace(parts[6]) != "-" {
-			v := strings.TrimSpace(parts[6])
-			schemeCategory = &v
+		if schemeCode <= 0 || schemeName == "" {
+			continue
 		}
 
-		now := time.Now().UTC()
 		funds = append(funds, models.Fund{
 			SchemeCode:          schemeCode,
 			SchemeName:          schemeName,
@@ -135,7 +173,7 @@ func parseAmfiMasterData(r io.Reader) ([]models.Fund, error) {
 		})
 	}
 
-	return funds, scanner.Err()
+	return funds, nil
 }
 
 func (s *AmfiService) FetchLatestNavSnapshots(ctx context.Context) ([]LatestNavSnapshot, error) {
@@ -161,7 +199,8 @@ func parseLatestNavAll(r io.Reader) ([]LatestNavSnapshot, error) {
 	var snapshots []LatestNavSnapshot
 	scanner := bufio.NewScanner(r)
 
-	// Format: Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+	// Format 1 (8 columns): Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date
+	// Format 2 (6 columns): Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -178,13 +217,20 @@ func parseLatestNavAll(r io.Reader) ([]LatestNavSnapshot, error) {
 			continue
 		}
 
-		navStr := strings.TrimSpace(parts[4])
+		navIdx := 4
+		dateIdx := 5
+		if len(parts) >= 8 {
+			navIdx = 6
+			dateIdx = 7
+		}
+
+		navStr := strings.TrimSpace(parts[navIdx])
 		nav, err := strconv.ParseFloat(navStr, 64)
 		if err != nil || nav <= 0 {
 			continue
 		}
 
-		dateStr := strings.TrimSpace(parts[5])
+		dateStr := strings.TrimSpace(parts[dateIdx])
 		date, err := ParseDate(dateStr)
 		if err != nil {
 			continue

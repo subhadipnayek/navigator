@@ -130,6 +130,40 @@ func (s *FundService) SyncFundMasterList(ctx context.Context) (*models.FundSyncR
 		inserted += len(batch)
 	}
 
+	// Also fetch and upsert latest published NAV snapshots from NAVAll.txt
+	navSnapshots, navErr := s.amfiService.FetchLatestNavSnapshots(ctx)
+	if navErr == nil && len(navSnapshots) > 0 {
+		nowIst := IndiaNow()
+		var trackers []models.NavSyncTracker
+		for _, snap := range navSnapshots {
+			navVal := snap.Nav
+			navDate := snap.Date
+			trackers = append(trackers, models.NavSyncTracker{
+				SchemeCode:              snap.SchemeCode,
+				LatestNav:               &navVal,
+				LatestNavDate:           &navDate,
+				LastLatestNavCheckAtIst: &nowIst,
+			})
+		}
+
+		for i := 0; i < len(trackers); i += batchSize {
+			end := i + batchSize
+			if end > len(trackers) {
+				end = len(trackers)
+			}
+			batch := trackers[i:end]
+			_ = s.db.WithContext(ctx).Clauses(clause.OnConflict{
+				Columns: []clause.Column{{Name: "scheme_code"}},
+				DoUpdates: clause.AssignmentColumns([]string{
+					"latest_nav",
+					"latest_nav_date",
+					"last_latest_nav_check_at_ist",
+					"updated_at",
+				}),
+			}).Create(&batch).Error
+		}
+	}
+
 	durationStr := time.Since(startTime).String()
 	log.Printf("AMFI Fund Master sync complete: processed %d funds in %s", len(funds), durationStr)
 	return &models.FundSyncResultDto{
