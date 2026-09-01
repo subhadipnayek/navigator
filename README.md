@@ -168,6 +168,21 @@ Navigate to `http://localhost:4200/`. The app will automatically reload on code 
 
 ---
 
+## 🧪 Testing & CI/CD Pipeline
+
+The project includes an automated GitHub Actions CI pipeline (`.github/workflows/ci.yml`) and comprehensive unit testing across financial calculation engines, multi-broker parsers, and authentication:
+
+```bash
+# Run backend test suite
+cd navigator-api
+go test -v ./...
+
+# Verify Go API binary build
+go build -v ./cmd/server
+```
+
+---
+
 ## 📄 License
 
 This project is licensed under the terms of the MIT license.

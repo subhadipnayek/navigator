@@ -2,6 +2,9 @@
 
 ```
 NAVigator/
+├── .github/
+│   └── workflows/
+│       └── ci.yml                      # GitHub Actions CI pipeline (Go tests + Angular build)
 ├── navigator-api/                   # Go 1.26 Backend Microservice
 │   ├── cmd/server/                 # Application entry point (main.go)
 │   ├── internal/
@@ -11,6 +14,10 @@ NAVigator/
 │   │   ├── middleware/             # JWT auth & CORS middleware
 │   │   ├── models/                 # GORM entities & API DTO contracts
 │   │   ├── services/               # Core business logic (XIRR, AMFI scraper, Simulations)
+│   │   │   ├── auth_service_test.go         # PBKDF2 & JWT token unit tests
+│   │   │   ├── calculation_rules_test.go    # Date parsing, binary search & CAGR tests
+│   │   │   ├── simulation_service_test.go   # SIP generator, rebalance & risk metric tests
+│   │   │   ├── xirr_calculator_test.go      # XIRR bisection & cash flow precision tests
 │   │   │   └── importer/           # Extensible SOLID multi-broker parser & deduplication engine
 │   │   └── worker/                 # Background AMFI daily NAV sync worker
 │   ├── Dockerfile                  # Lightweight multi-stage Docker build (~20MB)
@@ -35,6 +42,7 @@ NAVigator/
 │
 ├── docker-compose.yml              # PostgreSQL 17 Alpine + Go API + Angular UI
 ├── docker-compose.bat              # Quick startup batch script (Windows)
+├── .gitignore                      # Git ignore configurations for Go, Node, Angular
 ├── AGENTS.md                       # Agent instructions, engineering rules & DoD
 ├── GEMINI.md                       # Gemini-specific agent instructions
 └── README.md                       # Master platform documentation & quickstart

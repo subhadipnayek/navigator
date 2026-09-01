@@ -99,12 +99,23 @@ navigator-api/
 
 ---
 
-## 🧪 Testing & Building
+## 🧪 Testing & Quality Assurance
+
+The test suite covers financial math accuracy, multi-broker parsers, authentication, and timeseries date math:
+
+- **XIRR Calculator Suite** (`xirr_calculator_test.go`): Newton-Raphson solver, bisection fallback, multi-year compounding, and negative return cash flows.
+- **Calculation Rules Suite** (`calculation_rules_test.go`): AMFI date string parsing, binary search nearest NAV locators with tolerance checks, CAGR, and corporate action factor adjustments.
+- **Simulation Engine Suite** (`simulation_service_test.go`): SIP installment generators, rebalancing calendar schedules, and drawdown/volatility risk metrics.
+- **Authentication Suite** (`auth_service_test.go`): PBKDF2 salt generation, password verification, and JWT claims signing.
+- **Broker Ingestion Suite** (`importer/importer_test.go`): CAMS, KFintech, and Zerodha format auto-detection and deduplication fingerprints.
 
 ```bash
-# Run unit & integration test suites
-go test ./...
+# Run all unit and integration tests
+go test -v ./...
+
+# Run unit tests with race detector
+go test -v -race ./...
 
 # Verify production binary compilation
-go build -v ./...
+go build -v ./cmd/server
 ```

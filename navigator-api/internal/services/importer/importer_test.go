@@ -181,6 +181,15 @@ func TestCamsParserSchemeEnrichmentAndNoiseStripping(t *testing.T) {
 
 func TestAuditAllSampleFiles(t *testing.T) {
 	dir := "/home/subhadipnayek/git_repos/navigator/sample transaction files"
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		// Also check relative to workspace
+		relDir := "../../../../sample transaction files"
+		if _, errRel := os.Stat(relDir); errRel == nil {
+			dir = relDir
+		} else {
+			t.Skipf("Sample transaction files directory not found at %s", dir)
+		}
+	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("ReadDir failed: %v", err)

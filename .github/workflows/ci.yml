@@ -1,0 +1,59 @@
+name: NAVigator CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  backend-test-and-build:
+    name: Backend API (Go 1.26) - Test & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./navigator-api
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          check-latest: true
+          cache-dependency-path: navigator-api/go.sum
+
+      - name: Download Go Dependencies
+        run: go mod download
+
+      - name: Run Backend Unit Tests
+        run: go test -v -race ./...
+
+      - name: Build Go Backend Binary
+        run: go build -v ./cmd/server
+
+  frontend-build:
+    name: Frontend Client (Angular 22) - Build Verification
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./navigator-ui
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+          cache-dependency-path: navigator-ui/package.json
+
+      - name: Install Frontend Dependencies
+        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+
+      - name: Build Angular Frontend Production Bundle
+        run: npm run build
