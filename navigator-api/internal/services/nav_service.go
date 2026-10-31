@@ -34,6 +34,8 @@ func (s *NavService) GetNavHistory(
 		return nil, err
 	}
 
+	wasFetchedFromApi, _ := s.EnsureHistoricalRange(ctx, schemeCode, from, to)
+
 	query := s.db.WithContext(ctx).Where("scheme_code = ?", schemeCode)
 	if from != nil {
 		query = query.Where("date >= ?", *from)
@@ -45,70 +47,6 @@ func (s *NavService) GetNavHistory(
 	var navs []models.NavHistory
 	if err := query.Order("date asc").Find(&navs).Error; err != nil {
 		return nil, err
-	}
-
-	wasFetchedFromApi := false
-	var totalRecords int64
-	_ = s.db.WithContext(ctx).Model(&models.NavHistory{}).Where("scheme_code = ?", schemeCode).Count(&totalRecords).Error
-
-	// If no records or only a single snapshot in DB, lazy-load historical NAVs from AMFI
-	if totalRecords <= 1 {
-		now := IndiaToday()
-		fetchFrom := now.AddDate(-5, 0, 0)
-		if from != nil && !from.IsZero() && from.Before(fetchFrom) {
-			fetchFrom = *from
-		}
-		fetched, err := s.amfiService.FetchNavHistory(ctx, schemeCode, fetchFrom, now)
-		if err == nil && len(fetched) > 0 {
-			wasFetchedFromApi = true
-			const batchSize = 1000
-			for i := 0; i < len(fetched); i += batchSize {
-				end := i + batchSize
-				if end > len(fetched) {
-					end = len(fetched)
-				}
-				_ = s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(fetched[i:end]).Error
-			}
-
-			s.updateNavSyncTracker(ctx, schemeCode, fetched)
-
-			query = s.db.WithContext(ctx).Where("scheme_code = ?", schemeCode)
-			if from != nil {
-				query = query.Where("date >= ?", *from)
-			}
-			if to != nil {
-				query = query.Where("date <= ?", *to)
-			}
-			_ = query.Order("date asc").Find(&navs).Error
-		}
-	} else if from != nil {
-		// If specific 'from' was requested that precedes our earliest recorded NAV, fetch missing window
-		var minDate time.Time
-		_ = s.db.WithContext(ctx).Model(&models.NavHistory{}).Where("scheme_code = ?", schemeCode).Select("MIN(date)").Scan(&minDate).Error
-		if !minDate.IsZero() && minDate.After(*from) {
-			fetched, err := s.amfiService.FetchNavHistory(ctx, schemeCode, *from, minDate)
-			if err == nil && len(fetched) > 0 {
-				wasFetchedFromApi = true
-				const batchSize = 1000
-				for i := 0; i < len(fetched); i += batchSize {
-					end := i + batchSize
-					if end > len(fetched) {
-						end = len(fetched)
-					}
-					_ = s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(fetched[i:end]).Error
-				}
-				s.updateNavSyncTracker(ctx, schemeCode, fetched)
-
-				query = s.db.WithContext(ctx).Where("scheme_code = ?", schemeCode)
-				if from != nil {
-					query = query.Where("date >= ?", *from)
-				}
-				if to != nil {
-					query = query.Where("date <= ?", *to)
-				}
-				_ = query.Order("date asc").Find(&navs).Error
-			}
-		}
 	}
 
 	var caActions []models.CorporateActionDto
@@ -213,8 +151,8 @@ func (s *NavService) GetReturns(ctx context.Context, schemeCode int, startDate, 
 	endEntry := FindNavOnOrBefore(navs, endDate)
 
 	if startEntry == nil || endEntry == nil {
-		// Lazy-load history if missing points
-		_, _ = s.GetNavHistory(ctx, schemeCode, &startDate, &endDate, "daily", false)
+		// Ensure missing range is fetched via smart delta
+		_, _ = s.EnsureHistoricalRange(ctx, schemeCode, &startDate, &endDate)
 		_ = s.db.WithContext(ctx).Where("scheme_code = ? AND date >= ? AND date <= ?", schemeCode, startDate.AddDate(0, 0, -10), endDate.AddDate(0, 0, 10)).Order("date asc").Find(&navs).Error
 		startEntry = FindNavOnOrAfter(navs, startDate, 7, true)
 		endEntry = FindNavOnOrBefore(navs, endDate)
@@ -263,7 +201,8 @@ func (s *NavService) GetRollingReturns(
 	var navs []models.NavHistory
 	query := s.db.WithContext(ctx).Where("scheme_code = ?", schemeCode)
 	if err := query.Order("date asc").Find(&navs).Error; err != nil || len(navs) < 20 {
-		_, _ = s.GetNavHistory(ctx, schemeCode, nil, nil, "daily", false)
+		startDateNeeded := IndiaToday().AddDate(-periodInYears, 0, 0)
+		_, _ = s.EnsureHistoricalRange(ctx, schemeCode, &startDateNeeded, to)
 		_ = s.db.WithContext(ctx).Where("scheme_code = ?", schemeCode).Order("date asc").Find(&navs).Error
 	}
 	if len(navs) < 20 {
@@ -392,7 +331,7 @@ func (s *NavService) RepairNavGaps(ctx context.Context, schemeCode int, minGapDa
 		to, _ := ParseDate(g.ToDate)
 		fetched, err := s.amfiService.FetchNavHistory(ctx, schemeCode, from, to)
 		if err == nil && len(fetched) > 0 {
-			_ = s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&fetched).Error
+			s.saveNavHistoriesAndSyncTracker(ctx, schemeCode, fetched)
 		}
 	}
 
@@ -402,43 +341,151 @@ func (s *NavService) RepairNavGaps(ctx context.Context, schemeCode int, minGapDa
 func (s *NavService) EnsureNavHistories(ctx context.Context, schemeCodes []int, start, end time.Time) (map[int][]models.NavHistory, error) {
 	res := make(map[int][]models.NavHistory)
 	for _, sc := range schemeCodes {
+		_, _ = s.EnsureHistoricalRange(ctx, sc, &start, &end)
 		var navs []models.NavHistory
 		_ = s.db.WithContext(ctx).
 			Where("scheme_code = ? AND date >= ? AND date <= ?", sc, start.AddDate(0, 0, -30), end.AddDate(0, 0, 30)).
 			Order("date asc").
 			Find(&navs).Error
-
-		if len(navs) == 0 {
-			fetched, err := s.amfiService.FetchNavHistory(ctx, sc, start, end)
-			if err == nil && len(fetched) > 0 {
-				_ = s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&fetched).Error
-				s.updateNavSyncTracker(ctx, sc, fetched)
-				navs = fetched
-			}
-		}
 		res[sc] = navs
 	}
 	return res, nil
 }
 
-func (s *NavService) updateNavSyncTracker(ctx context.Context, schemeCode int, _ []models.NavHistory) {
+// EnsureHistoricalRange inspects local DB coverage for schemeCode.
+// It detects missing older prefix or newer suffix delta intervals and fetches strictly those
+// missing dates from AMFI. If local DB already contains complete coverage, it bypasses AMFI completely (0 HTTP calls).
+func (s *NavService) EnsureHistoricalRange(ctx context.Context, schemeCode int, from, to *time.Time) (bool, error) {
+	now := IndiaToday()
+	effectiveTo := now
+	if to != nil && !to.IsZero() {
+		effectiveTo = *to
+	}
+	effectiveFrom := now.AddDate(-5, 0, 0)
+	if from != nil && !from.IsZero() {
+		effectiveFrom = *from
+	}
+
 	var agg struct {
-		MinDate *time.Time
-		MaxDate *time.Time
-		Count   int64
+		MinDate *string `gorm:"column:min_date"`
+		MaxDate *string `gorm:"column:max_date"`
+		Count   int64   `gorm:"column:count"`
 	}
 	_ = s.db.WithContext(ctx).Model(&models.NavHistory{}).
 		Where("scheme_code = ?", schemeCode).
 		Select("MIN(date) as min_date, MAX(date) as max_date, COUNT(*) as count").
 		Scan(&agg).Error
 
-	if agg.MaxDate == nil || agg.Count == 0 {
+	var minDate, maxDate *time.Time
+	if agg.MinDate != nil && *agg.MinDate != "" {
+		if t, err := ParseDate(*agg.MinDate); err == nil {
+			minDate = &t
+		}
+	}
+	if agg.MaxDate != nil && *agg.MaxDate != "" {
+		if t, err := ParseDate(*agg.MaxDate); err == nil {
+			maxDate = &t
+		}
+	}
+
+	wasFetched := false
+
+	// Case 1: Database has <= 1 record (e.g. only 1 daily snapshot or empty)
+	if agg.Count <= 1 {
+		fetched, err := s.amfiService.FetchNavHistory(ctx, schemeCode, effectiveFrom, effectiveTo)
+		if err == nil && len(fetched) > 0 {
+			wasFetched = true
+			s.saveNavHistoriesAndSyncTracker(ctx, schemeCode, fetched)
+		}
+		return wasFetched, nil
+	}
+
+	// Case 2: Database already has history. Only fetch missing delta intervals!
+	var missingRanges [][2]time.Time
+
+	// 2a. Missing older prefix delta: if effectiveFrom is before our earliest recorded NAV
+	if minDate != nil && effectiveFrom.Before(*minDate) {
+		deltaTo := minDate.AddDate(0, 0, -1)
+		if !deltaTo.Before(effectiveFrom) {
+			missingRanges = append(missingRanges, [2]time.Time{effectiveFrom, deltaTo})
+		}
+	}
+
+	// 2b. Missing newer suffix delta: if effectiveTo is after our latest recorded NAV
+	if maxDate != nil && effectiveTo.After(*maxDate) && maxDate.Before(now) {
+		deltaFrom := maxDate.AddDate(0, 0, 1)
+		if !deltaFrom.After(effectiveTo) {
+			missingRanges = append(missingRanges, [2]time.Time{deltaFrom, effectiveTo})
+		}
+	}
+
+	// If no missing ranges, DB already covers the entire requested window!
+	// ZERO calls to AMFI!
+	if len(missingRanges) == 0 {
+		return false, nil
+	}
+
+	// Fetch strictly the missing delta intervals
+	for _, rng := range missingRanges {
+		fetched, err := s.amfiService.FetchNavHistory(ctx, schemeCode, rng[0], rng[1])
+		if err == nil && len(fetched) > 0 {
+			wasFetched = true
+			s.saveNavHistoriesAndSyncTracker(ctx, schemeCode, fetched)
+		}
+	}
+
+	return wasFetched, nil
+}
+
+func (s *NavService) saveNavHistoriesAndSyncTracker(ctx context.Context, schemeCode int, fetched []models.NavHistory) {
+	if len(fetched) == 0 {
+		return
+	}
+	const batchSize = 1000
+	for i := 0; i < len(fetched); i += batchSize {
+		end := i + batchSize
+		if end > len(fetched) {
+			end = len(fetched)
+		}
+		_ = s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(fetched[i:end]).Error
+	}
+	s.updateNavSyncTracker(ctx, schemeCode, fetched)
+}
+
+func (s *NavService) updateNavSyncTracker(ctx context.Context, schemeCode int, _ []models.NavHistory) {
+	var agg struct {
+		MinDate *string `gorm:"column:min_date"`
+		MaxDate *string `gorm:"column:max_date"`
+		Count   int64   `gorm:"column:count"`
+	}
+	_ = s.db.WithContext(ctx).Model(&models.NavHistory{}).
+		Where("scheme_code = ?", schemeCode).
+		Select("MIN(date) as min_date, MAX(date) as max_date, COUNT(*) as count").
+		Scan(&agg).Error
+
+	if agg.MaxDate == nil || *agg.MaxDate == "" || agg.Count == 0 {
+		return
+	}
+
+	var minDate, maxDate *time.Time
+	if agg.MinDate != nil && *agg.MinDate != "" {
+		if t, err := ParseDate(*agg.MinDate); err == nil {
+			minDate = &t
+		}
+	}
+	if agg.MaxDate != nil && *agg.MaxDate != "" {
+		if t, err := ParseDate(*agg.MaxDate); err == nil {
+			maxDate = &t
+		}
+	}
+
+	if maxDate == nil {
 		return
 	}
 
 	var latestNav float64
 	_ = s.db.WithContext(ctx).Model(&models.NavHistory{}).
-		Where("scheme_code = ? AND date = ?", schemeCode, *agg.MaxDate).
+		Where("scheme_code = ? AND date = ?", schemeCode, *maxDate).
 		Select("nav").
 		Scan(&latestNav).Error
 
@@ -447,10 +494,10 @@ func (s *NavService) updateNavSyncTracker(ctx context.Context, schemeCode int, _
 
 	tracker := models.NavSyncTracker{
 		SchemeCode:              schemeCode,
-		NavStartDate:            agg.MinDate,
-		NavEndDate:              agg.MaxDate,
+		NavStartDate:            minDate,
+		NavEndDate:              maxDate,
 		LatestNav:               &latestNav,
-		LatestNavDate:           agg.MaxDate,
+		LatestNavDate:           maxDate,
 		NavHistoryCount:         int(agg.Count),
 		LastLatestNavCheckAtIst: &nowIst,
 		UpdatedAtUtc:            nowUtc,

@@ -125,4 +125,16 @@ func TestNavService_GetNavHistoryAndReturns(t *testing.T) {
 	if retRes.Cagr <= 0 {
 		t.Errorf("Expected positive CAGR, got %f", retRes.Cagr)
 	}
+
+	// 3. Test Smart Delta Cache Hit (0 API calls when DB already has range)
+	// Requested range: 2024-01-01 to 2026-01-01 (fully inside 2023-10-30 to 2026-10-30)
+	reqFrom := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	reqTo := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	wasFetched, err := navSvc.EnsureHistoricalRange(ctx, schemeCode, &reqFrom, &reqTo)
+	if err != nil {
+		t.Fatalf("EnsureHistoricalRange failed: %v", err)
+	}
+	if wasFetched {
+		t.Errorf("Expected wasFetched to be false (0 API calls) for range fully covered by DB")
+	}
 }

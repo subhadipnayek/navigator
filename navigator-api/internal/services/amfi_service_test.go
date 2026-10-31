@@ -189,3 +189,19 @@ func testFetchNavHistoryWithCustomUrl(ctx context.Context, s *AmfiService, testU
 	}
 	return result, nil
 }
+
+func TestFetchNavHistory_10DayInceptionCutoff(t *testing.T) {
+	// Gap of 0 days between earliest record and chunkFrom
+	rec1 := []models.NavHistory{{Date: time.Date(2021, 11, 1, 0, 0, 0, 0, time.UTC), Nav: 150}}
+	chunkFrom1 := time.Date(2021, 11, 1, 0, 0, 0, 0, time.UTC)
+	if rec1[0].Date.Sub(chunkFrom1).Hours() > 10*24 {
+		t.Errorf("Did not expect cutoff for 0-day gap")
+	}
+
+	// 400-day gap (> 10 days) -> inception cutoff triggers
+	rec2 := []models.NavHistory{{Date: time.Date(2018, 1, 1, 0, 0, 0, 0, time.UTC), Nav: 100}}
+	chunkFrom2 := time.Date(2016, 11, 1, 0, 0, 0, 0, time.UTC)
+	if rec2[0].Date.Sub(chunkFrom2).Hours() <= 10*24 {
+		t.Errorf("Expected 10-day cutoff to trigger for 2018 vs 2016 chunk start")
+	}
+}

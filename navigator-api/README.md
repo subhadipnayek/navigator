@@ -86,11 +86,11 @@ navigator-api/
 - `POST /api/funds/sync`: Trigger on-demand sync with AMFI master.
 
 ### NAV History & Returns (`/api/nav`)
-- `GET /api/nav/:code`: Fetch NAV historical points with standardized `NavDataResponse` schema (`latestNavDate`, `navStartDate`, `navEndDate`, `corporateActions`, `isAdjusted`, `wasFetchedFromApi`, `data` with `dd-MM-yyyy` string formatting). Automatically lazy-loads deep history on-demand from AMFI chunking backwards from current date with inception break detection.
-- `GET /api/nav/:code/returns`: Calculate point-to-point CAGR and absolute returns with automatic historical lazy-loading fallback (`absoluteReturn`, `absoluteReturnPercent`, `cagr`, `startDate`, `endDate`, `startNav`, `endNav`).
-- `GET /api/nav/:code/rolling-returns`: Compute rolling return series and statistics (with on-demand lazy-loading fallback).
+- `GET /api/nav/:code`: Fetch NAV historical points with standardized `NavDataResponse` schema (`latestNavDate`, `navStartDate`, `navEndDate`, `corporateActions`, `isAdjusted`, `wasFetchedFromApi`, `data` with `dd-MM-yyyy` string formatting). Powered by a smart delta range resolver (0 HTTP calls on local DB hit), parallel multi-chunk 5-year interval ingestion (bounded 3-worker concurrency), and a 10-day missing NAV inception cutoff.
+- `GET /api/nav/:code/returns`: Calculate point-to-point CAGR and absolute returns with automatic historical delta lazy-loading fallback (`absoluteReturn`, `absoluteReturnPercent`, `cagr`, `startDate`, `endDate`, `startNav`, `endNav`).
+- `GET /api/nav/:code/rolling-returns`: Compute rolling return series and statistics (with on-demand smart delta lazy-loading fallback).
 - `GET /api/nav/:code/gaps`: Detect missing NAV dates.
-- `POST /api/nav/:code/repair-gaps`: Automatically backfill verified data gaps via multi-chunk AMFI time-series queries.
+- `POST /api/nav/:code/repair-gaps`: Automatically backfill verified data gaps via parallel multi-chunk AMFI time-series queries.
 
 ### Portfolio Backtesting & Lab (`/api/portfolio`)
 - `POST /api/portfolio/simulate`: Simulate custom multi-asset basket with SIP/Lump-sum.

@@ -33,7 +33,7 @@ navigator is a full-stack financial analytics application designed to track mutu
 
 ### Key Modules & Capabilities
 
-- **AMFI Integration & Modern NAV Timeseries Engine**: Automated background sync worker, real-time lazy-loaded historical backfills backwards from current date with early inception detection, aligned `NavDataResponse` contracts (`dd-MM-yyyy` date formatting, metadata ribbons, corporate actions), and multi-chunk sliding window retrieval ($\le 4$ years per chunk) for full 30+ year daily NAV histories from `amfiindia.com/api/nav-history`.
+- **AMFI Integration & Modern NAV Timeseries Engine**: Automated background sync worker, smart delta range resolver (0 HTTP calls on local DB coverage hits), parallel 5-year chunk ingestion with bounded 3-worker concurrency, 10-day missing NAV inception cutoff limit, aligned `NavDataResponse` contracts (`dd-MM-yyyy` date formatting, metadata ribbons, corporate actions), and multi-chunk sliding window retrieval for full 30+ year daily NAV histories from `amfiindia.com/api/nav-history`.
 - **Dual-Database Engine (PostgreSQL & SQLite)**: Seamlessly toggle between enterprise containerized PostgreSQL 17 with `pg_trgm` GIN indexing and zero-config embedded SQLite with WAL concurrency via environment settings (`DB_TYPE=sqlite` or `DB_TYPE=postgres`).
 - **Portfolio Lab & Simulation**: Backtest SIP and lump-sum investments across custom asset allocation baskets, calculate CAGR/XIRR, drawdowns, and side-by-side fund comparisons.
 - **Rolling Returns Engine**: Compute rolling return windows (1Y, 3Y, 5Y) with median, min, max, standard deviation, and quartile breakdowns.

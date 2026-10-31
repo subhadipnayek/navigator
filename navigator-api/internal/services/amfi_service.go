@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"navigator-api/internal/models"
@@ -283,10 +284,18 @@ func ParseLatestNavAll(r io.Reader) ([]LatestNavSnapshot, error) {
 	return snapshots, scanner.Err()
 }
 
+type navChunk struct {
+	Index int
+	From  time.Time
+	To    time.Time
+}
+
 // FetchNavHistory fetches historical NAV data for a scheme across any arbitrary time window (from days to 30+ years)
-// by automatically partitioning the window into <= 4-year chunks compliant with AMFI upstream limits.
-// It iterates backwards from 'to' down to 'from'. If an older chunk returns 0 records after having
-// already gathered records, it terminates early to avoid unnecessary timeouts for pre-launch dates.
+// by automatically partitioning the window into <= 5-year chunks compliant with AMFI upstream limits.
+// It iterates backwards from 'to' down to 'from', executing chunks in parallel (bounded to max 3 concurrent workers).
+// It applies a 10-day inception cutoff limit: if any chunk returns 0 records or its earliest recorded NAV is more
+// than 10 calendar days after the chunk start date, that date is recognized as the scheme inception point,
+// immediately terminating/canceling all older chunks.
 func (s *AmfiService) FetchNavHistory(ctx context.Context, schemeCode int, from, to time.Time) ([]models.NavHistory, error) {
 	if schemeCode <= 0 {
 		return nil, fmt.Errorf("invalid scheme code %d", schemeCode)
@@ -302,31 +311,138 @@ func (s *AmfiService) FetchNavHistory(ctx context.Context, schemeCode int, from,
 		from, to = to, from
 	}
 
-	// Partition date range into <= 4-year sliding intervals backwards from 'to' to 'from'
-	var chunks [][2]time.Time
+	// Partition date range into <= 5-year sliding intervals backwards from 'to' to 'from'
+	var chunks []navChunk
 	currTo := to
+	idx := 0
 	for !currTo.Before(from) {
-		currFrom := currTo.AddDate(-4, 0, 0)
+		// 5-year chunking: AddDate(-5, 0, 1) ensures duration is strictly <= 5 years (<= 1826 days)
+		currFrom := currTo.AddDate(-5, 0, 1)
 		if currFrom.Before(from) {
 			currFrom = from
 		}
-		chunks = append(chunks, [2]time.Time{currFrom, currTo})
+		chunks = append(chunks, navChunk{Index: idx, From: currFrom, To: currTo})
+		idx++
 		currTo = currFrom.AddDate(0, 0, -1)
 	}
 
-	recordMap := make(map[string]models.NavHistory)
+	if len(chunks) == 0 {
+		return nil, nil
+	}
 
-	for _, chunk := range chunks {
-		chunkFrom, chunkTo := chunk[0], chunk[1]
-		chunkRecords, err := s.fetchNavHistoryChunk(ctx, schemeCode, chunkFrom, chunkTo)
+	// Fast-path for single chunk (common for <= 5 year requests)
+	if len(chunks) == 1 {
+		records, err := s.fetchNavHistoryChunk(ctx, schemeCode, chunks[0].From, chunks[0].To)
 		if err != nil {
+			return nil, err
+		}
+		sort.Slice(records, func(i, j int) bool {
+			return records[i].Date.Before(records[j].Date)
+		})
+		return records, nil
+	}
+
+	// Multi-chunk parallel execution with 10-day inception cutoff
+	const maxConcurrency = 3
+	sem := make(chan struct{}, maxConcurrency)
+
+	childCtx, cancelAll := context.WithCancel(ctx)
+	defer cancelAll()
+
+	chunkCtxs := make([]context.Context, len(chunks))
+	chunkCancels := make([]context.CancelFunc, len(chunks))
+	for i := range chunks {
+		chunkCtxs[i], chunkCancels[i] = context.WithCancel(childCtx)
+		defer chunkCancels[i]()
+	}
+
+	var cutoffMutex sync.Mutex
+	cutoffChunkIndex := len(chunks)
+
+	setCutoff := func(chunkIdx int) {
+		cutoffMutex.Lock()
+		defer cutoffMutex.Unlock()
+		if chunkIdx < cutoffChunkIndex {
+			cutoffChunkIndex = chunkIdx
+			// Cancel all older chunks (j > chunkIdx)
+			for j := chunkIdx + 1; j < len(chunks); j++ {
+				chunkCancels[j]()
+			}
+		}
+	}
+
+	type chunkResult struct {
+		index   int
+		records []models.NavHistory
+	}
+	resultsChan := make(chan chunkResult, len(chunks))
+	var wg sync.WaitGroup
+
+	for _, ch := range chunks {
+		cutoffMutex.Lock()
+		shouldSkip := ch.Index >= cutoffChunkIndex
+		cutoffMutex.Unlock()
+		if shouldSkip {
 			continue
 		}
-		if len(chunkRecords) == 0 && len(recordMap) > 0 {
-			// Older chunk returned no records after gathering newer records: fund inception reached
-			break
+
+		wg.Add(1)
+		go func(chunk navChunk) {
+			defer wg.Done()
+
+			select {
+			case <-chunkCtxs[chunk.Index].Done():
+				return
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			}
+
+			cutoffMutex.Lock()
+			if chunk.Index >= cutoffChunkIndex {
+				cutoffMutex.Unlock()
+				return
+			}
+			cutoffMutex.Unlock()
+
+			records, err := s.fetchNavHistoryChunk(chunkCtxs[chunk.Index], schemeCode, chunk.From, chunk.To)
+			if err != nil {
+				return
+			}
+
+			// If no records in this chunk, older chunks have reached pre-inception
+			if len(records) == 0 {
+				setCutoff(chunk.Index)
+				return
+			}
+
+			sort.Slice(records, func(i, j int) bool {
+				return records[i].Date.Before(records[j].Date)
+			})
+
+			// 10-day inception cutoff rule:
+			// If more than 10 calendar days of NAV data are missing between chunk.From and earliest record,
+			// the scheme was not operational before this earliest record. We hit the beginning point!
+			earliest := records[0].Date
+			if earliest.Sub(chunk.From).Hours() > 10*24 {
+				setCutoff(chunk.Index)
+			}
+
+			resultsChan <- chunkResult{index: chunk.Index, records: records}
+		}(ch)
+	}
+
+	wg.Wait()
+	close(resultsChan)
+
+	recordMap := make(map[string]models.NavHistory)
+	for res := range resultsChan {
+		cutoffMutex.Lock()
+		isPastCutoff := res.index > cutoffChunkIndex
+		cutoffMutex.Unlock()
+		if isPastCutoff {
+			continue
 		}
-		for _, r := range chunkRecords {
+		for _, r := range res.records {
 			dateKey := r.Date.Format(DateFormatYYYYMMDD)
 			recordMap[dateKey] = r
 		}
