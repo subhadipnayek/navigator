@@ -111,28 +111,40 @@ type FundSyncResultDto struct {
 // ─── NAV DTOs ───
 
 type NavDataPointDto struct {
-	Date time.Time `json:"date"`
-	Nav  float64   `json:"nav"`
+	Date string  `json:"date"` // dd-MM-yyyy format
+	Nav  float64 `json:"nav"`
 }
 
 type NavDataResponse struct {
-	SchemeCode int               `json:"schemeCode"`
-	SchemeName string            `json:"schemeName"`
-	FundHouse  *string           `json:"fundHouse"`
-	Category   *string           `json:"category"`
-	Data       []NavDataPointDto `json:"data"`
+	SchemeCode                int                  `json:"schemeCode"`
+	SchemeName                string               `json:"schemeName"`
+	FundHouse                 *string              `json:"fundHouse"`
+	Category                  *string              `json:"category,omitempty"`
+	LatestNavDate             *string              `json:"latestNavDate,omitempty"`
+	NavStartDate              *string              `json:"navStartDate,omitempty"`
+	NavEndDate                *string              `json:"navEndDate,omitempty"`
+	LastSuccessfulNavCheckUtc *string              `json:"lastSuccessfulNavCheckUtc,omitempty"`
+	NavStatus                 string               `json:"navStatus,omitempty"`
+	IsLikelyDiscontinued      bool                 `json:"isLikelyDiscontinued"`
+	WasFetchedFromApi         bool                 `json:"wasFetchedFromApi"`
+	IsAdjusted                bool                 `json:"isAdjusted"`
+	Data                      []NavDataPointDto    `json:"data"`
+	CorporateActions          []CorporateActionDto `json:"corporateActions"`
 }
 
 type ReturnsResponse struct {
 	SchemeCode            int     `json:"schemeCode"`
 	SchemeName            string  `json:"schemeName"`
+	FundHouse             *string `json:"fundHouse,omitempty"`
 	StartDate             string  `json:"startDate"`
 	EndDate               string  `json:"endDate"`
 	StartNav              float64 `json:"startNav"`
 	EndNav                float64 `json:"endNav"`
+	AbsoluteReturn        float64 `json:"absoluteReturn"`
 	AbsoluteReturnPercent float64 `json:"absoluteReturnPercent"`
 	Cagr                  float64 `json:"cagr"`
 	Days                  int     `json:"days"`
+	HasDiscontinuity      bool    `json:"hasDiscontinuity"`
 }
 
 type RollingReturnDto struct {

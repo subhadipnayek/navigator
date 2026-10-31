@@ -203,10 +203,10 @@ func TestComputeAdjustmentFactor(t *testing.T) {
 
 func TestSampleNavDataPoints(t *testing.T) {
 	points := []models.NavDataPointDto{
-		{Date: time.Date(2023, 1, 2, 0, 0, 0, 0, time.UTC), Nav: 100},
-		{Date: time.Date(2023, 1, 3, 0, 0, 0, 0, time.UTC), Nav: 101},
-		{Date: time.Date(2023, 1, 9, 0, 0, 0, 0, time.UTC), Nav: 105},
-		{Date: time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC), Nav: 110},
+		{Date: "02-01-2023", Nav: 100},
+		{Date: "03-01-2023", Nav: 101},
+		{Date: "09-01-2023", Nav: 105},
+		{Date: "01-02-2023", Nav: 110},
 	}
 
 	daily := services.SampleNavDataPoints(points, "daily")

@@ -19,6 +19,7 @@ NAVigator/
 │   │   ├── services/               # Core business logic (XIRR, AMFI scraper, Simulations)
 │   │   │   ├── auth_service_test.go         # PBKDF2 & JWT token unit tests
 │   │   │   ├── calculation_rules_test.go    # Date parsing, binary search & CAGR tests
+│   │   │   ├── nav_service_test.go          # NAV history DTO & point-to-point returns tests
 │   │   │   ├── simulation_service_test.go   # SIP generator, rebalance & risk metric tests
 │   │   │   ├── xirr_calculator_test.go      # XIRR bisection & cash flow precision tests
 │   │   │   └── importer/           # Extensible SOLID multi-broker parser & deduplication engine

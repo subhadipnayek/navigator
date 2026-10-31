@@ -49,6 +49,12 @@ func ParseDate(s string) (time.Time, error) {
 	if t, err := time.Parse(DateFormatYYYYMMDD, s); err == nil {
 		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
 	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
+	}
+	if t, err := time.Parse("2006-01-02T15:04:05", s); err == nil {
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
+	}
 	return time.Time{}, fmt.Errorf("invalid date format '%s'", s)
 }
 
@@ -211,7 +217,11 @@ func SampleNavDataPoints(data []models.NavDataPointDto, interval string) []model
 		var keys []key
 
 		for _, item := range data {
-			year, week := item.Date.ISOWeek()
+			t, err := ParseDate(item.Date)
+			if err != nil {
+				continue
+			}
+			year, week := t.ISOWeek()
 			k := key{Year: year, Week: week}
 			if _, exists := m[k]; !exists {
 				keys = append(keys, k)
@@ -234,7 +244,11 @@ func SampleNavDataPoints(data []models.NavDataPointDto, interval string) []model
 		var keys []key
 
 		for _, item := range data {
-			k := key{Year: item.Date.Year(), Month: item.Date.Month()}
+			t, err := ParseDate(item.Date)
+			if err != nil {
+				continue
+			}
+			k := key{Year: t.Year(), Month: t.Month()}
 			if _, exists := m[k]; !exists {
 				keys = append(keys, k)
 			}

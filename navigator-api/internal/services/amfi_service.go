@@ -285,6 +285,8 @@ func ParseLatestNavAll(r io.Reader) ([]LatestNavSnapshot, error) {
 
 // FetchNavHistory fetches historical NAV data for a scheme across any arbitrary time window (from days to 30+ years)
 // by automatically partitioning the window into <= 4-year chunks compliant with AMFI upstream limits.
+// It iterates backwards from 'to' down to 'from'. If an older chunk returns 0 records after having
+// already gathered records, it terminates early to avoid unnecessary timeouts for pre-launch dates.
 func (s *AmfiService) FetchNavHistory(ctx context.Context, schemeCode int, from, to time.Time) ([]models.NavHistory, error) {
 	if schemeCode <= 0 {
 		return nil, fmt.Errorf("invalid scheme code %d", schemeCode)
@@ -300,16 +302,16 @@ func (s *AmfiService) FetchNavHistory(ctx context.Context, schemeCode int, from,
 		from, to = to, from
 	}
 
-	// Partition date range into <= 4-year sliding intervals to satisfy AMFI's < 5-year limit
+	// Partition date range into <= 4-year sliding intervals backwards from 'to' to 'from'
 	var chunks [][2]time.Time
-	currFrom := from
-	for !currFrom.After(to) {
-		currTo := currFrom.AddDate(4, 0, 0)
-		if currTo.After(to) {
-			currTo = to
+	currTo := to
+	for !currTo.Before(from) {
+		currFrom := currTo.AddDate(-4, 0, 0)
+		if currFrom.Before(from) {
+			currFrom = from
 		}
 		chunks = append(chunks, [2]time.Time{currFrom, currTo})
-		currFrom = currTo.AddDate(0, 0, 1)
+		currTo = currFrom.AddDate(0, 0, -1)
 	}
 
 	recordMap := make(map[string]models.NavHistory)
@@ -319,6 +321,10 @@ func (s *AmfiService) FetchNavHistory(ctx context.Context, schemeCode int, from,
 		chunkRecords, err := s.fetchNavHistoryChunk(ctx, schemeCode, chunkFrom, chunkTo)
 		if err != nil {
 			continue
+		}
+		if len(chunkRecords) == 0 && len(recordMap) > 0 {
+			// Older chunk returned no records after gathering newer records: fund inception reached
+			break
 		}
 		for _, r := range chunkRecords {
 			dateKey := r.Date.Format(DateFormatYYYYMMDD)
