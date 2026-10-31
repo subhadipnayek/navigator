@@ -293,7 +293,7 @@ func (h *UserPortfolioHandler) MatchFunds(c *gin.Context) {
 		}
 
 		if err != nil && row.SchemeName != nil && *row.SchemeName != "" {
-			err = h.db.WithContext(c.Request.Context()).Where("scheme_name ILIKE ?", "%"+*row.SchemeName+"%").First(&fund).Error
+			err = h.db.WithContext(c.Request.Context()).Where("LOWER(scheme_name) LIKE LOWER(?)", "%"+*row.SchemeName+"%").First(&fund).Error
 		}
 
 		if err == nil {

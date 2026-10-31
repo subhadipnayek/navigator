@@ -36,7 +36,7 @@ func (r *AssetResolver) Resolve(ctx context.Context, draft *RawTradeDraft) {
 	if isin := strings.TrimSpace(draft.ISIN); isin != "" {
 		var fund models.Fund
 		err := r.db.WithContext(ctx).
-			Where("isin_growth = ? OR isin_div_reinvestment = ? OR isin_growth ILIKE ? OR isin_div_reinvestment ILIKE ?", isin, isin, isin, isin).
+			Where("isin_growth = ? OR isin_div_reinvestment = ? OR LOWER(isin_growth) LIKE LOWER(?) OR LOWER(isin_div_reinvestment) LIKE LOWER(?)", isin, isin, isin, isin).
 			First(&fund).Error
 		if err == nil && fund.SchemeCode > 0 {
 			draft.SchemeCode = fund.SchemeCode
@@ -100,10 +100,10 @@ func (r *AssetResolver) resolveFundByName(ctx context.Context, rawName string) *
 
 	// Strategy A: Direct exact or substring query
 	var directFund models.Fund
-	if err := r.db.WithContext(ctx).Where("scheme_name ILIKE ?", clean).First(&directFund).Error; err == nil && directFund.SchemeCode > 0 {
+	if err := r.db.WithContext(ctx).Where("LOWER(scheme_name) LIKE LOWER(?)", clean).First(&directFund).Error; err == nil && directFund.SchemeCode > 0 {
 		return &directFund
 	}
-	if err := r.db.WithContext(ctx).Where("scheme_name ILIKE ?", "%"+clean+"%").First(&directFund).Error; err == nil && directFund.SchemeCode > 0 {
+	if err := r.db.WithContext(ctx).Where("LOWER(scheme_name) LIKE LOWER(?)", "%"+clean+"%").First(&directFund).Error; err == nil && directFund.SchemeCode > 0 {
 		return &directFund
 	}
 
@@ -128,19 +128,19 @@ func (r *AssetResolver) resolveFundByName(ctx context.Context, rawName string) *
 	var candidates []models.Fund
 	query := r.db.WithContext(ctx).Model(&models.Fund{})
 	for _, kw := range searchKeywords {
-		query = query.Where("scheme_name ILIKE ? OR fund_house ILIKE ?", "%"+kw+"%", "%"+kw+"%")
+		query = query.Where("LOWER(scheme_name) LIKE LOWER(?) OR LOWER(fund_house) LIKE LOWER(?)", "%"+kw+"%", "%"+kw+"%")
 	}
 	if err := query.Limit(40).Find(&candidates).Error; err != nil || len(candidates) == 0 {
 		// Fallback to top 2 keywords if all keywords together yielded 0 records
 		if len(searchKeywords) > 2 {
 			q2 := r.db.WithContext(ctx).Model(&models.Fund{})
 			for _, kw := range searchKeywords[:2] {
-				q2 = q2.Where("scheme_name ILIKE ? OR fund_house ILIKE ?", "%"+kw+"%", "%"+kw+"%")
+				q2 = q2.Where("LOWER(scheme_name) LIKE LOWER(?) OR LOWER(fund_house) LIKE LOWER(?)", "%"+kw+"%", "%"+kw+"%")
 			}
 			_ = q2.Limit(40).Find(&candidates).Error
 		} else if len(searchKeywords) > 1 {
 			qSingle := r.db.WithContext(ctx).Model(&models.Fund{})
-			qSingle = qSingle.Where("scheme_name ILIKE ? OR fund_house ILIKE ?", "%"+searchKeywords[0]+"%", "%"+searchKeywords[0]+"%")
+			qSingle = qSingle.Where("LOWER(scheme_name) LIKE LOWER(?) OR LOWER(fund_house) LIKE LOWER(?)", "%"+searchKeywords[0]+"%", "%"+searchKeywords[0]+"%")
 			_ = qSingle.Limit(40).Find(&candidates).Error
 		}
 	}

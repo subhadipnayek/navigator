@@ -25,14 +25,16 @@ navigator is a full-stack financial analytics application designed to track mutu
                      ┌──────────────────────┴──────────────────────┐
                      ▼                                             ▼
        ┌───────────────────────────┐                 ┌───────────────────────────┐
-       │   PostgreSQL 17 Alpine    │                 │       AMFI India API      │
-       │     (Port 5432)           │                 │    (Daily NAV & History)  │
-       └───────────────────────────┘                 └───────────────────────────┘
+       │   Dual Database Engine    │                 │       AMFI India API      │
+       │ PostgreSQL 17 (Container) │                 │    (Daily NAV & History)  │
+       │   OR SQLite (Embedded)    │                 └───────────────────────────┘
+       └───────────────────────────┘
 ```
 
 ### Key Modules & Capabilities
 
 - **AMFI Integration & Modern NAV Timeseries Engine**: Automated background sync worker, real-time lazy-loaded historical backfills, and multi-chunk sliding window retrieval ($\le 4$ years per chunk) for full 30+ year daily NAV histories from `amfiindia.com/api/nav-history`.
+- **Dual-Database Engine (PostgreSQL & SQLite)**: Seamlessly toggle between enterprise containerized PostgreSQL 17 with `pg_trgm` GIN indexing and zero-config embedded SQLite with WAL concurrency via environment settings (`DB_TYPE=sqlite` or `DB_TYPE=postgres`).
 - **Portfolio Lab & Simulation**: Backtest SIP and lump-sum investments across custom asset allocation baskets, calculate CAGR/XIRR, drawdowns, and side-by-side fund comparisons.
 - **Rolling Returns Engine**: Compute rolling return windows (1Y, 3Y, 5Y) with median, min, max, standard deviation, and quartile breakdowns.
 - **User Portfolios & Transaction Ledger**: Track real user portfolios, parse CAMS/KFintech Excel statements, track historical valuations, and compute realized/unrealized PnL.
@@ -45,11 +47,12 @@ navigator is a full-stack financial analytics application designed to track mutu
 
 ```
 NAVigator/
+├── go.work                          # Go multi-module workspace root
 ├── navigator-api/                   # Go 1.26 Backend Microservice
 │   ├── cmd/server/                 # Entry point (main.go)
 │   ├── internal/
-│   │   ├── config/                 # Environment & config loader
-│   │   ├── database/               # PostgreSQL GORM connection & auto-migrations
+│   │   ├── config/                 # Environment & config loader (dual DB dialect resolution)
+│   │   ├── database/               # PostgreSQL & SQLite GORM connection & auto-migrations
 │   │   ├── handlers/               # Gin REST route handlers
 │   │   ├── middleware/             # JWT auth & CORS middleware
 │   │   ├── models/                 # Database entities & DTO contracts
@@ -110,7 +113,20 @@ _(On Windows, you can also double-click `docker-compose.bat`)_
 
 ## 💻 Local Development Setup
 
-### 1. Database (PostgreSQL)
+### Option A: Self-Contained SQLite (Zero Docker & Zero Setup)
+Run the backend completely self-contained with embedded SQLite (no Docker, PostgreSQL, or external SQLite installation required):
+
+```bash
+# Directly from the repository root:
+go run ./navigator-api/cmd/server
+
+# Or from inside navigator-api:
+cd navigator-api
+go run cmd/server/main.go
+```
+The API automatically creates and manages `navigator.db` in high-concurrency WAL mode on Port `8080`.
+
+### Option B: PostgreSQL (Containerized)
 
 Run a lightweight PostgreSQL instance:
 
@@ -124,21 +140,15 @@ docker run -d \
   postgres:17-alpine
 ```
 
-### 2. Backend (`navigator-api`)
-
+Then start the API with PostgreSQL:
 ```bash
-cd navigator-api
-
-# Download dependencies
-go mod download
-
-# Run the API
-go run cmd/server/main.go
+export DB_TYPE=postgres
+go run ./navigator-api/cmd/server
 ```
 
 API runs on `http://localhost:8080` (or `http://localhost:5038` via docker compose).
 
-### 3. Frontend (`navigator-ui`)
+### Frontend (`navigator-ui`)
 
 ```bash
 cd navigator-ui
@@ -173,12 +183,11 @@ Navigate to `http://localhost:4200/`. The app will automatically reload on code 
 The project includes an automated GitHub Actions CI pipeline (`.github/workflows/ci.yml`) and comprehensive unit testing across financial calculation engines, multi-broker parsers, and authentication:
 
 ```bash
-# Run backend test suite
-cd navigator-api
-go test -v ./...
+# Run backend test suite (including SQLite WAL & config dialect tests)
+go test -v ./navigator-api/...
 
 # Verify Go API binary build
-go build -v ./cmd/server
+go build -v ./navigator-api/cmd/server
 ```
 
 ---

@@ -2,7 +2,7 @@
 
 > **Go 1.26 Backend Microservice for NAVigator Mutual Fund Analytics**
 
-`navigator-api` is the core high-performance financial analytics and data ingestion engine for NAVigator. It handles direct AMFI NAV synchronization, historical scraping, portfolio backtesting, XIRR calculations, Excel trade ledger parsing, and user authentication.
+`navigator-api` is the core high-performance financial analytics and data ingestion engine for NAVigator. It handles direct AMFI NAV synchronization, historical scraping, portfolio backtesting, XIRR calculations, Excel trade ledger parsing, user authentication, and dual database persistence (SQLite out-of-the-box for zero-setup local runs, and PostgreSQL 17 for containerized production).
 
 ---
 
@@ -10,10 +10,37 @@
 
 - **Language**: Go 1.26
 - **Web Framework**: [Gin Web Framework](https://github.com/gin-gonic/gin)
-- **ORM / Database**: [GORM](https://gorm.io/) with PostgreSQL 17 driver
+- **ORM / Database**: [GORM](https://gorm.io/) with dual-database engine:
+  - **SQLite**: `github.com/glebarez/sqlite` (Pure Go, CGO-free, embedded — default for local runs with WAL mode).
+  - **PostgreSQL 17**: `gorm.io/driver/postgres` with `pg_trgm` GIN indexing for production environments.
 - **Authentication**: JWT (`golang-jwt/jwt/v5`) with PBKDF2 password hashing (`golang.org/x/crypto`)
 - **Excel Engine**: [Excelize](https://github.com/qax-os/excelize) for CAMS & KFintech statement parsing
 - **Port**: `5038` (Docker) / `8080` (Local default)
+
+---
+
+## ⚙️ Environment Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `8080` | HTTP port on which the Gin server listens. |
+| `DB_TYPE` | `sqlite` | Database dialect to use: `sqlite` (default for local runs) or `postgres` (used in Docker Compose). |
+| `DATABASE_URL` | `navigator.db` | SQLite file path OR PostgreSQL connection string. |
+| `DATABASE_PATH` | `""` | Dedicated path for SQLite database file (e.g., `./data/navigator.db`). |
+| `JWT_KEY` | `dev-only-...` | Secret key used for signing JWT authentication tokens. |
+| `JWT_EXPIRES_HOURS` | `8` | Expiry duration for authentication tokens in hours. |
+| `CORS_ORIGINS` | `http://localhost:4000,...` | Comma-separated list of allowed CORS browser origins. |
+
+### Running Zero-Config with SQLite (Zero Docker Required)
+No Docker, PostgreSQL, or external SQLite installation needed:
+```bash
+# Directly from repository root:
+go run ./navigator-api/cmd/server
+
+# Or from inside navigator-api:
+cd navigator-api
+go run cmd/server/main.go
+```
 
 ---
 
@@ -25,8 +52,10 @@ navigator-api/
 │   └── server/
 │       └── main.go              # Application entry point & router initialization
 ├── internal/
-│   ├── config/                  # Environment variable configuration
-│   ├── database/                # PostgreSQL GORM connection & migrations
+│   ├── config/                  # Environment variable configuration & dialect resolver
+│   │   └── config_test.go       # Config resolution & database type tests
+│   ├── database/                # Dual PostgreSQL/SQLite GORM connection & migrations
+│   │   └── db_test.go           # SQLite WAL, indexes, and schema verification tests
 │   ├── handlers/                # REST HTTP route controllers
 │   ├── middleware/              # Auth & CORS middleware
 │   ├── models/                  # GORM database entities & API contracts
@@ -99,23 +128,15 @@ navigator-api/
 
 ---
 
-## 🧪 Testing & Quality Assurance
-
-The test suite covers financial math accuracy, multi-broker parsers, authentication, and timeseries date math:
-
-- **XIRR Calculator Suite** (`xirr_calculator_test.go`): Newton-Raphson solver, bisection fallback, multi-year compounding, and negative return cash flows.
-- **Calculation Rules Suite** (`calculation_rules_test.go`): AMFI date string parsing, binary search nearest NAV locators with tolerance checks, CAGR, and corporate action factor adjustments.
-- **Simulation Engine Suite** (`simulation_service_test.go`): SIP installment generators, rebalancing calendar schedules, and drawdown/volatility risk metrics.
-- **Authentication Suite** (`auth_service_test.go`): PBKDF2 salt generation, password verification, and JWT claims signing.
-- **Broker Ingestion Suite** (`importer/importer_test.go`): CAMS, KFintech, and Zerodha format auto-detection and deduplication fingerprints.
+## 🧪 Testing
 
 ```bash
-# Run all unit and integration tests
-go test -v ./...
+# Run unit tests across all packages
+go test -v ./navigator-api/...
 
-# Run unit tests with race detector
-go test -v -race ./...
+# Run database engine tests
+go test -v ./navigator-api/internal/database
 
 # Verify production binary compilation
-go build -v ./cmd/server
+go build -v ./navigator-api/cmd/server
 ```

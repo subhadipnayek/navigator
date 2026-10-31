@@ -5,11 +5,14 @@ NAVigator/
 ├── .github/
 │   └── workflows/
 │       └── ci.yml                      # GitHub Actions CI pipeline (Go tests + Angular build)
+├── go.work                          # Root Go workspace file
 ├── navigator-api/                   # Go 1.26 Backend Microservice
 │   ├── cmd/server/                 # Application entry point (main.go)
 │   ├── internal/
-│   │   ├── config/                 # Environment & configuration loader
-│   │   ├── database/               # PostgreSQL GORM connection & migration
+│   │   ├── config/                 # Environment & configuration loader (Postgres/SQLite dialect resolution)
+│   │   │   └── config_test.go      # Config resolution unit tests
+│   │   ├── database/               # Dual PostgreSQL 17 & SQLite GORM connection & migration
+│   │   │   └── db_test.go          # SQLite WAL, schema migration, and partial index tests
 │   │   ├── handlers/               # Gin HTTP route handlers
 │   │   ├── middleware/             # JWT auth & CORS middleware
 │   │   ├── models/                 # GORM entities & API DTO contracts

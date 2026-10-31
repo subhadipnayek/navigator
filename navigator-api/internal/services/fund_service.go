@@ -63,9 +63,9 @@ func (s *FundService) SearchFunds(ctx context.Context, query string) ([]models.F
 	dbQuery := s.db.WithContext(ctx).Preload("NavSyncTracker")
 
 	if code, err := strconv.Atoi(query); err == nil {
-		dbQuery = dbQuery.Where("scheme_code = ? OR scheme_name ILIKE ? OR fund_house ILIKE ?", code, "%"+query+"%", "%"+query+"%")
+		dbQuery = dbQuery.Where("scheme_code = ? OR LOWER(scheme_name) LIKE LOWER(?) OR LOWER(fund_house) LIKE LOWER(?)", code, "%"+query+"%", "%"+query+"%")
 	} else {
-		dbQuery = dbQuery.Where("scheme_name ILIKE ? OR fund_house ILIKE ?", "%"+query+"%", "%"+query+"%")
+		dbQuery = dbQuery.Where("LOWER(scheme_name) LIKE LOWER(?) OR LOWER(fund_house) LIKE LOWER(?)", "%"+query+"%", "%"+query+"%")
 	}
 
 	err := dbQuery.Order("scheme_name asc").Limit(100).Find(&funds).Error
@@ -109,7 +109,7 @@ func (s *FundService) SyncFundMasterList(ctx context.Context) (*models.FundSyncR
 		}
 		batch := funds[i:end]
 
-		// Bulk upsert into Postgres
+		// Bulk upsert into database (compatible with both PostgreSQL and SQLite ON CONFLICT DO UPDATE)
 		err := s.db.WithContext(ctx).Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "scheme_code"}},
 			DoUpdates: clause.AssignmentColumns([]string{

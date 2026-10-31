@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	Port           string
+	DatabaseType   string // "postgres" or "sqlite"
 	DatabaseURL    string
 	JwtSecret      string
 	JwtIssuer      string
@@ -24,18 +25,47 @@ func Load() *Config {
 		port = "8080"
 	}
 
-	// 1. Resolve PostgreSQL Database Connection DSN
-	dbURL := getEnv("DATABASE_URL", "")
-	if dbURL == "" {
-		host := getEnv("DB_HOST", "localhost")
-		dbPort := getEnv("DB_PORT", "5432")
-		user := getEnv("DB_USER", "devuser")
-		password := getEnv("DB_PASSWORD", "devpassword")
-		dbname := getEnv("DB_NAME", "NAVigatorDb_QA")
-		sslmode := getEnv("DB_SSLMODE", "disable")
+	// 1. Resolve Database Engine & Connection
+	dbType := strings.ToLower(strings.TrimSpace(getEnv("DB_TYPE", getEnv("DB_DRIVER", ""))))
+	rawURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	dbPath := strings.TrimSpace(getEnv("DATABASE_PATH", getEnv("DB_PATH", "")))
 
-		dbURL = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-			host, dbPort, user, password, dbname, sslmode)
+	if dbType == "" {
+		if dbPath != "" || strings.HasSuffix(rawURL, ".db") || strings.HasSuffix(rawURL, ".sqlite") || strings.HasPrefix(rawURL, "sqlite:") || strings.HasPrefix(rawURL, "file:") {
+			dbType = "sqlite"
+		} else if strings.HasPrefix(rawURL, "postgres://") || strings.HasPrefix(rawURL, "postgresql://") || strings.Contains(rawURL, "host=") {
+			dbType = "postgres"
+		} else if os.Getenv("DB_HOST") != "" {
+			dbType = "postgres"
+		} else {
+			// Zero-config default: embedded SQLite for zero-setup local run
+			dbType = "sqlite"
+		}
+	}
+
+	var dbURL string
+	if dbType == "sqlite" {
+		if dbPath != "" {
+			dbURL = dbPath
+		} else if rawURL != "" {
+			dbURL = strings.TrimPrefix(rawURL, "sqlite:")
+		} else {
+			dbURL = "navigator.db"
+		}
+	} else {
+		dbType = "postgres"
+		dbURL = rawURL
+		if dbURL == "" {
+			host := getEnv("DB_HOST", "localhost")
+			dbPort := getEnv("DB_PORT", "5432")
+			user := getEnv("DB_USER", "devuser")
+			password := getEnv("DB_PASSWORD", "devpassword")
+			dbname := getEnv("DB_NAME", "NAVigatorDb_QA")
+			sslmode := getEnv("DB_SSLMODE", "disable")
+
+			dbURL = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+				host, dbPort, user, password, dbname, sslmode)
+		}
 	}
 
 	// 2. JWT Configuration
@@ -59,6 +89,7 @@ func Load() *Config {
 
 	return &Config{
 		Port:           port,
+		DatabaseType:   dbType,
 		DatabaseURL:    dbURL,
 		JwtSecret:      jwtSecret,
 		JwtIssuer:      jwtIssuer,

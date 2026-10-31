@@ -75,9 +75,9 @@ func (h *AdminHandler) GetFunds(c *gin.Context) {
 
 	if q != "" {
 		if code, err := strconv.Atoi(q); err == nil {
-			query = query.Where("scheme_code = ? OR scheme_name ILIKE ? OR fund_house ILIKE ?", code, "%"+q+"%", "%"+q+"%")
+			query = query.Where("scheme_code = ? OR LOWER(scheme_name) LIKE LOWER(?) OR LOWER(fund_house) LIKE LOWER(?)", code, "%"+q+"%", "%"+q+"%")
 		} else {
-			query = query.Where("scheme_name ILIKE ? OR fund_house ILIKE ?", "%"+q+"%", "%"+q+"%")
+			query = query.Where("LOWER(scheme_name) LIKE LOWER(?) OR LOWER(fund_house) LIKE LOWER(?)", "%"+q+"%", "%"+q+"%")
 		}
 	}
 
@@ -185,6 +185,13 @@ func (h *AdminHandler) DeleteFund(c *gin.Context) {
 }
 
 func (h *AdminHandler) DeleteAllFunds(c *gin.Context) {
-	_ = h.db.WithContext(c.Request.Context()).Exec("TRUNCATE TABLE \"NavHistories\", \"CorporateActions\", \"NavSyncTrackers\", \"Funds\" CASCADE").Error
+	if h.db.Dialector.Name() == "sqlite" {
+		_ = h.db.WithContext(c.Request.Context()).Exec("DELETE FROM \"NavHistories\"").Error
+		_ = h.db.WithContext(c.Request.Context()).Exec("DELETE FROM \"CorporateActions\"").Error
+		_ = h.db.WithContext(c.Request.Context()).Exec("DELETE FROM \"NavSyncTrackers\"").Error
+		_ = h.db.WithContext(c.Request.Context()).Exec("DELETE FROM \"Funds\"").Error
+	} else {
+		_ = h.db.WithContext(c.Request.Context()).Exec("TRUNCATE TABLE \"NavHistories\", \"CorporateActions\", \"NavSyncTrackers\", \"Funds\" CASCADE").Error
+	}
 	c.Status(http.StatusNoContent)
 }

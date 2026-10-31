@@ -8,6 +8,7 @@ import (
 	"navigator-api/internal/config"
 	"navigator-api/internal/models"
 
+	"github.com/glebarez/sqlite"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -21,7 +22,15 @@ func InitDB(cfg *config.Config) (*gorm.DB, error) {
 		DisableForeignKeyConstraintWhenMigrating: true,
 	}
 
-	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), gormConfig)
+	var dialector gorm.Dialector
+	isSqlite := strings.EqualFold(cfg.DatabaseType, "sqlite")
+	if isSqlite {
+		dialector = sqlite.Open(cfg.DatabaseURL)
+	} else {
+		dialector = postgres.Open(cfg.DatabaseURL)
+	}
+
+	db, err := gorm.Open(dialector, gormConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -31,12 +40,24 @@ func InitDB(cfg *config.Config) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	sqlDB.SetMaxIdleConns(25)
-	sqlDB.SetMaxOpenConns(100)
-	sqlDB.SetConnMaxLifetime(time.Hour)
+	if isSqlite {
+		sqlDB.SetMaxIdleConns(5)
+		sqlDB.SetMaxOpenConns(50)
+		sqlDB.SetConnMaxLifetime(time.Hour)
 
-	// Create extensions
-	_ = db.Exec(`CREATE EXTENSION IF NOT EXISTS "pg_trgm";`).Error
+		// Optimize SQLite for high-concurrency read/write operations
+		_ = db.Exec("PRAGMA journal_mode = WAL;").Error
+		_ = db.Exec("PRAGMA busy_timeout = 5000;").Error
+		_ = db.Exec("PRAGMA synchronous = NORMAL;").Error
+		_ = db.Exec("PRAGMA foreign_keys = ON;").Error
+	} else {
+		sqlDB.SetMaxIdleConns(25)
+		sqlDB.SetMaxOpenConns(100)
+		sqlDB.SetConnMaxLifetime(time.Hour)
+
+		// Create Postgres extensions
+		_ = db.Exec(`CREATE EXTENSION IF NOT EXISTS "pg_trgm";`).Error
+	}
 
 	// Auto migrate tables
 	err = db.AutoMigrate(
@@ -55,17 +76,21 @@ func InitDB(cfg *config.Config) (*gorm.DB, error) {
 		log.Printf("AutoMigrate warning: %v", err)
 	}
 
-	// Create GIN indexes with pg_trgm for ultra-fast fund searching if not already created
-	_ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_funds_scheme_name_trgm ON "Funds" USING gin (scheme_name gin_trgm_ops);`).Error
-	_ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_funds_fund_house_trgm ON "Funds" USING gin (fund_house gin_trgm_ops);`).Error
+	if !isSqlite {
+		// Create GIN indexes with pg_trgm for ultra-fast fund searching if not already created (PostgreSQL only)
+		_ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_funds_scheme_name_trgm ON "Funds" USING gin (scheme_name gin_trgm_ops);`).Error
+		_ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_funds_fund_house_trgm ON "Funds" USING gin (fund_house gin_trgm_ops);`).Error
+	}
 
-	// Create unique constraint on (portfolio_id, fingerprint)
+	// Create unique constraint on (portfolio_id, fingerprint) where fingerprint != ''
+	// Ensure any non-unique single-column index from AutoMigrate is dropped first so unique constraint takes effect
+	_ = db.Exec(`DROP INDEX IF EXISTS idx_portfolio_transactions_port_fp;`).Error
 	_ = db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_portfolio_transactions_port_fp ON "PortfolioTransactions" (portfolio_id, fingerprint) WHERE fingerprint != '';`).Error
 
 	seedDefaultEndpointConfigs(db)
 
 	DB = db
-	log.Println("Database connection established and schema verified.")
+	log.Printf("Database connection established (%s) and schema verified.", cfg.DatabaseType)
 	return db, nil
 }
 
