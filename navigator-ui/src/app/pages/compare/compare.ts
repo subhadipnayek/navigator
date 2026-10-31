@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnDestroy, computed, ChangeDetectionStrategy } from '@angular/core';
+import { Component, inject, signal, OnInit, OnDestroy, computed, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DecimalPipe } from '@angular/common';
 import {
@@ -13,6 +13,7 @@ import {
 } from 'rxjs';
 import { FundService } from '../../services/fund.service';
 import { NavService } from '../../services/nav.service';
+import { ResearchTrayService } from '../../services/research-tray.service';
 import {
   Fund,
   ReturnsResponse,
@@ -54,7 +55,8 @@ import { MatTableModule } from '@angular/material/table';
   ],
   templateUrl: './compare.html',
 })
-export class Compare implements OnDestroy {
+export class Compare implements OnInit, OnDestroy {
+  readonly tray = inject(ResearchTrayService);
   private readonly fundService = inject(FundService);
   private readonly navService = inject(NavService);
   private readonly destroy$ = new Subject<void>();
@@ -130,6 +132,30 @@ export class Compare implements OnDestroy {
         },
         error: () => this.loading.set(false),
       });
+  }
+
+  ngOnInit(): void {
+    if (this.selectedFunds().length === 0 && this.tray.count() >= 2) {
+      this.importFromTray();
+    }
+  }
+
+  importFromTray(): void {
+    const pinned = this.tray.pinnedFunds();
+    if (pinned.length < 2) return;
+    const funds: Fund[] = pinned.map((f) => ({
+      schemeCode: f.schemeCode,
+      schemeName: f.schemeName,
+      fundHouse: f.fundHouse,
+      schemeCategory: f.schemeCategory,
+      latestNav: f.latestNav,
+      latestNavDate: f.latestNavDate,
+      createdAtUtc: new Date().toISOString(),
+      updatedAtUtc: new Date().toISOString(),
+    } as unknown as Fund));
+    this.selectedFunds.set(funds);
+    this.clampSelectedDateRange();
+    this.compare();
   }
 
   onSearchInput(query: string): void {

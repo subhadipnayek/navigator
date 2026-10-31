@@ -3,6 +3,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { Subject, debounceTime, distinctUntilChanged, switchMap, of, takeUntil } from 'rxjs';
 import { FundService } from '../../services/fund.service';
+import { ResearchTrayService } from '../../services/research-tray.service';
 import { Fund } from '../../models/fund.model';
 import { DecimalPipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
@@ -31,6 +32,7 @@ import { MatChipsModule } from '@angular/material/chips';
   templateUrl: './fund-list.html',
 })
 export class FundList implements OnInit, OnDestroy {
+  readonly tray = inject(ResearchTrayService);
   private readonly fundService = inject(FundService);
   private readonly route = inject(ActivatedRoute);
   private readonly destroy$ = new Subject<void>();

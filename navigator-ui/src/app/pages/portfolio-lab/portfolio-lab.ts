@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
+import { Component, inject, signal, OnInit, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
@@ -12,6 +12,7 @@ import {
 } from 'rxjs';
 import { FundService } from '../../services/fund.service';
 import { PortfolioService } from '../../services/portfolio.service';
+import { ResearchTrayService } from '../../services/research-tray.service';
 import { Fund } from '../../models/fund.model';
 import {
   BasketDefinition,
@@ -86,7 +87,8 @@ interface BasketSlot {
   templateUrl: './portfolio-lab.html',
   styleUrl: './portfolio-lab.scss',
 })
-export class PortfolioLab implements OnDestroy {
+export class PortfolioLab implements OnInit, OnDestroy {
+  readonly tray = inject(ResearchTrayService);
   private readonly fundService = inject(FundService);
   private readonly portfolioService = inject(PortfolioService);
   private readonly destroy$ = new Subject<void>();
@@ -155,6 +157,43 @@ export class PortfolioLab implements OnDestroy {
         },
         error: () => this.loading.set(false),
       });
+  }
+
+  ngOnInit(): void {
+    const firstBasket = this.baskets()[0];
+    if (firstBasket && firstBasket.funds.length === 0 && this.tray.count() > 0) {
+      this.importFromTray(firstBasket.id);
+    }
+  }
+
+  importFromTray(targetBasketId?: number): void {
+    const pinned = this.tray.pinnedFunds();
+    if (pinned.length === 0) return;
+    const targetId = targetBasketId ?? this.baskets()[0]?.id;
+    if (!targetId) return;
+
+    const count = pinned.length;
+    const baseWeight = Math.floor(100 / count);
+    const remainder = 100 - baseWeight * count;
+
+    const newFunds = pinned.map((f, idx) => ({
+      fund: {
+        schemeCode: f.schemeCode,
+        schemeName: f.schemeName,
+        fundHouse: f.fundHouse,
+        schemeCategory: f.schemeCategory,
+        latestNav: f.latestNav,
+        latestNavDate: f.latestNavDate,
+        createdAtUtc: new Date().toISOString(),
+        updatedAtUtc: new Date().toISOString(),
+      } as unknown as Fund,
+      allocationPercent: idx === count - 1 ? baseWeight + remainder : baseWeight,
+      locked: false,
+    }));
+
+    this.baskets.update((list) =>
+      list.map((b) => (b.id === targetId ? { ...b, funds: newFunds } : b)),
+    );
   }
 
   // ──────────────────────────────────────

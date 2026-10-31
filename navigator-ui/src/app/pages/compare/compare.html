@@ -1,28 +1,22 @@
 <!-- ═══════════════════════════════════════════════
-     HEADER WORKBAR
-═══════════════════════════════════════════════ -->
-<header class="admin-workbar">
-  <div>
-    <div class="admin-breadcrumb">
-      <a routerLink="/dashboard">Workspace</a>
-      <strong>Multi-Fund Comparator</strong>
-    </div>
-    <h1>Performance &amp; Rolling Return Comparator</h1>
-  </div>
-  <nav aria-label="Quick navigation">
-    <a routerLink="/funds">Screener</a>
-    <a routerLink="/compare" class="active">Comparator</a>
-    <a routerLink="/portfolio-lab">Lab</a>
-  </nav>
-</header>
-
-<!-- ═══════════════════════════════════════════════
      FUND SELECTION & PARAMETERS PANEL
 ═══════════════════════════════════════════════ -->
 <mat-card appearance="outlined">
-  <mat-card-header>
-    <mat-card-title>Basket Selection &amp; Evaluation Horizon</mat-card-title>
-    <mat-card-subtitle>Search and add 2 to 10 funds to overlay growth trajectories and compute alpha matrices</mat-card-subtitle>
+  <mat-card-header style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+    <div>
+      <mat-card-title>Basket Selection &amp; Evaluation Horizon</mat-card-title>
+      <mat-card-subtitle>Search and add 2 to 10 funds to overlay growth trajectories and compute alpha matrices</mat-card-subtitle>
+    </div>
+    @if (tray.count() >= 2) {
+      <button
+        mat-stroked-button
+        type="button"
+        (click)="importFromTray()"
+        style="height: 28px !important; font-size: 11px !important; color: #0f766e; border-color: #0f766e;"
+      >
+        Import {{ tray.count() }} Pinned Funds
+      </button>
+    }
   </mat-card-header>
   <mat-card-content>
     <!-- Search Input & Live Results Dropdown -->
@@ -43,7 +37,7 @@
       }
 
       @if (searchResults().length > 0 && searchQuery().trim().length > 0) {
-        <div style="position: absolute; top: 100%; left: 0; right: 0; z-index: 20; max-height: 220px; overflow-y: auto; background: #ffffff; border: 1px solid rgba(15,23,42,0.15); border-radius: 6px; box-shadow: 0 8px 24px rgba(15,23,42,0.12); padding: 4px;">
+        <div style="position: absolute; top: 100%; left: 0; right: 0; z-index: 50; max-height: 220px; overflow-y: auto; background: #ffffff; border: 1px solid rgba(15,23,42,0.15); border-radius: 6px; box-shadow: 0 8px 24px rgba(15,23,42,0.12); padding: 4px;">
           @for (fund of searchResults(); track fund.schemeCode) {
             <div
               (click)="!isAlreadySelected(fund.schemeCode) ? addFund(fund) : null"

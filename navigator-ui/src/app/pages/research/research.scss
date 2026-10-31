@@ -1,0 +1,309 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.research-shell {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+
+/* ── Workbar Header ── */
+.research-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+}
+
+.header-title-block {
+  min-width: 0;
+  flex: 1 1 300px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 2px;
+
+  a {
+    color: #64748b;
+    text-decoration: none;
+
+    &::after {
+      content: '/';
+      margin-left: 4px;
+      color: #94a3b8;
+    }
+
+    &:hover {
+      color: #0f172a;
+    }
+  }
+
+  strong {
+    color: #0f766e;
+    font-weight: 700;
+  }
+}
+
+.header-title-block h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Segmented Pill Switcher ── */
+.research-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-decoration: none;
+  transition: all 0.15s ease;
+
+  &:hover {
+    color: #0f172a;
+    background: rgba(255, 255, 255, 0.6);
+  }
+
+  &.active {
+    background: #0f172a;
+    color: #ffffff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+
+    .pill-icon {
+      color: #10b981;
+    }
+  }
+}
+
+.pill-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+}
+
+/* ── Pinned Basket Tray Ribbon ── */
+.basket-tray {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #0f172a;
+  color: #f8fafc;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.15);
+  animation: slideDown 0.18s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.basket-tray-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.basket-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.basket-count {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.basket-chips-scroll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 200px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  min-width: 0;
+}
+
+.tray-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #f1f5f9;
+  font-size: 11.5px;
+  font-weight: 600;
+  max-width: 260px;
+  flex-shrink: 0;
+}
+
+.chip-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+
+.chip-code {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 2px;
+
+  mat-icon {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    line-height: 14px;
+  }
+
+  &:hover {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.15);
+  }
+}
+
+.basket-tray-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.tray-btn {
+  height: 28px !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  border-radius: 4px !important;
+  padding: 0 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.compare-btn {
+  background: #1e293b !important;
+  color: #38bdf8 !important;
+  border: 1px solid #38bdf8 !important;
+
+  &:hover {
+    background: rgba(56, 189, 248, 0.15) !important;
+  }
+}
+
+.simulate-btn {
+  background: #0f766e !important;
+  color: #ffffff !important;
+
+  &:hover {
+    background: #0d9488 !important;
+  }
+}
+
+.clear-btn {
+  color: #94a3b8 !important;
+  min-width: unset !important;
+
+  &:hover {
+    color: #f1f5f9 !important;
+  }
+}
+
+.btn-icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+  line-height: 14px;
+}
+
+/* ── Outlet Container ── */
+.research-outlet {
+  width: 100%;
+}
+
+@media (max-width: 860px) {
+  .research-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .header-title-block h1 {
+    white-space: normal;
+  }
+
+  .basket-tray {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .basket-tray-actions {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

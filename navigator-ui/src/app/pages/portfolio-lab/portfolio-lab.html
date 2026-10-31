@@ -12,6 +12,18 @@
 
     <!-- Global date range -->
     <div class="lab-dates">
+      @if (tray.count() > 0) {
+        <button
+          mat-stroked-button
+          type="button"
+          (click)="importFromTray()"
+          style="height: 38px !important; font-size: 11.5px !important; color: #0f766e; border-color: #0f766e; margin-bottom: 8px;"
+          title="Import pinned funds into Basket A with equal allocations"
+        >
+          Import {{ tray.count() }} Pinned Funds
+        </button>
+      }
+
       <mat-form-field appearance="outline" class="date-field">
         <mat-label>Start date</mat-label>
         <input matInput [matDatepicker]="dpStart" [(ngModel)]="startDate" [max]="maxSelectableDate" />

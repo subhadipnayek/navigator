@@ -1,22 +1,4 @@
 <!-- ═══════════════════════════════════════════════
-     HEADER WORKBAR
-═══════════════════════════════════════════════ -->
-<header class="admin-workbar">
-  <div>
-    <div class="admin-breadcrumb">
-      <a routerLink="/dashboard">Workspace</a>
-      <strong>Fund Screener</strong>
-    </div>
-    <h1>Fund Database &amp; Screener</h1>
-  </div>
-  <nav aria-label="Quick navigation">
-    <a routerLink="/funds" class="active">Screener</a>
-    <a routerLink="/compare">Comparator</a>
-    <a routerLink="/portfolio-lab">Lab</a>
-  </nav>
-</header>
-
-<!-- ═══════════════════════════════════════════════
      SEARCH & FILTER TOOLBAR
 ═══════════════════════════════════════════════ -->
 <mat-card appearance="outlined">
@@ -134,8 +116,19 @@
 
         <!-- Quick Actions Column -->
         <ng-container matColumnDef="actions">
-          <th mat-header-cell *matHeaderCellDef style="text-align: right; width: 180px;">Actions</th>
-          <td mat-cell *matCellDef="let fund" style="text-align: right;">
+          <th mat-header-cell *matHeaderCellDef style="text-align: right; width: 250px;">Actions</th>
+          <td mat-cell *matCellDef="let fund" style="text-align: right; white-space: nowrap;">
+            <button
+              mat-stroked-button
+              type="button"
+              (click)="tray.toggleFund(fund)"
+              [style.background]="tray.isInTray(fund.schemeCode) ? '#0f766e' : 'transparent'"
+              [style.color]="tray.isInTray(fund.schemeCode) ? '#ffffff' : '#0f766e'"
+              style="height: 26px !important; font-size: 11px !important; padding: 0 8px !important; margin-right: 4px;"
+              [title]="tray.isInTray(fund.schemeCode) ? 'Remove from basket' : 'Pin to research basket'"
+            >
+              {{ tray.isInTray(fund.schemeCode) ? '✓ Basket' : '+ Basket' }}
+            </button>
             <a mat-flat-button [routerLink]="['/funds', fund.schemeCode]" style="height: 26px !important; font-size: 11px !important; padding: 0 8px !important; margin-right: 4px;">
               Analyze
             </a>

@@ -1,0 +1,82 @@
+<section class="research-shell">
+  <!-- ═══════════════════════════════════════════════
+       UNIFIED RESEARCH HEADER & SUB-PILLS
+  ═══════════════════════════════════════════════ -->
+  <header class="research-header">
+    <div class="header-title-block">
+      <div class="breadcrumb">
+        <a routerLink="/dashboard">Terminal</a>
+        <strong>Research &amp; Strategy Hub</strong>
+      </div>
+      <h1>Fund Discovery, Alpha Comparison &amp; Basket Simulation</h1>
+    </div>
+
+    <!-- Segmented Navigation Pills -->
+    <nav class="research-pills" aria-label="Research sub-navigation">
+      <a routerLink="/research/screener" routerLinkActive="active" class="pill-btn">
+        <mat-icon class="pill-icon">search</mat-icon>
+        <span>Screener</span>
+      </a>
+      <a routerLink="/research/compare" routerLinkActive="active" class="pill-btn">
+        <mat-icon class="pill-icon">compare_arrows</mat-icon>
+        <span>Compare</span>
+      </a>
+      <a routerLink="/research/lab" routerLinkActive="active" class="pill-btn">
+        <mat-icon class="pill-icon">science</mat-icon>
+        <span>Basket Lab</span>
+      </a>
+    </nav>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════
+       SHARED ACTIVE BASKET TRAY
+  ═══════════════════════════════════════════════ -->
+  @if (tray.count() > 0) {
+    <div class="basket-tray">
+      <div class="basket-tray-meta">
+        <span class="basket-badge">ACTIVE BASKET</span>
+        <span class="basket-count">{{ tray.count() }}/{{ tray.maxCapacity }} Funds</span>
+      </div>
+
+      <div class="basket-chips-scroll">
+        @for (fund of tray.pinnedFunds(); track fund.schemeCode) {
+          <div class="tray-chip" [title]="fund.schemeName">
+            <span class="chip-name">{{ fund.schemeName }}</span>
+            <span class="chip-code font-mono">{{ fund.schemeCode }}</span>
+            <button
+              type="button"
+              class="chip-remove"
+              (click)="tray.removeFund(fund.schemeCode)"
+              title="Remove from basket"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          </div>
+        }
+      </div>
+
+      <div class="basket-tray-actions">
+        <button mat-button class="tray-btn compare-btn" (click)="goToCompare()" title="Compare pinned funds head-to-head">
+          <mat-icon class="btn-icon">compare_arrows</mat-icon>
+          <span>Compare All</span>
+        </button>
+
+        <button mat-flat-button class="tray-btn simulate-btn" (click)="goToLab()" title="Simulate multi-asset basket with SIP">
+          <mat-icon class="btn-icon">science</mat-icon>
+          <span>Simulate Basket</span>
+        </button>
+
+        <button mat-button class="tray-btn clear-btn" (click)="tray.clear()" title="Clear all pinned funds">
+          <span>Clear</span>
+        </button>
+      </div>
+    </div>
+  }
+
+  <!-- ═══════════════════════════════════════════════
+       ACTIVE RESEARCH WORKBENCH OUTLET
+  ═══════════════════════════════════════════════ -->
+  <div class="research-outlet">
+    <router-outlet />
+  </div>
+</section>

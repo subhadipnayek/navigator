@@ -3,7 +3,7 @@
     <mat-card-content style="padding: 24px !important; text-align: center;">
       <strong style="color: #dc2626; font-size: 14px;">{{ error() }}</strong>
       <div style="margin-top: 10px;">
-        <a mat-stroked-button routerLink="/funds">Back to Fund Screener</a>
+        <a mat-stroked-button routerLink="/research/screener">Back to Fund Screener</a>
       </div>
     </mat-card-content>
   </mat-card>
@@ -39,15 +39,24 @@
       </div>
 
       <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+        <button
+          mat-stroked-button
+          type="button"
+          (click)="tray.toggleFund(f)"
+          [style.background]="tray.isInTray(f.schemeCode) ? '#0f766e' : 'transparent'"
+          [style.color]="tray.isInTray(f.schemeCode) ? '#ffffff' : '#0f766e'"
+        >
+          {{ tray.isInTray(f.schemeCode) ? '✓ In Basket' : '+ Add to Basket' }}
+        </button>
         <a mat-flat-button [routerLink]="['/funds', f.schemeCode, 'rolling']">
           <span class="nav-icon" style="vertical-align: middle; margin-right: 4px;">timeline</span>
           Rolling Returns
         </a>
-        <a mat-stroked-button routerLink="/compare">
+        <a mat-stroked-button routerLink="/research/compare">
           <span class="nav-icon" style="vertical-align: middle; margin-right: 4px;">compare_arrows</span>
           Compare
         </a>
-        <a mat-stroked-button routerLink="/funds">Screener</a>
+        <a mat-stroked-button routerLink="/research/screener">Screener</a>
       </div>
     </header>
 

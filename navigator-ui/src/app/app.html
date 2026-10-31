@@ -18,21 +18,13 @@
         <span class="nav-icon">dashboard</span>
         <span>Dashboard</span>
       </a>
-      <a mat-button routerLink="/funds" routerLinkActive="active">
-        <span class="nav-icon">search</span>
-        <span>Funds</span>
-      </a>
-      <a mat-button routerLink="/compare" routerLinkActive="active">
-        <span class="nav-icon">compare_arrows</span>
-        <span>Compare</span>
+      <a mat-button routerLink="/research" routerLinkActive="active">
+        <span class="nav-icon">query_stats</span>
+        <span>Research</span>
       </a>
       <a mat-button routerLink="/portfolio" routerLinkActive="active">
         <span class="nav-icon">pie_chart</span>
         <span>Portfolio</span>
-      </a>
-      <a mat-button routerLink="/portfolio-lab" routerLinkActive="active">
-        <span class="nav-icon">science</span>
-        <span>Lab</span>
       </a>
       @if (auth.isAdmin()) {
         <a mat-button routerLink="/admin" routerLinkActive="active">

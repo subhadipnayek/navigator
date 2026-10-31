@@ -4,6 +4,7 @@ import { DecimalPipe, TitleCasePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FundService } from '../../services/fund.service';
 import { NavService } from '../../services/nav.service';
+import { ResearchTrayService } from '../../services/research-tray.service';
 import {
   Fund,
   NavDataResponse,
@@ -50,6 +51,7 @@ import { MatTableModule } from '@angular/material/table';
   templateUrl: './fund-detail.html',
 })
 export class FundDetail implements OnInit {
+  readonly tray = inject(ResearchTrayService);
   private readonly fundService = inject(FundService);
   private readonly navService = inject(NavService);
 

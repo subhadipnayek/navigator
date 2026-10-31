@@ -12,9 +12,33 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/dashboard/dashboard').then((m) => m.Dashboard),
   },
   {
-    path: 'funds',
+    path: 'research',
     canActivate: [authGuard],
-    loadComponent: () => import('./pages/fund-list/fund-list').then((m) => m.FundList),
+    loadComponent: () => import('./pages/research/research').then((m) => m.ResearchComponent),
+    children: [
+      {
+        path: '',
+        redirectTo: 'screener',
+        pathMatch: 'full',
+      },
+      {
+        path: 'screener',
+        loadComponent: () => import('./pages/fund-list/fund-list').then((m) => m.FundList),
+      },
+      {
+        path: 'compare',
+        loadComponent: () => import('./pages/compare/compare').then((m) => m.Compare),
+      },
+      {
+        path: 'lab',
+        loadComponent: () => import('./pages/portfolio-lab/portfolio-lab').then((m) => m.PortfolioLab),
+      },
+    ],
+  },
+  {
+    path: 'funds',
+    redirectTo: 'research/screener',
+    pathMatch: 'full',
   },
   {
     path: 'funds/:schemeCode',
@@ -29,8 +53,8 @@ export const routes: Routes = [
   },
   {
     path: 'compare',
-    canActivate: [authGuard],
-    loadComponent: () => import('./pages/compare/compare').then((m) => m.Compare),
+    redirectTo: 'research/compare',
+    pathMatch: 'full',
   },
   {
     path: 'portfolio',
@@ -45,12 +69,12 @@ export const routes: Routes = [
   },
   {
     path: 'portfolio-lab',
-    canActivate: [authGuard],
-    loadComponent: () => import('./pages/portfolio-lab/portfolio-lab').then((m) => m.PortfolioLab),
+    redirectTo: 'research/lab',
+    pathMatch: 'full',
   },
   {
     path: 'lab',
-    redirectTo: 'portfolio-lab',
+    redirectTo: 'research/lab',
     pathMatch: 'full',
   },
   {

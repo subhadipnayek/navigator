@@ -34,8 +34,8 @@ NAVigator/
 │   │   ├── app/
 │   │   │   ├── core/               # Auth guards, HTTP interceptors, API config
 │   │   │   ├── models/             # TypeScript DTO models
-│   │   │   ├── pages/              # Workspaces (Dashboard, Screener, Compare, Lab, Ledger)
-│   │   │   ├── services/           # HTTP services
+│   │   │   ├── pages/              # Workspaces (Dashboard, Research Hub [Screener, Compare, Lab], Ledger)
+│   │   │   ├── services/           # HTTP services & state stores (ResearchTrayService)
 │   │   │   └── shared/             # Lightweight charts, utilities
 │   │   ├── index.html              # Inter & JetBrains Mono font definitions
 │   │   └── styles.scss             # High-density Material design system (density -3)

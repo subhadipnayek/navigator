@@ -361,7 +361,7 @@ func (s *NavService) EnsureHistoricalRange(ctx context.Context, schemeCode int, 
 	if to != nil && !to.IsZero() {
 		effectiveTo = *to
 	}
-	effectiveFrom := now.AddDate(-5, 0, 0)
+	effectiveFrom := now.AddDate(-30, 0, 0)
 	if from != nil && !from.IsZero() {
 		effectiveFrom = *from
 	}

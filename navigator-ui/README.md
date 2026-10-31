@@ -27,6 +27,7 @@ navigator-ui/
 │   │   ├── models/               # TypeScript interfaces & DTOs
 │   │   ├── pages/                # Route components
 │   │   │   ├── dashboard/        # Command terminal hub & instant lookup
+│   │   │   ├── research/         # Unified Research Terminal Hub (Basket Tray, Screener, Compare, Lab)
 │   │   │   ├── fund-list/        # High-density fund screener & table
 │   │   │   ├── fund-detail/      # Factsheet & NAV history workbench
 │   │   │   ├── compare/          # Multi-fund CAGR & alpha comparator
@@ -38,7 +39,7 @@ navigator-ui/
 │   │   │   ├── admin-integrations/# Upstream third-party API control center & health checker
 │   │   │   ├── landing/          # Institutional welcome portal
 │   │   │   └── login/register/   # Terminal authentication views
-│   │   ├── services/             # Angular HTTP services
+│   │   ├── services/             # Angular HTTP services & signal-based stores (ResearchTrayService)
 │   │   └── shared/               # Line charts, stat cards, date utilities
 │   ├── index.html                # Inter & JetBrains Mono font imports
 │   ├── styles.scss               # Global high-density design system

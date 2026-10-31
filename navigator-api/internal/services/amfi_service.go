@@ -311,13 +311,15 @@ func (s *AmfiService) FetchNavHistory(ctx context.Context, schemeCode int, from,
 		from, to = to, from
 	}
 
-	// Partition date range into <= 5-year sliding intervals backwards from 'to' to 'from'
+	// Partition date range into <= 4-year sliding intervals backwards from 'to' to 'from'.
+	// AMFI enforces an upstream rule: "from_date to to_date range must be less than 5 years".
+	// Using 4-year chunks (~1,460 days) ensures safety against leap years, avoids edge rejections,
+	// and optimizes payload sizes for parallel concurrency.
 	var chunks []navChunk
 	currTo := to
 	idx := 0
 	for !currTo.Before(from) {
-		// 5-year chunking: AddDate(-5, 0, 1) ensures duration is strictly <= 5 years (<= 1826 days)
-		currFrom := currTo.AddDate(-5, 0, 1)
+		currFrom := currTo.AddDate(-4, 0, 1)
 		if currFrom.Before(from) {
 			currFrom = from
 		}
@@ -503,6 +505,10 @@ func ParseAmfiNavHistoryJson(body []byte, schemeCode int) ([]models.NavHistory, 
 	var apiResp AmfiNavHistoryApiResponse
 	if err := json.Unmarshal(body, &apiResp); err != nil {
 		return nil, err
+	}
+
+	if apiResp.Error != "" {
+		return nil, fmt.Errorf("AMFI error: %s", apiResp.Error)
 	}
 
 	if apiResp.Data == nil || len(apiResp.Data.NavGroups) == 0 {
