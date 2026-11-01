@@ -36,6 +36,16 @@ func TestParseDate(t *testing.T) {
 			hasError: false,
 		},
 		{
+			input:    "2023-08-15 00:00:00+00:00",
+			expected: time.Date(2023, 8, 15, 0, 0, 0, 0, time.UTC),
+			hasError: false,
+		},
+		{
+			input:    "2023-08-15 14:30:00",
+			expected: time.Date(2023, 8, 15, 0, 0, 0, 0, time.UTC),
+			hasError: false,
+		},
+		{
 			input:    "invalid-date-string",
 			hasError: true,
 		},

@@ -11,6 +11,7 @@
 - **Framework**: Angular 22 (Zoneless signals, standalone components)
 - **UI Components**: Angular Material 22 (configured at density `-3` for maximum information density)
 - **Data Visualization**: [Lightweight Charts](https://tradingview.github.io/lightweight-charts/) (TradingView)
+- **Progress & Resilience**: Real-time sync progress banners and resilient stream handlers for multi-year historical ingestion
 - **Data Tables**: [AG Grid Community](https://www.ag-grid.com/) with Quartz theme
 - **Typography**: [Inter](https://fonts.google.com/specimen/Inter) & [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono) with tabular numeric alignment
 - **Spreadsheets**: ExcelJS / Excelize data exchange

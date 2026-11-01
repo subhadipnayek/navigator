@@ -129,6 +129,15 @@
         {{ comparing() ? 'Comparing...' : 'Run Comparison (' + selectedFunds().length + ' funds)' }}
       </button>
     </div>
+
+    @if (comparing()) {
+      <div style="display: flex; align-items: center; gap: 12px; margin-top: 10px; padding: 10px 14px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px;">
+        <mat-progress-bar mode="indeterminate" style="flex: 1;" />
+        <span style="font-size: 11.5px; font-weight: 600; color: #166534; white-space: nowrap;">
+          Retrieving &amp; synchronizing AMFI NAV data... Initial sync may take 10–20 seconds.
+        </span>
+      </div>
+    }
   </mat-card-content>
 </mat-card>
 

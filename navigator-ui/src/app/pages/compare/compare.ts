@@ -10,6 +10,7 @@ import {
   takeUntil,
   forkJoin,
   finalize,
+  catchError,
 } from 'rxjs';
 import { FundService } from '../../services/fund.service';
 import { NavService } from '../../services/nav.service';
@@ -198,36 +199,48 @@ export class Compare implements OnInit, OnDestroy {
     // and owns the comparing state until everything finishes or fails.
     forkJoin({
       returns: forkJoin(
-        funds.map((f) => this.navService.getReturns(f.schemeCode, startDate, endDate)),
+        funds.map((f) =>
+          this.navService
+            .getReturns(f.schemeCode, startDate, endDate)
+            .pipe(catchError(() => of(null))),
+        ),
       ),
       growth: forkJoin(
         funds.map((f) =>
-          this.navService.getNavHistory(f.schemeCode, {
-            from: startDate,
-            to: endDate,
-            interval: 'monthly',
-            adjusted: true,
-          }),
+          this.navService
+            .getNavHistory(f.schemeCode, {
+              from: startDate,
+              to: endDate,
+              interval: 'monthly',
+              adjusted: true,
+            })
+            .pipe(catchError(() => of(null))),
         ),
       ),
       rolling: forkJoin(
         funds.map((f) =>
-          this.navService.getRollingReturns(f.schemeCode, this.selectedRollingPeriod(), {
-            from: this.toApiDate(this.startDate),
-            to: this.toApiDate(this.endDate),
-            interval: 'monthly',
-          }),
+          this.navService
+            .getRollingReturns(f.schemeCode, this.selectedRollingPeriod(), {
+              from: this.toApiDate(this.startDate),
+              to: this.toApiDate(this.endDate),
+              interval: 'monthly',
+            })
+            .pipe(catchError(() => of(null))),
         ),
       ),
     })
       .pipe(finalize(() => this.comparing.set(false)))
       .subscribe({
         next: ({ returns, growth, rolling }) => {
-          this.returnsResults.set(returns);
-          this.buildGrowthChart(growth);
-          this.rollingResults.set(rolling);
+          const validReturns = returns.filter((r): r is ReturnsResponse => r !== null);
+          const validGrowth = growth.filter((g): g is NavDataResponse => g !== null);
+          const validRolling = rolling.filter((r): r is RollingReturnResponse => r !== null);
+
+          this.returnsResults.set(validReturns);
+          this.buildGrowthChart(validGrowth);
+          this.rollingResults.set(validRolling);
           this.rollingChartSeries.set(
-            rolling.map((r) => ({
+            validRolling.map((r) => ({
               name: r.schemeName,
               data: r.data.map((pt) => ({
                 time: toChartDate(pt.date),
@@ -235,6 +248,12 @@ export class Compare implements OnInit, OnDestroy {
               })),
             })),
           );
+
+          if (validReturns.length === 0 && validGrowth.length === 0) {
+            this.error.set('Could not retrieve historical data for the selected funds and date range.');
+          } else if (validReturns.length < funds.length) {
+            this.error.set('Some funds could not be fully loaded from AMFI. Displaying available results.');
+          }
         },
         error: (err) => {
           this.error.set(err.error?.message ?? 'Comparison failed');

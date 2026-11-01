@@ -2,6 +2,9 @@ package services_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -136,5 +139,92 @@ func TestNavService_GetNavHistoryAndReturns(t *testing.T) {
 	}
 	if wasFetched {
 		t.Errorf("Expected wasFetched to be false (0 API calls) for range fully covered by DB")
+	}
+}
+
+func TestNavService_SingleflightDeduplication(t *testing.T) {
+	db := setupTestDB(t)
+	schemeCode := 140084
+
+	// Mock server that tracks number of calls
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		time.Sleep(30 * time.Millisecond) // Simulate upstream latency
+		resp := `{
+			"data": {
+				"mf_name": "Nippon",
+				"scheme_name": "Nippon ETF",
+				"nav_groups": [
+					{
+						"nav_name": "Nippon ETF",
+						"historical_records": [
+							{"date": "2024-01-01", "nav": 200.0},
+							{"date": "2024-01-02", "nav": 201.0}
+						]
+					}
+				]
+			}
+		}`
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(resp))
+	}))
+	defer server.Close()
+
+	// Seed fund
+	name := "Nippon India ETF Nifty 50 BeES"
+	db.Create(&models.Fund{SchemeCode: schemeCode, SchemeName: name})
+
+	db.Create(&models.ApiEndpointConfig{
+		Key:         "AMFI_NAV_HISTORY_URL",
+		Name:        "AMFI History",
+		Description: "Mock",
+		Url:         server.URL,
+		DefaultUrl:  server.URL,
+		IsActive:    true,
+	})
+
+	intSvc := services.NewIntegrationService(db)
+	amfiSvc := services.NewAmfiService(intSvc)
+	caSvc := services.NewCorporateActionService(db)
+	navSvc := services.NewNavService(db, amfiSvc, caSvc)
+
+	// Fire 5 concurrent calls simultaneously for the same scheme
+	const concurrency = 5
+	var wg sync.WaitGroup
+	errs := make(chan error, concurrency)
+
+	d1 := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	d2 := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := navSvc.EnsureHistoricalRange(context.Background(), schemeCode, &d1, &d2)
+			if err != nil {
+				errs <- err
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		t.Fatalf("Unexpected error in concurrent EnsureHistoricalRange: %v", err)
+	}
+
+	// Singleflight must ensure exactly 1 call was made to the upstream server!
+	if calls != 1 {
+		t.Errorf("Expected exactly 1 upstream call due to singleflight deduplication, got %d", calls)
+	}
+
+	// Verify records were saved to SQLite as we go
+	var count int64
+	db.Model(&models.NavHistory{}).Where("scheme_code = ?", schemeCode).Count(&count)
+	if count != 2 {
+		t.Errorf("Expected 2 records saved in SQLite, got %d", count)
 	}
 }

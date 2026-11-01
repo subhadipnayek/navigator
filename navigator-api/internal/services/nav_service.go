@@ -8,6 +8,7 @@ import (
 
 	"navigator-api/internal/models"
 
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -16,6 +17,7 @@ type NavService struct {
 	db          *gorm.DB
 	amfiService *AmfiService
 	caService   *CorporateActionService
+	sfGroup     singleflight.Group
 }
 
 func NewNavService(db *gorm.DB, amfi *AmfiService, ca *CorporateActionService) *NavService {
@@ -353,9 +355,32 @@ func (s *NavService) EnsureNavHistories(ctx context.Context, schemeCodes []int, 
 }
 
 // EnsureHistoricalRange inspects local DB coverage for schemeCode.
-// It detects missing older prefix or newer suffix delta intervals and fetches strictly those
-// missing dates from AMFI. If local DB already contains complete coverage, it bypasses AMFI completely (0 HTTP calls).
+// It uses singleflight deduplication to collapse any concurrent requests for the same fund,
+// runs ingestion under a detached 2-minute background context so client disconnections never abort in-flight work,
+// and saves data incrementally ("store as we go") as each 2-year chunk arrives from AMFI.
+// If local DB already contains complete coverage, it bypasses AMFI completely (0 HTTP calls).
 func (s *NavService) EnsureHistoricalRange(ctx context.Context, schemeCode int, from, to *time.Time) (bool, error) {
+	if schemeCode <= 0 {
+		return false, fmt.Errorf("invalid scheme code %d", schemeCode)
+	}
+
+	// Detached context: Ingestion must not be killed if the client cancels or switches tabs.
+	// We run ingestion under a detached background context with a generous 2-minute deadline.
+	detachedCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	// Singleflight deduplication: collapse concurrent calls for the same scheme into 1 execution
+	sfKey := fmt.Sprintf("nav-sync:%d", schemeCode)
+	val, err, _ := s.sfGroup.Do(sfKey, func() (interface{}, error) {
+		return s.doEnsureHistoricalRange(detachedCtx, schemeCode, from, to)
+	})
+	if err != nil {
+		return false, err
+	}
+	return val.(bool), nil
+}
+
+func (s *NavService) doEnsureHistoricalRange(ctx context.Context, schemeCode int, from, to *time.Time) (bool, error) {
 	now := IndiaToday()
 	effectiveTo := now
 	if to != nil && !to.IsZero() {
@@ -388,14 +413,25 @@ func (s *NavService) EnsureHistoricalRange(ctx context.Context, schemeCode int, 
 		}
 	}
 
+	var tracker models.NavSyncTracker
+	_ = s.db.WithContext(ctx).Where("scheme_code = ?", schemeCode).First(&tracker).Error
+
 	wasFetched := false
 
-	// Case 1: Database has <= 1 record (e.g. only 1 daily snapshot or empty)
+	// Incremental chunk saver: "store as we go"
+	// As soon as each chunk arrives from AMFI, it is immediately committed to SQLite and NavSyncTracker updated
+	saver := func(chunkRecords []models.NavHistory) {
+		s.saveNavHistoriesAndSyncTracker(ctx, schemeCode, chunkRecords)
+	}
+
+	// Case 1: Database has <= 1 record (e.g. only 1 daily snapshot or completely empty)
 	if agg.Count <= 1 {
-		fetched, err := s.amfiService.FetchNavHistory(ctx, schemeCode, effectiveFrom, effectiveTo)
+		fetched, err := s.amfiService.FetchNavHistory(ctx, schemeCode, effectiveFrom, effectiveTo, saver)
 		if err == nil && len(fetched) > 0 {
 			wasFetched = true
-			s.saveNavHistoriesAndSyncTracker(ctx, schemeCode, fetched)
+			if from == nil {
+				_ = s.db.WithContext(ctx).Model(&models.NavSyncTracker{}).Where("scheme_code = ?", schemeCode).Update("inception_reached", true).Error
+			}
 		}
 		return wasFetched, nil
 	}
@@ -403,8 +439,8 @@ func (s *NavService) EnsureHistoricalRange(ctx context.Context, schemeCode int, 
 	// Case 2: Database already has history. Only fetch missing delta intervals!
 	var missingRanges [][2]time.Time
 
-	// 2a. Missing older prefix delta: if effectiveFrom is before our earliest recorded NAV
-	if minDate != nil && effectiveFrom.Before(*minDate) {
+	// 2a. Missing older prefix delta: if effectiveFrom is before our earliest recorded NAV and inception not yet marked
+	if from != nil && !tracker.InceptionReached && minDate != nil && effectiveFrom.Before(*minDate) {
 		deltaTo := minDate.AddDate(0, 0, -1)
 		if !deltaTo.Before(effectiveFrom) {
 			missingRanges = append(missingRanges, [2]time.Time{effectiveFrom, deltaTo})
@@ -425,12 +461,15 @@ func (s *NavService) EnsureHistoricalRange(ctx context.Context, schemeCode int, 
 		return false, nil
 	}
 
-	// Fetch strictly the missing delta intervals
+	// Fetch strictly the missing delta intervals, saving incrementally as we go
 	for _, rng := range missingRanges {
-		fetched, err := s.amfiService.FetchNavHistory(ctx, schemeCode, rng[0], rng[1])
+		fetched, err := s.amfiService.FetchNavHistory(ctx, schemeCode, rng[0], rng[1], saver)
 		if err == nil && len(fetched) > 0 {
 			wasFetched = true
-			s.saveNavHistoriesAndSyncTracker(ctx, schemeCode, fetched)
+		}
+		if minDate != nil && rng[1].Before(*minDate) {
+			// Prefix interval reached inception limit; mark so we never re-scan pre-inception dates
+			_ = s.db.WithContext(ctx).Model(&models.NavSyncTracker{}).Where("scheme_code = ?", schemeCode).Update("inception_reached", true).Error
 		}
 	}
 

@@ -35,7 +35,7 @@ func NewAmfiService(integrationSvc ...*IntegrationService) *AmfiService {
 	}
 	return &AmfiService{
 		httpClient: &http.Client{
-			Timeout: 60 * time.Second,
+			Timeout: 120 * time.Second,
 		},
 		integrationService: intSvc,
 	}
@@ -291,12 +291,19 @@ type navChunk struct {
 }
 
 // FetchNavHistory fetches historical NAV data for a scheme across any arbitrary time window (from days to 30+ years)
-// by automatically partitioning the window into <= 5-year chunks compliant with AMFI upstream limits.
+// by automatically partitioning the window into <= 2-year chunks compliant with AMFI upstream limits.
 // It iterates backwards from 'to' down to 'from', executing chunks in parallel (bounded to max 3 concurrent workers).
 // It applies a 10-day inception cutoff limit: if any chunk returns 0 records or its earliest recorded NAV is more
 // than 10 calendar days after the chunk start date, that date is recognized as the scheme inception point,
 // immediately terminating/canceling all older chunks.
-func (s *AmfiService) FetchNavHistory(ctx context.Context, schemeCode int, from, to time.Time) ([]models.NavHistory, error) {
+// If an optional onChunk callback is provided, it is invoked immediately as each individual chunk completes,
+// ensuring incremental "store-as-we-go" persistence so already fetched dates are never lost or re-queried.
+func (s *AmfiService) FetchNavHistory(
+	ctx context.Context,
+	schemeCode int,
+	from, to time.Time,
+	onChunk ...func(records []models.NavHistory),
+) ([]models.NavHistory, error) {
 	if schemeCode <= 0 {
 		return nil, fmt.Errorf("invalid scheme code %d", schemeCode)
 	}
@@ -311,15 +318,17 @@ func (s *AmfiService) FetchNavHistory(ctx context.Context, schemeCode int, from,
 		from, to = to, from
 	}
 
-	// Partition date range into <= 4-year sliding intervals backwards from 'to' to 'from'.
-	// AMFI enforces an upstream rule: "from_date to to_date range must be less than 5 years".
-	// Using 4-year chunks (~1,460 days) ensures safety against leap years, avoids edge rejections,
-	// and optimizes payload sizes for parallel concurrency.
+	// Partition date range into <= 2-year sliding intervals backwards from 'to' to 'from'.
+	// Benchmark measurements confirm AMFI latency scales super-linearly:
+	// - 1-Year chunk: ~4.3s
+	// - 2-Year chunk: ~7.7s
+	// - 4-Year chunk: ~17.8s - 50+s (frequently hits upstream timeouts)
+	// 2-Year chunks provide optimal latency and throughput while bounded parallel concurrency streams chunks.
 	var chunks []navChunk
 	currTo := to
 	idx := 0
 	for !currTo.Before(from) {
-		currFrom := currTo.AddDate(-4, 0, 1)
+		currFrom := currTo.AddDate(-2, 0, 1)
 		if currFrom.Before(from) {
 			currFrom = from
 		}
@@ -332,7 +341,7 @@ func (s *AmfiService) FetchNavHistory(ctx context.Context, schemeCode int, from,
 		return nil, nil
 	}
 
-	// Fast-path for single chunk (common for <= 5 year requests)
+	// Fast-path for single chunk (common for <= 2 year requests)
 	if len(chunks) == 1 {
 		records, err := s.fetchNavHistoryChunk(ctx, schemeCode, chunks[0].From, chunks[0].To)
 		if err != nil {
@@ -341,6 +350,9 @@ func (s *AmfiService) FetchNavHistory(ctx context.Context, schemeCode int, from,
 		sort.Slice(records, func(i, j int) bool {
 			return records[i].Date.Before(records[j].Date)
 		})
+		if len(onChunk) > 0 && onChunk[0] != nil && len(records) > 0 {
+			onChunk[0](records)
+		}
 		return records, nil
 	}
 
@@ -429,6 +441,11 @@ func (s *AmfiService) FetchNavHistory(ctx context.Context, schemeCode int, from,
 				setCutoff(chunk.Index)
 			}
 
+			// Store-as-we-go: notify chunk saver immediately
+			if len(onChunk) > 0 && onChunk[0] != nil && len(records) > 0 {
+				onChunk[0](records)
+			}
+
 			resultsChan <- chunkResult{index: chunk.Index, records: records}
 		}(ch)
 	}
@@ -476,28 +493,45 @@ func (s *AmfiService) fetchNavHistoryChunk(ctx context.Context, schemeCode int, 
 	url := fmt.Sprintf("%s?query_type=historical_period&from_date=%s&to_date=%s&sd_id=%d",
 		baseUrl, FormatDateYYYYMMDD(from), FormatDateYYYYMMDD(to), schemeCode)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "NAVigator/2.0")
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(500 * time.Millisecond):
+			}
+		}
 
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("User-Agent", "NAVigator/2.0")
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("AMFI history API returned status %d", resp.StatusCode)
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("AMFI history API returned status %d", resp.StatusCode)
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		return ParseAmfiNavHistoryJson(body, schemeCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return ParseAmfiNavHistoryJson(body, schemeCode)
+	return nil, lastErr
 }
 
 // ParseAmfiNavHistoryJson parses the modern AMFI historical NAV JSON response payload.

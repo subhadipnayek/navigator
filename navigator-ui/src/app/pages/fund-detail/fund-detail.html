@@ -9,7 +9,12 @@
   </mat-card>
 } @else if (loading()) {
   <mat-card appearance="outlined">
-    <mat-progress-bar mode="indeterminate" />
+    <mat-card-content style="padding: 24px !important; text-align: center;">
+      <mat-progress-bar mode="indeterminate" style="margin-bottom: 12px;" />
+      <span style="font-size: 13px; font-weight: 600; color: #0f766e;">
+        Retrieving historical NAV series from AMFI India... Initial synchronization may take up to 15 seconds.
+      </span>
+    </mat-card-content>
   </mat-card>
 } @else {
   @if (fund(); as f) {

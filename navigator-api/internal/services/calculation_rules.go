@@ -37,8 +37,17 @@ func IndiaToday() time.Time {
 
 func ParseDate(s string) (time.Time, error) {
 	s = strings.TrimSpace(s)
-	if t, err := time.Parse(DateFormatDDMMYYYY, s); err == nil {
-		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
+	if s == "" {
+		return time.Time{}, fmt.Errorf("empty date string")
+	}
+	if len(s) >= 10 {
+		prefix := s[:10]
+		if t, err := time.Parse(DateFormatYYYYMMDD, prefix); err == nil {
+			return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
+		}
+		if t, err := time.Parse(DateFormatDDMMYYYY, prefix); err == nil {
+			return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
+		}
 	}
 	if t, err := time.Parse("02-Jan-2006", s); err == nil {
 		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
@@ -50,6 +59,9 @@ func ParseDate(s string) (time.Time, error) {
 		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
 	}
 	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
+	}
+	if t, err := time.Parse("2006-01-02 15:04:05", s); err == nil {
 		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
 	}
 	if t, err := time.Parse("2006-01-02T15:04:05", s); err == nil {

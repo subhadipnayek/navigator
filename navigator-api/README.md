@@ -86,7 +86,7 @@ navigator-api/
 - `POST /api/funds/sync`: Trigger on-demand sync with AMFI master.
 
 ### NAV History & Returns (`/api/nav`)
-- `GET /api/nav/:code`: Fetch NAV historical points with standardized `NavDataResponse` schema (`latestNavDate`, `navStartDate`, `navEndDate`, `corporateActions`, `isAdjusted`, `wasFetchedFromApi`, `data` with `dd-MM-yyyy` string formatting). Powered by a smart delta range resolver (0 HTTP calls on local DB hit), parallel multi-chunk 5-year interval ingestion (bounded 3-worker concurrency), and a 10-day missing NAV inception cutoff.
+- `GET /api/nav/:code`: Fetch NAV historical points with standardized `NavDataResponse` schema (`latestNavDate`, `navStartDate`, `navEndDate`, `corporateActions`, `isAdjusted`, `wasFetchedFromApi`, `data` with `dd-MM-yyyy` string formatting). Powered by a smart delta range resolver (0 HTTP calls on local DB hit), `golang.org/x/sync/singleflight` in-flight request deduplication, incremental "store as we go" persistence streaming chunks directly to the database, detached background execution context (2-minute timeout), right-sized <= 2-year chunking, and intelligent inception boundary detection (`InceptionReached` cache flag).
 - `GET /api/nav/:code/returns`: Calculate point-to-point CAGR and absolute returns with automatic historical delta lazy-loading fallback (`absoluteReturn`, `absoluteReturnPercent`, `cagr`, `startDate`, `endDate`, `startNav`, `endNav`).
 - `GET /api/nav/:code/rolling-returns`: Compute rolling return series and statistics (with on-demand smart delta lazy-loading fallback).
 - `GET /api/nav/:code/gaps`: Detect missing NAV dates.

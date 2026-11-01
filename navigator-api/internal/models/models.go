@@ -47,6 +47,7 @@ type NavSyncTracker struct {
 	LastHistoryCheckAtIst   *time.Time `gorm:"column:last_history_check_at_ist" json:"lastHistoryCheckAtIst"`
 	NavHistoryCount         int        `gorm:"column:nav_history_count;not null;default:0" json:"navHistoryCount"`
 	CorporateActionCount    int        `gorm:"column:corporate_action_count;not null;default:0" json:"corporateActionCount"`
+	InceptionReached        bool       `gorm:"column:inception_reached;not null;default:false" json:"inceptionReached"`
 	UpdatedAtUtc            time.Time  `gorm:"column:updated_at;not null;autoUpdateTime" json:"updatedAt"`
 }
 
